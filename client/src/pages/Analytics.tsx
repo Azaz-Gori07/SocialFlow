@@ -57,7 +57,7 @@ export const Analytics: React.FC = () => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.setAttribute('href', url);
-      a.setAttribute('download', `SocialFlow_Analytics_Report_${new Date().toISOString().split('T')[0]}.${type}`);
+      a.setAttribute('download', `ViralDrift_Analytics_Report_${new Date().toISOString().split('T')[0]}.${type}`);
       a.click();
     }, 1500);
   };

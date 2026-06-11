@@ -1,4 +1,4 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Layers, Sparkles } from 'lucide-react';
@@ -84,7 +84,7 @@ export const Auth: React.FC = () => {
             <Layers size={24} color="white" />
           </div>
           <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.5rem', background: 'linear-gradient(135deg, #fff, hsl(var(--text-secondary)))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            SocialFlow AI
+            ViralDrift AI
           </span>
         </div>
 
