@@ -22,7 +22,7 @@ import { initSocketIO } from './services/socket/socket.service';
 import { SchedulerService } from './services/scheduler';
 
 // Import the Atlas database connection and fail fast on startup if it cannot connect.
-import { connectDb } from './database/db';
+import { connectDb, isConnected } from './database/db';
 
 // Import worker to initialize the post scheduling queue listener
 import './services/queue/post.worker';
@@ -53,6 +53,33 @@ app.use('/api/', apiLimiter as unknown as RequestHandler);
 app.use(helmet());
 
 app.use(express.json());
+
+// Database connection check middleware for serverless/production requests
+app.use(async (req, res, next) => {
+  // Skip check for root health check, API health route, and swagger UI assets/docs
+  if (
+    req.path === '/' ||
+    req.path === '/health' ||
+    req.path === '/api/test/limit' ||
+    req.path.startsWith('/api-docs')
+  ) {
+    return next();
+  }
+
+  if (!isConnected()) {
+    try {
+      await connectDb();
+    } catch (error: any) {
+      console.error(`[${new Date().toISOString()}] DB connection failed for ${req.method} ${req.path}:`, error.message);
+      return res.status(503).json({
+        success: false,
+        message: 'Database service temporarily unavailable. Please try again shortly.',
+      });
+    }
+  }
+
+  next();
+});
 
 // API Swagger Documentation Interface
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
@@ -108,8 +135,8 @@ const httpServer = http.createServer(app);
 // Initialize Socket.IO for real-time notifications
 initSocketIO(httpServer);
 
-// Start Listener if not in test mode
-if (process.env.NODE_ENV !== 'test') {
+// Start Listener if not in test mode and not on Vercel
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   const startServer = async () => {
     try {
       await connectDb();

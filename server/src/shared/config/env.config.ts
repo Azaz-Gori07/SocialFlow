@@ -3,6 +3,10 @@ import { z } from 'zod';
 
 dotenv.config();
 
+// Fallback to MONGODB_URL if MONGO_URI is not set
+process.env.MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URL;
+
+
 const envSchema = z.object({
   PORT: z.string().default('5000').transform(Number),
   JWT_SECRET: z.string().min(8, 'JWT_SECRET must be at least 8 characters'),

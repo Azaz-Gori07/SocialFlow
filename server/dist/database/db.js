@@ -37,6 +37,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.mongoose = exports.db = void 0;
+exports.isConnected = isConnected;
 exports.connectDb = connectDb;
 const mongoose_1 = __importStar(require("mongoose"));
 exports.mongoose = mongoose_1.default;
@@ -164,65 +165,77 @@ const AnalyticsMetricModel = mongoose_1.default.models.AnalyticsMetric || (0, mo
 const NotificationModel = mongoose_1.default.models.Notification || (0, mongoose_1.model)('Notification', NotificationSchema);
 const ActivityLogModel = mongoose_1.default.models.ActivityLog || (0, mongoose_1.model)('ActivityLog', ActivityLogSchema);
 const GrowthInsightModel = mongoose_1.default.models.GrowthInsight || (0, mongoose_1.model)('GrowthInsight', GrowthInsightSchema);
-async function startMemoryDbFallback(originalError) {
-    console.log('🔌 Starting in-memory MongoDB fallback...');
+// Configure custom DNS servers if provided in env
+if (process.env.DNS_SERVERS) {
     try {
-        const { MongoMemoryServer } = await Promise.resolve().then(() => __importStar(require('mongodb-memory-server')));
-        let mongod;
-        try {
-            mongod = await MongoMemoryServer.create({
-                instance: {
-                    port: 27017
-                }
-            });
-        }
-        catch {
-            mongod = await MongoMemoryServer.create();
-        }
-        const memoryUri = mongod.getUri();
-        console.log(`🔌 Connecting to in-memory MongoDB fallback: ${memoryUri}`);
-        await mongoose_1.default.connect(memoryUri);
-        console.log('✅ In-memory MongoDB connected successfully.');
+        const servers = process.env.DNS_SERVERS.split(',').map(s => s.trim());
+        dns_1.default.setServers(servers);
+        console.log(`✓ DNS servers set to: ${servers.join(', ')}`);
     }
-    catch (fallbackError) {
-        console.error('❌ Failed to start in-memory MongoDB fallback:', fallbackError.message);
-        throw new Error(`MongoDB Atlas connection failed: ${originalError.message}. Fallback error: ${fallbackError.message}`);
+    catch (err) {
+        console.warn(`⚠️ Failed to set DNS servers from env: ${err.message}`);
     }
 }
+// Cache the connection promise at module level for serverless reuse
+let cachedConnection = null;
 async function connectDb() {
-    try {
-        console.log(`🔌 Connecting to MongoDB Atlas: ${MONGO_URI.replace(/\/\/.*@/, '//***:***@')}`);
-        await mongoose_1.default.connect(MONGO_URI, {
-            serverSelectionTimeoutMS: 8000,
-            retryWrites: true,
-            dbName: process.env.MONGO_DB_NAME || undefined
-        });
-        console.log('✅ MongoDB Atlas connected.');
+    // Return cached connection if already connected or connecting
+    if (cachedConnection) {
+        return cachedConnection;
     }
-    catch (error) {
-        if (error.code === 'ECONNREFUSED' && error.syscall === 'querySrv') {
-            console.warn("⚠️ DNS SRV resolution failed. Retrying with Google/Cloudflare public DNS servers...");
-            try {
-                dns_1.default.setServers(['8.8.8.8', '1.1.1.1']);
-                await mongoose_1.default.connect(MONGO_URI, {
-                    serverSelectionTimeoutMS: 8000,
-                    retryWrites: true,
-                    dbName: process.env.MONGO_DB_NAME || undefined
-                });
-                console.log('✅ MongoDB Atlas connected.');
-                return;
+    // Create connection promise and cache it immediately to prevent multiple concurrent connects
+    const connectionPromise = (async () => {
+        try {
+            console.log(`🔌 Connecting to MongoDB Atlas: ${MONGO_URI.replace(/\/\/.*@/, '//***:***@')}`);
+            const conn = await mongoose_1.default.connect(MONGO_URI, {
+                // Serverless-optimized connection options
+                serverSelectionTimeoutMS: 5000, // Quick timeout for cold starts
+                socketTimeoutMS: 10000, // Socket timeout for long operations
+                maxPoolSize: 10, // Limit connection pool for serverless
+                minPoolSize: 1, // Minimum connections to maintain
+                waitQueueTimeoutMS: 10000, // Max wait for available connection
+                retryWrites: true, // Retry writes for better reliability
+                dbName: process.env.MONGO_DB_NAME || undefined
+            });
+            console.log('✅ Database connected successfully');
+            return conn;
+        }
+        catch (error) {
+            // Check if it's a DNS resolution error that might be fixed by public DNS
+            if (error.code === 'ECONNREFUSED' && error.syscall === 'querySrv') {
+                console.warn("⚠️ DNS SRV resolution failed. Retrying with Google/Cloudflare public DNS servers...");
+                try {
+                    dns_1.default.setServers(['8.8.8.8', '1.1.1.1']);
+                    const conn = await mongoose_1.default.connect(MONGO_URI, {
+                        serverSelectionTimeoutMS: 5000,
+                        socketTimeoutMS: 10000,
+                        maxPoolSize: 10,
+                        minPoolSize: 1,
+                        waitQueueTimeoutMS: 10000,
+                        retryWrites: true,
+                        dbName: process.env.MONGO_DB_NAME || undefined
+                    });
+                    console.log('✅ Database connected successfully');
+                    return conn;
+                }
+                catch (retryError) {
+                    console.error("✗ Database connection failed after retrying with public DNS:");
+                    console.error(retryError.message);
+                    throw retryError;
+                }
             }
-            catch (retryError) {
-                console.error("❌ Database connection failed after retrying with public DNS:");
-                console.error(retryError.message);
-                await startMemoryDbFallback(retryError);
+            else {
+                console.error("✗ Database connection failed:");
+                console.error(error.message);
+                throw error;
             }
         }
-        else {
-            console.error('❌ MongoDB Atlas connection failed:', error.message);
-            await startMemoryDbFallback(error);
-        }
-    }
+    })();
+    cachedConnection = connectionPromise;
+    return connectionPromise;
+}
+function isConnected() {
+    return mongoose_1.default.connection.readyState === 1;
 }
 exports.db = {
     users: UserModel,

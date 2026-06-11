@@ -7,6 +7,8 @@ exports.env = void 0;
 const dotenv_1 = __importDefault(require("dotenv"));
 const zod_1 = require("zod");
 dotenv_1.default.config();
+// Fallback to MONGODB_URL if MONGO_URI is not set
+process.env.MONGO_URI = process.env.MONGO_URI || process.env.MONGODB_URL;
 const envSchema = zod_1.z.object({
     PORT: zod_1.z.string().default('5000').transform(Number),
     JWT_SECRET: zod_1.z.string().min(8, 'JWT_SECRET must be at least 8 characters'),

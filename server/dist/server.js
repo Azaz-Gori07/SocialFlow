@@ -53,6 +53,29 @@ app.use('/api/', apiLimiter);
 // Helmet for setting secure HTTP headers
 app.use((0, helmet_1.default)());
 app.use(express_1.default.json());
+// Database connection check middleware for serverless/production requests
+app.use(async (req, res, next) => {
+    // Skip check for root health check, API health route, and swagger UI assets/docs
+    if (req.path === '/' ||
+        req.path === '/health' ||
+        req.path === '/api/test/limit' ||
+        req.path.startsWith('/api-docs')) {
+        return next();
+    }
+    if (!(0, db_1.isConnected)()) {
+        try {
+            await (0, db_1.connectDb)();
+        }
+        catch (error) {
+            console.error(`[${new Date().toISOString()}] DB connection failed for ${req.method} ${req.path}:`, error.message);
+            return res.status(503).json({
+                success: false,
+                message: 'Database service temporarily unavailable. Please try again shortly.',
+            });
+        }
+    }
+    next();
+});
 // API Swagger Documentation Interface
 app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_json_1.default));
 // Simple test endpoint for rate‑limit verification (returns 200)
@@ -97,8 +120,8 @@ const httpServer = http_1.default.createServer(app);
 exports.httpServer = httpServer;
 // Initialize Socket.IO for real-time notifications
 (0, socket_service_1.initSocketIO)(httpServer);
-// Start Listener if not in test mode
-if (process.env.NODE_ENV !== 'test') {
+// Start Listener if not in test mode and not on Vercel
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     const startServer = async () => {
         try {
             await (0, db_1.connectDb)();

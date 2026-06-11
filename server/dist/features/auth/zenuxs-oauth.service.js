@@ -13,10 +13,14 @@ class ZenuxsOAuthService {
     constructor(userRepository) {
         this.userRepository = userRepository;
     }
+    getBackendUrl() {
+        return process.env.BACKEND_URL ||
+            (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${env_config_1.env.PORT}`);
+    }
     createOAuthInstance(provider) {
         const clientId = env_config_1.env.ZENUXS_CLIENT_ID || env_config_1.env.ZENUXS_GOOGLE_CLIENT_ID || env_config_1.env.ZENUXS_GITHUB_CLIENT_ID;
         const authServer = (env_config_1.env.ZENUXS_AUTH_SERVER || 'https://api.auth.zenuxs.in').replace(/\/$/, '');
-        const backendUrl = process.env.BACKEND_URL || `http://localhost:${env_config_1.env.PORT}`;
+        const backendUrl = this.getBackendUrl();
         const redirectUri = provider
             ? `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`
             : `${backendUrl}/api/auth/oauth/zenuxs/{provider}/callback`;
@@ -39,7 +43,7 @@ class ZenuxsOAuthService {
     }
     async getAuthorizationUrl(provider) {
         const oauth = this.createOAuthInstance(provider);
-        const backendUrl = process.env.BACKEND_URL || `http://localhost:${env_config_1.env.PORT}`;
+        const backendUrl = this.getBackendUrl();
         const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`;
         const authData = await oauth.getAuthorizationUrl({
             redirectUri,
@@ -52,7 +56,7 @@ class ZenuxsOAuthService {
     }
     async handleCallback(provider, code, state) {
         const oauth = this.createOAuthInstance(provider);
-        const backendUrl = process.env.BACKEND_URL || `http://localhost:${env_config_1.env.PORT}`;
+        const backendUrl = this.getBackendUrl();
         const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`;
         // Build the full callback URL from the redirect URI and the code/state params
         const callbackUrl = new URL(redirectUri);
