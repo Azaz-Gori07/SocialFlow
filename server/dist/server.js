@@ -32,13 +32,25 @@ const db_1 = require("./database/db");
 require("./services/queue/post.worker");
 const app = (0, express_1.default)();
 exports.app = app;
-const allowedOrigins = process.env.CORS_ORIGIN
-    ? process.env.CORS_ORIGIN.split(',')
-    : process.env.NODE_ENV === 'production'
-        ? []
-        : ['http://localhost:5173', 'http://localhost:3000'];
+const LOCAL_ORIGINS = ['http://localhost:5173', 'http://localhost:5000'];
+const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)
+    ? (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS).split(',').map(s => s.trim()).filter(Boolean)
+    : [];
+const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...envOrigins])];
 app.use((0, cors_1.default)({
-    origin: allowedOrigins.length ? allowedOrigins : false,
+    origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
+        if (!origin)
+            return callback(null, true);
+        // Check if origin is in the explicit static origins list
+        if (staticOrigins.includes(origin))
+            return callback(null, true);
+        // Allow any Vercel preview/production deployments
+        if (origin.startsWith('https://') && origin.endsWith('.vercel.app')) {
+            return callback(null, true);
+        }
+        callback(null, false);
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -58,6 +70,7 @@ app.use(async (req, res, next) => {
     // Skip check for root health check, API health route, and swagger UI assets/docs
     if (req.path === '/' ||
         req.path === '/health' ||
+        req.path === '/cors-debug' ||
         req.path === '/api/test/limit' ||
         req.path.startsWith('/api-docs')) {
         return next();
@@ -111,6 +124,18 @@ app.get('/health', (req, res) => {
         status: 'healthy',
         timestamp: new Date().toISOString(),
         env: process.env.NODE_ENV || 'development'
+    });
+});
+// CORS debug diagnostics endpoint (no DB dependencies)
+app.get('/cors-debug', (req, res) => {
+    res.json({
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        CORS_ORIGIN: process.env.CORS_ORIGIN,
+        ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
+        LOCAL_ORIGINS,
+        envOrigins,
+        staticOrigins
     });
 });
 // Centralized Error Interceptor (MUST be registered last)
