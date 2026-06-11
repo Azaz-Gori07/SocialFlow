@@ -1,0 +1,38 @@
+[
+  {
+    "userId": "6a2a91db8d779b94093a23f4",
+    "email": {
+      "enabled": true,
+      "types": [
+        "post_published",
+        "post_failed",
+        "new_comment",
+        "workspace_invite",
+        "subscription_update",
+        "analytics_alert"
+      ]
+    },
+    "push": {
+      "enabled": true,
+      "types": [
+        "post_published",
+        "post_failed",
+        "new_comment",
+        "workspace_invite",
+        "subscription_update",
+        "analytics_alert"
+      ]
+    },
+    "inApp": {
+      "enabled": true,
+      "types": [
+        "post_published",
+        "post_failed",
+        "new_comment",
+        "workspace_invite",
+        "subscription_update",
+        "analytics_alert"
+      ]
+    }
+  }
+]
