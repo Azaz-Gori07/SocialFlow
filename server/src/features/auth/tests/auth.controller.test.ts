@@ -4,6 +4,7 @@ import { mongoose } from '../../../database/db';
 import UserModel from '../../user/user.model';
 import OtpModel from '../otp.model';
 import bcrypt from 'bcryptjs';
+// import bcrypt from 'bcryptjs';
 
 describe('AuthController Integration Tests', () => {
   const testUser = {
