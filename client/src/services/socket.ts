@@ -1,6 +1,12 @@
 import { io, Socket } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:5000';
+const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL as string | undefined;
+
+// VITE_BACKEND_API_URL is expected to end with `/api`.
+// Socket.IO should connect to the backend origin (no `/api` suffix).
+const SOCKET_URL = backendApiUrl
+  ? backendApiUrl.replace(/\/api\/?$/, '')
+  : 'http://localhost:5000';
 
 let socket: Socket | null = null;
 

@@ -1,31 +1,83 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ZenuxsOAuthService = void 0;
 const env_config_1 = require("../../shared/config/env.config");
 const appError_1 = require("../../shared/errors/appError");
+const zenuxs_oauth_1 = __importDefault(require("zenuxs-oauth"));
 class ZenuxsOAuthService {
     userRepository;
+    oauth;
     constructor(userRepository) {
         this.userRepository = userRepository;
-    }
-    getAuthorizationUrl(provider) {
         const clientId = env_config_1.env.ZENUXS_CLIENT_ID || env_config_1.env.ZENUXS_GOOGLE_CLIENT_ID || env_config_1.env.ZENUXS_GITHUB_CLIENT_ID;
         if (!clientId) {
             throw appError_1.AppError.badRequest('Zenuxs OAuth is not configured');
         }
         const authServer = (env_config_1.env.ZENUXS_AUTH_SERVER || 'https://api.auth.zenuxs.in').replace(/\/$/, '');
-        const redirectUri = `${env_config_1.env.FRONTEND_URL}/api/auth/oauth/zenuxs/${provider}/callback`;
-        const params = new URLSearchParams({
-            client_id: clientId,
-            redirect_uri: redirectUri,
-            response_type: 'code',
-            scope: 'openid profile email',
-            state: `${provider}:${Date.now()}`
+        const backendUrl = process.env.BACKEND_URL || `http://localhost:${env_config_1.env.PORT}`;
+        const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/{provider}/callback`;
+        const clientSecret = env_config_1.env.ZENUXS_CLIENT_SECRET || env_config_1.env.ZENUXS_GOOGLE_CLIENT_SECRET || env_config_1.env.ZENUXS_GITHUB_CLIENT_SECRET;
+        this.oauth = new zenuxs_oauth_1.default({
+            clientId,
+            authServer,
+            redirectUri,
+            scopes: 'openid profile email',
+            storage: 'memory',
+            validateState: true,
+            usePKCE: true,
+            debug: process.env.NODE_ENV === 'development',
+            // For server-side (confidential client), send client_secret with token requests
+            ...(clientSecret ? { extraTokenParams: { client_secret: clientSecret } } : {})
         });
-        return `${authServer}/oauth/authorize?${params.toString()}`;
     }
-    async handleCallback(provider, code) {
-        const profile = await this.exchangeCode(code, provider);
+    async getAuthorizationUrl(provider) {
+        const backendUrl = process.env.BACKEND_URL || `http://localhost:${env_config_1.env.PORT}`;
+        const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`;
+        const authData = await this.oauth.getAuthorizationUrl({
+            redirectUri,
+            extraAuthParams: {
+                provider,
+                connection: provider
+            }
+        });
+        return authData.url;
+    }
+    async handleCallback(provider, code, state) {
+        const backendUrl = process.env.BACKEND_URL || `http://localhost:${env_config_1.env.PORT}`;
+        const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`;
+        // Build the full callback URL from the redirect URI and the code/state params
+        const callbackUrl = new URL(redirectUri);
+        callbackUrl.searchParams.set('code', code);
+        if (state) {
+            callbackUrl.searchParams.set('state', state);
+        }
+        let tokens = null;
+        try {
+            tokens = await this.oauth.handleCallback(callbackUrl.toString(), { redirectUri });
+        }
+        catch (error) {
+            throw appError_1.AppError.unauthorized(`Zenuxs OAuth callback failed: ${error.message}`);
+        }
+        if (!tokens || !tokens.access_token) {
+            throw appError_1.AppError.unauthorized('Zenuxs OAuth did not return tokens');
+        }
+        // Fetch user info using the SDK's built-in method
+        let userInfo;
+        try {
+            userInfo = await this.oauth.getUserInfo();
+        }
+        catch (error) {
+            throw appError_1.AppError.unauthorized(`Zenuxs userinfo failed: ${error.message}`);
+        }
+        const profile = {
+            providerId: String(userInfo.sub || userInfo.id || userInfo.email || `${provider}-${Date.now()}`),
+            email: userInfo.email || '',
+            fullName: userInfo.name || userInfo.full_name || userInfo.username || userInfo.preferred_username || 'Zenuxs User',
+            avatarUrl: userInfo.picture || userInfo.avatar_url
+        };
         const authProvider = provider === 'google' ? 'zenuxs-google' : 'zenuxs-github';
         let user = await this.userRepository.findByOAuthProvider(authProvider, profile.providerId);
         if (!user && profile.email) {
@@ -54,52 +106,6 @@ class ZenuxsOAuthService {
             lastLogin: new Date()
         });
         return { user: newUser, isNew: true };
-    }
-    async exchangeCode(code, provider) {
-        const clientId = env_config_1.env.ZENUXS_CLIENT_ID || env_config_1.env.ZENUXS_GOOGLE_CLIENT_ID || env_config_1.env.ZENUXS_GITHUB_CLIENT_ID;
-        const clientSecret = env_config_1.env.ZENUXS_CLIENT_SECRET || env_config_1.env.ZENUXS_GOOGLE_CLIENT_SECRET || env_config_1.env.ZENUXS_GITHUB_CLIENT_SECRET;
-        if (!clientId || !clientSecret) {
-            throw appError_1.AppError.badRequest('Zenuxs OAuth is not configured');
-        }
-        const authServer = (env_config_1.env.ZENUXS_AUTH_SERVER || 'https://api.auth.zenuxs.in').replace(/\/$/, '');
-        const redirectUri = `${env_config_1.env.FRONTEND_URL}/api/auth/oauth/zenuxs/${provider}/callback`;
-        const tokenResp = await fetch(`${authServer}/oauth/token`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-                'Accept': 'application/json'
-            },
-            body: new URLSearchParams({
-                grant_type: 'authorization_code',
-                code,
-                client_id: clientId,
-                client_secret: clientSecret,
-                redirect_uri: redirectUri
-            }).toString()
-        });
-        if (!tokenResp.ok) {
-            const err = await tokenResp.text();
-            throw appError_1.AppError.unauthorized(`Zenuxs token exchange failed: ${err}`);
-        }
-        const tokenData = await tokenResp.json();
-        const accessToken = tokenData.access_token || tokenData.token || tokenData.id_token;
-        if (!accessToken) {
-            throw appError_1.AppError.unauthorized('Zenuxs token exchange did not return an access token');
-        }
-        const userResp = await fetch(`${authServer}/oauth/userinfo`, {
-            headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' }
-        });
-        if (!userResp.ok) {
-            const err = await userResp.text();
-            throw appError_1.AppError.unauthorized(`Zenuxs userinfo failed: ${err}`);
-        }
-        const profile = await userResp.json();
-        return {
-            providerId: String(profile.id || profile.sub || profile.email || `${provider}-${Date.now()}`),
-            email: profile.email || profile.user?.email || '',
-            fullName: profile.name || profile.full_name || profile.username || profile.preferred_username || 'Zenuxs User',
-            avatarUrl: profile.picture || profile.avatar_url || profile.avatarUrl
-        };
     }
 }
 exports.ZenuxsOAuthService = ZenuxsOAuthService;

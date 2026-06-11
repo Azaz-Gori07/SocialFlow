@@ -39,7 +39,7 @@ class AuthController {
     login = async (req, res, next) => {
         try {
             const result = await this.authService.login(req.body);
-            return response_util_1.ApiResponse.success(res, result, 'OTP sent to email address');
+            return response_util_1.ApiResponse.success(res, result, 'Login successful');
         }
         catch (error) {
             next(error);
@@ -78,7 +78,7 @@ class AuthController {
     oauthRedirect = async (req, res, next) => {
         try {
             const { provider } = req.params;
-            const url = this.zenuxsOAuthService.getAuthorizationUrl(provider);
+            const url = await this.zenuxsOAuthService.getAuthorizationUrl(provider);
             return res.redirect(url);
         }
         catch (error) {
@@ -88,12 +88,13 @@ class AuthController {
     oauthCallback = async (req, res, next) => {
         try {
             const { provider } = req.params;
-            const { code } = req.query;
+            const { code, state } = req.query;
             if (!code || typeof code !== 'string') {
                 const frontendUrl = env_config_1.env.FRONTEND_URL;
                 return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent('Authorization code is required')}`);
             }
-            const result = await this.authService.handleOAuthCallback(provider, code, this.zenuxsOAuthService);
+            const stateStr = typeof state === 'string' ? state : undefined;
+            const result = await this.authService.handleOAuthCallback(provider, code, stateStr, this.zenuxsOAuthService);
             const frontendUrl = env_config_1.env.FRONTEND_URL;
             const params = new URLSearchParams({
                 accessToken: result.accessToken,

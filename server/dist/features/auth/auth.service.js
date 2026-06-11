@@ -63,7 +63,21 @@ class AuthService {
         if (!user) {
             throw appError_1.AppError.notFound('User not found');
         }
-        return { message: 'Account activated successfully' };
+        // Generate tokens so user is logged in after account activation
+        user.lastLogin = new Date();
+        await user.save();
+        const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
+        return {
+            user: {
+                id: user._id.toString(),
+                email: user.email,
+                fullName: user.fullName,
+                avatarUrl: user.avatarUrl,
+                provider: user.provider
+            },
+            message: 'Account activated successfully',
+            ...tokens
+        };
     }
     async login(input) {
         this.requireDb();
@@ -81,10 +95,19 @@ class AuthService {
         if (!user.emailVerified) {
             throw appError_1.AppError.unauthorized('Account not activated — verify your email first');
         }
-        await this.otpService.generateAndSendOtp(user._id.toString(), user.email, 'login');
+        // Directly return tokens without OTP requirement
+        user.lastLogin = new Date();
+        await user.save();
+        const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
         return {
-            userId: user._id.toString(),
-            email: user.email
+            user: {
+                id: user._id.toString(),
+                email: user.email,
+                fullName: user.fullName,
+                avatarUrl: user.avatarUrl,
+                provider: user.provider
+            },
+            ...tokens
         };
     }
     async verifyLoginOtp(userId, code) {
@@ -145,9 +168,9 @@ class AuthService {
             createdAt: user.createdAt
         };
     }
-    async handleOAuthCallback(provider, code, zenuxsOAuthService) {
+    async handleOAuthCallback(provider, code, state, zenuxsOAuthService) {
         this.requireDb();
-        const { user, isNew } = await zenuxsOAuthService.handleCallback(provider, code);
+        const { user, isNew } = await zenuxsOAuthService.handleCallback(provider, code, state);
         let workspace = null;
         if (isNew && this.createDefaultWorkspaceCallback) {
             workspace = await this.createDefaultWorkspaceCallback(user._id.toString(), `${user.fullName}'s Workspace`);

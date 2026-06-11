@@ -23,13 +23,14 @@ function initSocketIO(httpServer) {
     });
     // Authentication middleware for Socket.IO
     io.use((socket, next) => {
-        const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+        const authSocket = socket;
+        const token = authSocket.handshake.auth?.token || authSocket.handshake.query?.token;
         if (!token) {
             return next(new Error('Authentication token required'));
         }
         try {
             const decoded = jsonwebtoken_1.default.verify(token, JWT_SECRET);
-            socket.userId = decoded.id;
+            authSocket.userId = decoded.id;
             next();
         }
         catch (err) {
@@ -37,24 +38,25 @@ function initSocketIO(httpServer) {
         }
     });
     io.on('connection', (socket) => {
-        console.log(`🔌 Socket connected: user=${socket.userId}, socketId=${socket.id}`);
+        const authSocket = socket;
+        console.log(`🔌 Socket connected: user=${authSocket.userId}, socketId=${authSocket.id}`);
         // Join a room specific to the user for targeted notifications
-        if (socket.userId) {
-            socket.join(`user:${socket.userId}`);
+        if (authSocket.userId) {
+            authSocket.join(`user:${authSocket.userId}`);
         }
         // Handle client-side read acknowledgement
-        socket.on('notification:read', (data) => {
-            if (socket.userId) {
-                io?.to(`user:${socket.userId}`).emit('notification:read', data);
+        authSocket.on('notification:read', (data) => {
+            if (authSocket.userId) {
+                io?.to(`user:${authSocket.userId}`).emit('notification:read', data);
             }
         });
-        socket.on('notification:readAll', () => {
-            if (socket.userId) {
-                io?.to(`user:${socket.userId}`).emit('notification:readAll', { userId: socket.userId });
+        authSocket.on('notification:readAll', () => {
+            if (authSocket.userId) {
+                io?.to(`user:${authSocket.userId}`).emit('notification:readAll', { userId: authSocket.userId });
             }
         });
-        socket.on('disconnect', (reason) => {
-            console.log(`🔌 Socket disconnected: user=${socket.userId}, socketId=${socket.id}, reason=${reason}`);
+        authSocket.on('disconnect', (reason) => {
+            console.log(`🔌 Socket disconnected: user=${authSocket.userId}, socketId=${authSocket.id}, reason=${reason}`);
         });
     });
     return io;

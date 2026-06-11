@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { Layers, Sparkles } from 'lucide-react';
 
-const oauthBase = 'http://localhost:5000/api/auth/oauth/zenuxs';
+const oauthBase = `${(import.meta.env.VITE_BACKEND_API_URL as string).replace(/\/$/, '')}/auth/oauth/zenuxs`;
 
 export const Auth: React.FC = () => {
   const { login, register, verifyOtp, pendingOtp, user } = useAuth();
@@ -117,10 +117,14 @@ export const Auth: React.FC = () => {
             <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '8px', padding: '12px', fontSize: '0.95rem' }} disabled={loading}>
               {loading ? 'Verifying OTP...' : 'Verify OTP'}
             </button>
-            <button type="button" className="btn" style={{ width: '100%' }} onClick={() => {
-              setOtpCode('');
-              setPendingOtp(null);
-            }}>
+            <button
+              type="button"
+              className="btn"
+              style={{ width: '100%' }}
+              onClick={() => {
+                setOtpCode('');
+              }}
+            >
               Resend / Change email
             </button>
           </form>

@@ -41,6 +41,7 @@ exports.connectDb = connectDb;
 const mongoose_1 = __importStar(require("mongoose"));
 exports.mongoose = mongoose_1.default;
 const dotenv_1 = __importDefault(require("dotenv"));
+const dns_1 = __importDefault(require("dns"));
 dotenv_1.default.config();
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/socialflow';
 const schemaOptions = {
@@ -174,8 +175,28 @@ async function connectDb() {
         console.log('✅ MongoDB Atlas connected.');
     }
     catch (error) {
-        console.error('❌ MongoDB Atlas connection failed:', error.message);
-        throw new Error(`MongoDB Atlas connection failed: ${error.message}`);
+        if (error.code === 'ECONNREFUSED' && error.syscall === 'querySrv') {
+            console.warn("⚠️ DNS SRV resolution failed. Retrying with Google/Cloudflare public DNS servers...");
+            try {
+                dns_1.default.setServers(['8.8.8.8', '1.1.1.1']);
+                await mongoose_1.default.connect(MONGO_URI, {
+                    serverSelectionTimeoutMS: 8000,
+                    retryWrites: true,
+                    dbName: process.env.MONGO_DB_NAME || undefined
+                });
+                console.log('✅ MongoDB Atlas connected.');
+                return;
+            }
+            catch (retryError) {
+                console.error("❌ Database connection failed after retrying with public DNS:");
+                console.error(retryError.message);
+                throw retryError;
+            }
+        }
+        else {
+            console.error('❌ MongoDB Atlas connection failed:', error.message);
+            throw new Error(`MongoDB Atlas connection failed: ${error.message}`);
+        }
     }
 }
 exports.db = {
