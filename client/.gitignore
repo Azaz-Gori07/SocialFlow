@@ -1,6 +1,4 @@
-# Environment files (local override)
-.env
-.env.*
+
 
 # Dependencies (local override)
 node_modules/
