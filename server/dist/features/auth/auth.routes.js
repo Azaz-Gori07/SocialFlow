@@ -20,7 +20,7 @@ const auth_validation_1 = require("./auth.validation");
 const router = (0, express_1.Router)();
 const authLimiter = (0, express_rate_limit_1.default)({
     windowMs: 60 * 1000,
-    max: process.env.NODE_ENV === 'test' ? 100 : 5,
+    max: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? 100 : 5,
     message: { message: 'Too many auth requests, please try again later.' }
 });
 const authLimiterHandler = authLimiter;

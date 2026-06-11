@@ -38,7 +38,7 @@ const mongoose_1 = __importStar(require("mongoose"));
 const OtpSchema = new mongoose_1.Schema({
     userId: { type: String, required: true, index: true },
     codeHash: { type: String, required: true },
-    purpose: { type: String, enum: ['account_activation', 'login'], required: true },
+    purpose: { type: String, enum: ['account_activation'], required: true },
     expiresAt: { type: Date, required: true },
     used: { type: Boolean, default: false },
     attempts: { type: Number, default: 0 },

@@ -1,3 +1,11 @@
-.env,
-node_modules,
-.md
+# Environment files (local override)
+.env
+.env.*
+
+# Dependencies (local override)
+node_modules/
+
+# Build output (local override)
+dist/
+
+# Do NOT add .md here — it would block important docs like README.md

@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, Document, Model } from 'mongoose';
 
-export type OtpPurpose = 'account_activation' | 'login';
+export type OtpPurpose = 'account_activation';
 
 export interface IOtp extends Document {
   userId: string;
@@ -15,7 +15,7 @@ export interface IOtp extends Document {
 const OtpSchema = new Schema<IOtp>({
   userId: { type: String, required: true, index: true },
   codeHash: { type: String, required: true },
-  purpose: { type: String, enum: ['account_activation', 'login'], required: true },
+  purpose: { type: String, enum: ['account_activation'], required: true },
   expiresAt: { type: Date, required: true },
   used: { type: Boolean, default: false },
   attempts: { type: Number, default: 0 },

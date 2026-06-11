@@ -29,11 +29,6 @@ export class AuthController {
         return ApiResponse.success(res, result, 'Account activated successfully');
       }
 
-      if (purpose === 'login') {
-        const result = await this.authService.verifyLoginOtp(userId, code);
-        return ApiResponse.success(res, result, 'Login successful');
-      }
-
       return ApiResponse.error(res, 'Invalid OTP purpose', null, 400);
     } catch (error) {
       next(error);

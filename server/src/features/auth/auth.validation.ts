@@ -9,7 +9,7 @@ export const registerSchema = z.object({
 export const verifyOtpSchema = z.object({
   userId: z.string().min(1, 'User ID is required'),
   code: z.string().length(8, 'OTP must be exactly 8 digits'),
-  purpose: z.enum(['account_activation', 'login'])
+  purpose: z.enum(['account_activation'])
 });
 
 export const loginSchema = z.object({

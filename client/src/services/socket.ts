@@ -15,12 +15,18 @@ let socket: Socket | null = null;
  * Should be called after user logs in.
  */
 export function connectSocket(token: string): Socket {
-  if (socket?.connected) {
+  if (socket) {
+    socket.auth = { token };
+    if (!socket.connected) {
+      socket.connect();
+    }
     return socket;
   }
 
   socket = io(SOCKET_URL, {
-    auth: { token },
+    auth: (cb) => {
+      cb({ token: localStorage.getItem('access_token') || token });
+    },
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: Infinity,

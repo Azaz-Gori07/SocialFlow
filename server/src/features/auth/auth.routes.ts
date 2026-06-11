@@ -16,7 +16,7 @@ const router = Router();
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: process.env.NODE_ENV === 'test' ? 100 : 5,
+  max: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? 100 : 5,
   message: { message: 'Too many auth requests, please try again later.' }
 });
 const authLimiterHandler = authLimiter as unknown as RequestHandler;

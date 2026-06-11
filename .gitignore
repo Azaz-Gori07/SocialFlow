@@ -1,34 +1,71 @@
-node_modules,
-dist,
-build,
-.DS_Store,
-.env,
-server/.env,
-*.log,
-*.tsbuildinfo,
-coverage,
-.vscode,
-.idea,
-*.iml,
-*.suo,
-*.ntvs*,
-*.njsproj,
-*.sln,
-*.swp,
-*.bak,
-*.tmp,
-*.cache,
-*.eslintcache,
-*.prettiercache,
-*.tscache,
-*.eslintcache,
-*.prettiercache,
-*.tscache,
-*.zip,
-*.tar.gz,
-client/node_modules,
-client/dist,
-client/build,
-server/node_modules,server/dist,
-server/build,
-.md
+# Dependencies
+node_modules/
+client/node_modules/
+server/node_modules/
+
+# Environment files
+.env
+.env.*
+.env.local
+.env.production
+.env.development
+.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build output
+dist/
+build/
+client/dist/
+client/build/
+server/dist/
+.next/
+out/
+coverage/
+
+# IDE
+.vscode/
+.idea/
+*.iml
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript
+*.tsbuildinfo
+*.tscache
+*.eslintcache
+*.prettiercache
+
+# Temporary files
+*.tmp
+*.bak
+*.cache
+tmp/
+temp/
+
+# Archives
+*.zip
+*.tar.gz
+*.rar
+
+# Reports / generated docs (keep README.md)
+reports/
+problem.md
+*AUDIT.md
+*REPORT.md
+*ANALYSIS.md
+*PLAN.md
+*STATUS.md

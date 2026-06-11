@@ -95,7 +95,6 @@ class AuthService {
         if (!user.emailVerified) {
             throw appError_1.AppError.unauthorized('Account not activated — verify your email first');
         }
-        // Directly return tokens without OTP requirement
         user.lastLogin = new Date();
         await user.save();
         const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
@@ -112,7 +111,7 @@ class AuthService {
     }
     async verifyLoginOtp(userId, code) {
         this.requireDb();
-        const isValid = await this.otpService.verifyOtp(userId, code, 'login');
+        const isValid = await this.otpService.verifyOtp(userId, code, 'account_activation');
         if (!isValid) {
             throw appError_1.AppError.badRequest('Invalid or expired OTP');
         }

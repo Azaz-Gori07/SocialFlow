@@ -71,6 +71,10 @@ class ProviderFactory {
     }
     static getProvider(platform) {
         const cleanPlatform = platform.toLowerCase().trim();
+        if (process.env.NODE_ENV === 'test') {
+            const mockPlatform = cleanPlatform === 'x' ? 'twitter' : cleanPlatform === 'google' ? 'youtube' : cleanPlatform;
+            return new MockSocialProvider(mockPlatform);
+        }
         const isMockCredentials = (clientId) => {
             return (!clientId ||
                 clientId.startsWith('mock_') ||

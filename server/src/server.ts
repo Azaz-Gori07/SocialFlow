@@ -29,17 +29,6 @@ import './services/queue/post.worker';
 
 const app = express();
 
-// Security Middleware
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-  message: { message: 'Too many requests, please try again later.' }
-});
-app.use('/api/', apiLimiter as unknown as RequestHandler);
-
-// Helmet for setting secure HTTP headers
-app.use(helmet());
-
 const allowedOrigins = process.env.CORS_ORIGIN
   ? process.env.CORS_ORIGIN.split(',')
   : process.env.NODE_ENV === 'production'
@@ -51,6 +40,17 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
+// Security Middleware
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'development' ? 10000 : 100,
+  message: { message: 'Too many requests, please try again later.' }
+});
+app.use('/api/', apiLimiter as unknown as RequestHandler);
+
+// Helmet for setting secure HTTP headers
+app.use(helmet());
 
 app.use(express.json());
 

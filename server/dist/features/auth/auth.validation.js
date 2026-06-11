@@ -10,7 +10,7 @@ exports.registerSchema = zod_1.z.object({
 exports.verifyOtpSchema = zod_1.z.object({
     userId: zod_1.z.string().min(1, 'User ID is required'),
     code: zod_1.z.string().length(8, 'OTP must be exactly 8 digits'),
-    purpose: zod_1.z.enum(['account_activation', 'login'])
+    purpose: zod_1.z.enum(['account_activation'])
 });
 exports.loginSchema = zod_1.z.object({
     email: zod_1.z.string().email('Invalid email address format'),

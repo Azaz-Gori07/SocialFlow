@@ -121,23 +121,27 @@ export class AuthService {
       throw AppError.unauthorized('Account not activated — verify your email first');
     }
 
-    // Generate and send login OTP
-    await this.otpService.generateAndSendOtp(
-      user._id.toString(),
-      user.email,
-      'login'
-    );
+    user.lastLogin = new Date();
+    await user.save();
+
+    const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
 
     return {
-      userId: user._id.toString(),
-      email: user.email
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        provider: user.provider
+      },
+      ...tokens
     };
   }
 
   async verifyLoginOtp(userId: string, code: string) {
     this.requireDb();
 
-    const isValid = await this.otpService.verifyOtp(userId, code, 'login');
+    const isValid = await this.otpService.verifyOtp(userId, code, 'account_activation');
     if (!isValid) {
       throw AppError.badRequest('Invalid or expired OTP');
     }

@@ -81,14 +81,7 @@ export const api = {
     register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     login: (body: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     verifyOtp: (body: any) => request<any>('/auth/verify-otp', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
-    logout: () => {
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user');
-      localStorage.removeItem('workspace');
-      window.dispatchEvent(new Event('auth-logout'));
-      return request<any>('/auth/logout', { method: 'POST' });
-    },
+    logout: () => request<any>('/auth/logout', { method: 'POST', skipAuth: true }),
     me: () => request<any>('/auth/me')
   },
   

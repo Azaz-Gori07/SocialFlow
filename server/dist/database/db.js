@@ -164,6 +164,31 @@ const AnalyticsMetricModel = mongoose_1.default.models.AnalyticsMetric || (0, mo
 const NotificationModel = mongoose_1.default.models.Notification || (0, mongoose_1.model)('Notification', NotificationSchema);
 const ActivityLogModel = mongoose_1.default.models.ActivityLog || (0, mongoose_1.model)('ActivityLog', ActivityLogSchema);
 const GrowthInsightModel = mongoose_1.default.models.GrowthInsight || (0, mongoose_1.model)('GrowthInsight', GrowthInsightSchema);
+async function startMemoryDbFallback(originalError) {
+    console.log('🔌 Starting in-memory MongoDB fallback...');
+    try {
+        const { MongoMemoryServer } = await Promise.resolve().then(() => __importStar(require('mongodb-memory-server')));
+        let mongod;
+        try {
+            mongod = await MongoMemoryServer.create({
+                instance: {
+                    port: 27017
+                }
+            });
+        }
+        catch {
+            mongod = await MongoMemoryServer.create();
+        }
+        const memoryUri = mongod.getUri();
+        console.log(`🔌 Connecting to in-memory MongoDB fallback: ${memoryUri}`);
+        await mongoose_1.default.connect(memoryUri);
+        console.log('✅ In-memory MongoDB connected successfully.');
+    }
+    catch (fallbackError) {
+        console.error('❌ Failed to start in-memory MongoDB fallback:', fallbackError.message);
+        throw new Error(`MongoDB Atlas connection failed: ${originalError.message}. Fallback error: ${fallbackError.message}`);
+    }
+}
 async function connectDb() {
     try {
         console.log(`🔌 Connecting to MongoDB Atlas: ${MONGO_URI.replace(/\/\/.*@/, '//***:***@')}`);
@@ -190,12 +215,12 @@ async function connectDb() {
             catch (retryError) {
                 console.error("❌ Database connection failed after retrying with public DNS:");
                 console.error(retryError.message);
-                throw retryError;
+                await startMemoryDbFallback(retryError);
             }
         }
         else {
             console.error('❌ MongoDB Atlas connection failed:', error.message);
-            throw new Error(`MongoDB Atlas connection failed: ${error.message}`);
+            await startMemoryDbFallback(error);
         }
     }
 }

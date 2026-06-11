@@ -32,15 +32,6 @@ const db_1 = require("./database/db");
 require("./services/queue/post.worker");
 const app = (0, express_1.default)();
 exports.app = app;
-// Security Middleware
-const apiLimiter = (0, express_rate_limit_1.default)({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    message: { message: 'Too many requests, please try again later.' }
-});
-app.use('/api/', apiLimiter);
-// Helmet for setting secure HTTP headers
-app.use((0, helmet_1.default)());
 const allowedOrigins = process.env.CORS_ORIGIN
     ? process.env.CORS_ORIGIN.split(',')
     : process.env.NODE_ENV === 'production'
@@ -52,6 +43,15 @@ app.use((0, cors_1.default)({
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
 }));
+// Security Middleware
+const apiLimiter = (0, express_rate_limit_1.default)({
+    windowMs: 15 * 60 * 1000,
+    max: process.env.NODE_ENV === 'development' ? 10000 : 100,
+    message: { message: 'Too many requests, please try again later.' }
+});
+app.use('/api/', apiLimiter);
+// Helmet for setting secure HTTP headers
+app.use((0, helmet_1.default)());
 app.use(express_1.default.json());
 // API Swagger Documentation Interface
 app.use('/api-docs', swagger_ui_express_1.default.serve, swagger_ui_express_1.default.setup(swagger_json_1.default));

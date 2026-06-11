@@ -80,10 +80,9 @@ describe('AuthService Unit Tests', () => {
   });
 
   describe('login', () => {
-    it('should send OTP with valid credentials', async () => {
+    it('should return tokens with valid credentials (no OTP)', async () => {
       mockUserRepository.findByEmail.mockResolvedValue({ ...mockUser, emailVerified: true });
       (bcrypt.compare as jest.Mock).mockResolvedValue(true);
-      mockOtpService.generateAndSendOtp.mockResolvedValue(undefined);
 
       const result = await authService.login({
         email: 'test@socialflow.ai',
@@ -91,13 +90,12 @@ describe('AuthService Unit Tests', () => {
       });
 
       expect(mockUserRepository.findByEmail).toHaveBeenCalledWith('test@socialflow.ai');
-      expect(result).toHaveProperty('userId');
-      expect(result).toHaveProperty('email');
-      expect(mockOtpService.generateAndSendOtp).toHaveBeenCalledWith(
-        mockUser._id.toString(),
-        mockUser.email,
-        'login'
-      );
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+      expect(result).toHaveProperty('user');
+      expect(result.user).toHaveProperty('id');
+      expect(result.user.email).toBe('test@socialflow.ai');
+      expect(mockOtpService.generateAndSendOtp).not.toHaveBeenCalled();
     });
 
     it('should throw AppError unauthorized if user not found', async () => {
@@ -143,7 +141,7 @@ describe('AuthService Unit Tests', () => {
 
       const result = await authService.verifyLoginOtp('user_123', '12345678');
 
-      expect(mockOtpService.verifyOtp).toHaveBeenCalledWith('user_123', '12345678', 'login');
+      expect(mockOtpService.verifyOtp).toHaveBeenCalledWith('user_123', '12345678', 'account_activation');
       expect(result).toHaveProperty('accessToken');
       expect(result).toHaveProperty('refreshToken');
       expect(result).toHaveProperty('expiresIn');

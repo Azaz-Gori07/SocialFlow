@@ -115,7 +115,7 @@ describe('AuthController Integration Tests', () => {
       }).exec();
     });
 
-    it('should send OTP with valid credentials', async () => {
+    it('should return tokens with valid credentials (no OTP)', async () => {
       const response = await request(app)
         .post('/api/auth/login')
         .send({
@@ -125,13 +125,11 @@ describe('AuthController Integration Tests', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveProperty('userId');
-      expect(response.body.data).not.toHaveProperty('accessToken');
-
-      // Verify login OTP was created
-      const otp = await OtpModel.findOne({ userId: testUserId, purpose: 'login' });
-      expect(otp).toBeTruthy();
-      expect(otp!.used).toBe(false);
+      expect(response.body.data).toHaveProperty('accessToken');
+      expect(response.body.data).toHaveProperty('refreshToken');
+      expect(response.body.data).toHaveProperty('user');
+      expect(response.body.data.user).toHaveProperty('id');
+      expect(response.body.data.user.email).toBe(testUser.email.toLowerCase());
     });
 
     it('should fail login with incorrect password', async () => {

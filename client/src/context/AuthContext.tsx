@@ -1,4 +1,4 @@
-﻿import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { connectSocket, disconnectSocket } from '../services/socket';
 
@@ -7,10 +7,10 @@ interface AuthContextType {
   workspace: any | null;
   workspaces: any[];
   loading: boolean;
-  pendingOtp: { userId: string; purpose: 'login' | 'account_activation' } | null;
+  pendingOtp: { userId: string; purpose: 'account_activation' } | null;
   login: (email: string, password: string) => Promise<any>;
   register: (email: string, password: string, fullName: string) => Promise<any>;
-  verifyOtp: (userId: string, code: string, purpose: 'login' | 'account_activation') => Promise<any>;
+  verifyOtp: (userId: string, code: string, purpose: 'account_activation') => Promise<any>;
   logout: () => Promise<void>;
   switchWorkspace: (workspaceId: string) => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
@@ -30,7 +30,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [workspace, setWorkspace] = useState<any | null>(null);
   const [workspaces, setWorkspaces] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [pendingOtp, setPendingOtp] = useState<{ userId: string; purpose: 'login' | 'account_activation' } | null>(null);
+  const [pendingOtp, setPendingOtp] = useState<{ userId: string; purpose: 'account_activation' } | null>(null);
 
   // Load user from localStorage on mount
   useEffect(() => {
@@ -40,6 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const cachedWorkspace = localStorage.getItem('workspace');
 
       if (token && cachedUser) {
+        connectSocket(token);
         try {
           setUser(JSON.parse(cachedUser));
         } catch {
@@ -98,6 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const handleLogoutCleanup = () => {
+    disconnectSocket();
     setUser(null);
     setWorkspace(null);
     setWorkspaces([]);
@@ -111,21 +113,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      // Login now directly returns tokens without OTP
       const res = await api.auth.login({ email, password });
+
       if (res?.accessToken) {
         setupUserSession(res);
         setUser(res.user);
-        
+
         const wsList = await api.workspaces.list();
         setWorkspaces(wsList);
         if (wsList.length > 0) {
           setWorkspace(wsList[0]);
           localStorage.setItem('workspace', JSON.stringify(wsList[0]));
         }
-        return res;
       }
-      return null;
+
+      return res;
     } finally {
       setLoading(false);
     }
@@ -145,11 +147,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const verifyOtp = async (userId: string, code: string, purpose: 'login' | 'account_activation') => {
+  const verifyOtp = async (userId: string, code: string, purpose: 'account_activation') => {
     setLoading(true);
     try {
       const res = await api.auth.verifyOtp({ userId, code, purpose });
-      // Both login and account_activation now return tokens
+      // Account activation returns tokens
       if (res?.accessToken) {
         setupUserSession(res);
         setUser(res.user);

@@ -26,10 +26,6 @@ class AuthController {
                 const result = await this.authService.verifyAccount(userId, code);
                 return response_util_1.ApiResponse.success(res, result, 'Account activated successfully');
             }
-            if (purpose === 'login') {
-                const result = await this.authService.verifyLoginOtp(userId, code);
-                return response_util_1.ApiResponse.success(res, result, 'Login successful');
-            }
             return response_util_1.ApiResponse.error(res, 'Invalid OTP purpose', null, 400);
         }
         catch (error) {

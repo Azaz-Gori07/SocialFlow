@@ -19,7 +19,7 @@ export const Auth: React.FC = () => {
   // Redirect to dashboard if already logged in
   React.useEffect(() => {
     if (user) {
-      navigate('/');
+      navigate('/dashboard');
     }
   }, [user, navigate]);
 
@@ -32,7 +32,7 @@ export const Auth: React.FC = () => {
       if (isLogin) {
         const res = await login(email, password);
         if (res?.accessToken) {
-          navigate('/');
+          navigate('/dashboard');
         }
       } else {
         if (!fullName) {
@@ -60,7 +60,7 @@ export const Auth: React.FC = () => {
       }
       const res = await verifyOtp(pendingOtp.userId, otpCode, pendingOtp.purpose);
       if (res?.accessToken) {
-        navigate('/');
+        navigate('/dashboard');
       }
     } catch (err: any) {
       setError(err.message || 'OTP verification failed.');
@@ -104,13 +104,13 @@ export const Auth: React.FC = () => {
         {pendingOtp ? (
           <form onSubmit={handleOtpSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div>
-              <label className="form-label">Enter the 6-digit OTP</label>
+              <label className="form-label">Enter the 8-digit OTP</label>
               <input
                 type="text"
                 className="form-input"
-                placeholder="123456"
+                placeholder="12345678"
                 value={otpCode}
-                onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
                 required
               />
             </div>
