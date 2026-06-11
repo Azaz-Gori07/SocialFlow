@@ -139,6 +139,30 @@ const NotificationModel = (mongoose.models.Notification as Model<any>) || model(
 const ActivityLogModel = (mongoose.models.ActivityLog as Model<any>) || model('ActivityLog', ActivityLogSchema);
 const GrowthInsightModel = (mongoose.models.GrowthInsight as Model<any>) || model('GrowthInsight', GrowthInsightSchema);
 
+async function startMemoryDbFallback(originalError: Error) {
+  console.log('🔌 Starting in-memory MongoDB fallback...');
+  try {
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+    let mongod;
+    try {
+      mongod = await MongoMemoryServer.create({
+        instance: {
+          port: 27017
+        }
+      });
+    } catch {
+      mongod = await MongoMemoryServer.create();
+    }
+    const memoryUri = mongod.getUri();
+    console.log(`🔌 Connecting to in-memory MongoDB fallback: ${memoryUri}`);
+    await mongoose.connect(memoryUri);
+    console.log('✅ In-memory MongoDB connected successfully.');
+  } catch (fallbackError: any) {
+    console.error('❌ Failed to start in-memory MongoDB fallback:', fallbackError.message);
+    throw new Error(`MongoDB Atlas connection failed: ${originalError.message}. Fallback error: ${fallbackError.message}`);
+  }
+}
+
 async function connectDb() {
   try {
     console.log(`🔌 Connecting to MongoDB Atlas: ${MONGO_URI.replace(/\/\/.*@/, '//***:***@')}`);
@@ -163,11 +187,11 @@ async function connectDb() {
       } catch (retryError: any) {
         console.error("❌ Database connection failed after retrying with public DNS:");
         console.error(retryError.message);
-        throw retryError;
+        await startMemoryDbFallback(retryError);
       }
     } else {
       console.error('❌ MongoDB Atlas connection failed:', error.message);
-      throw new Error(`MongoDB Atlas connection failed: ${error.message}`);
+      await startMemoryDbFallback(error);
     }
   }
 }

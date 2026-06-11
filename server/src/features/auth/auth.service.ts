@@ -1,4 +1,4 @@
-﻿import bcrypt from 'bcryptjs';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { UserRepository } from '../user/user.repository';
@@ -121,21 +121,16 @@ export class AuthService {
       throw AppError.unauthorized('Account not activated — verify your email first');
     }
 
-    // Directly return tokens without OTP requirement
-    user.lastLogin = new Date();
-    await user.save();
-
-    const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
+    // Generate and send login OTP
+    await this.otpService.generateAndSendOtp(
+      user._id.toString(),
+      user.email,
+      'login'
+    );
 
     return {
-      user: {
-        id: user._id.toString(),
-        email: user.email,
-        fullName: user.fullName,
-        avatarUrl: user.avatarUrl,
-        provider: user.provider
-      },
-      ...tokens
+      userId: user._id.toString(),
+      email: user.email
     };
   }
 
