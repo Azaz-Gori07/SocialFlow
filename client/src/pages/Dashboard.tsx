@@ -101,7 +101,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Metrics Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+      <div className="responsive-stat-grid">
         {statCards.map((card, i) => {
           const Icon = card.icon;
           const isPositive = card.change && card.change >= 0;
@@ -132,7 +132,7 @@ export const Dashboard: React.FC = () => {
       </div>
 
       {/* Charts section */}
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: '30px', marginBottom: '32px' }}>
+      <div className="responsive-grid-2-1" style={{ marginBottom: '32px' }}>
         {/* Growth Graph */}
         <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -224,7 +224,7 @@ export const Dashboard: React.FC = () => {
           </div>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 600 }}>AI Growth Recommendations</h3>
         </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+        <div className="responsive-grid-3-col">
           {insights.length === 0 ? (
             <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>Generating recommendations... Connect channels and schedule posts to enable AI analytics.</p>
           ) : (

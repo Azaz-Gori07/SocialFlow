@@ -131,7 +131,7 @@ export const NotificationCenter: React.FC = () => {
       </div>
 
       {/* Filter Tabs */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
         <button
           onClick={() => setFilter('all')}
           className={filter === 'all' ? 'btn btn-primary' : 'btn btn-secondary'}

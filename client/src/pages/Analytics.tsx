@@ -90,7 +90,7 @@ export const Analytics: React.FC = () => {
         </div>
         
         {/* Export Dropdown */}
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
           <button
             onClick={() => handleExport('csv')}
             className="btn btn-secondary"
@@ -111,7 +111,7 @@ export const Analytics: React.FC = () => {
       </div>
 
       {/* Growth Trends Row */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '30px', marginBottom: '30px' }}>
+      <div className="responsive-grid-125-1" style={{ marginBottom: '30px' }}>
         
         {/* Time Series Area Chart */}
         <div className="glass-card" style={{ padding: '24px' }}>

@@ -6,7 +6,8 @@ import {
   Sparkles, 
   UserPlus, 
   CheckCircle,
-  Send
+  Send,
+  ArrowLeft
 } from 'lucide-react';
 
 export const Comments: React.FC = () => {
@@ -32,15 +33,19 @@ export const Comments: React.FC = () => {
       );
       setComments(list);
       
-      // Auto-select first comment if none is selected
+      const isMobileViewport = window.innerWidth <= 768;
+
+      // Auto-select first comment if none is selected (only on desktop/tablet)
       if (list.length > 0 && !selectedComment) {
-        setSelectedComment(list[0]);
+        if (!isMobileViewport) {
+          setSelectedComment(list[0]);
+        }
       } else if (list.length === 0) {
         setSelectedComment(null);
       } else if (selectedComment) {
         // Refresh active comment
         const active = list.find((c: any) => c._id === selectedComment._id);
-        setSelectedComment(active || list[0]);
+        setSelectedComment(active || (isMobileViewport ? null : list[0]));
       }
     } catch (err) {
       console.error(err);
@@ -151,13 +156,13 @@ export const Comments: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '30px', flexGrow: 1, alignItems: 'stretch' }}>
+      <div className={`responsive-grid-1-15 responsive-comments-grid ${selectedComment ? 'show-detail' : 'show-list'}`} style={{ flexGrow: 1, alignItems: 'stretch' }}>
         
         {/* Left Column - Comments Queue */}
-        <div className="glass-card" style={{ padding: '20px', display: 'flex', flexDirection: 'column', maxHeight: '650px' }}>
+        <div className="glass-card comments-master-pane" style={{ padding: '20px', display: 'flex', flexDirection: 'column', maxHeight: '650px' }}>
           
           {/* Platform Filters */}
-          <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '8px' }}>
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '16px', overflowX: 'auto', paddingBottom: '8px', whiteSpace: 'nowrap', width: '100%', flexShrink: 0 }}>
             {['all', 'twitter', 'linkedin', 'instagram', 'facebook'].map(plat => (
               <button
                 key={plat}
@@ -175,7 +180,8 @@ export const Comments: React.FC = () => {
                   fontSize: '0.75rem',
                   fontWeight: filterPlatform === plat ? 600 : 400,
                   textTransform: 'capitalize',
-                  whiteSpace: 'nowrap'
+                  whiteSpace: 'nowrap',
+                  flexShrink: 0
                 }}
               >
                 {plat === 'all' ? 'All Channels' : plat === 'twitter' ? 'X (Twitter)' : plat}
@@ -248,7 +254,7 @@ export const Comments: React.FC = () => {
         </div>
 
         {/* Right Column - Active Discussion Panel */}
-        <div className="glass-card" style={{ padding: '24px', display: 'flex', flexDirection: 'column', maxHeight: '650px' }}>
+        <div className="glass-card comments-detail-pane" style={{ padding: '24px', display: 'flex', flexDirection: 'column', maxHeight: '650px' }}>
           {!selectedComment ? (
             <div style={{ display: 'flex', flexGrow: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'hsl(var(--text-muted))', padding: '40px', textAlign: 'center' }}>
               <MessageSquare size={36} style={{ color: 'hsl(var(--primary) / 0.3)', marginBottom: '16px' }} />
@@ -258,8 +264,18 @@ export const Comments: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, overflow: 'hidden' }}>
               
+              {/* Mobile Back Button */}
+              <button 
+                onClick={() => setSelectedComment(null)}
+                className="mobile-back-btn"
+                style={{ marginBottom: '16px', alignSelf: 'flex-start' }}
+              >
+                <ArrowLeft size={16} />
+                <span>Back to Inbox</span>
+              </button>
+
               {/* Active Header */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '16px', marginBottom: '16px' }}>
+              <div className="comments-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                   <img src={selectedComment.author.avatarUrl} alt="" style={{ width: '36px', height: '36px', borderRadius: '50%' }} />
                   <div>
@@ -303,7 +319,7 @@ export const Comments: React.FC = () => {
                 <div style={{ display: 'flex', gap: '10px', background: 'rgba(255,255,255,0.01)', border: '1px solid var(--border-glass)', padding: '14px', borderRadius: 'var(--radius-md)' }}>
                   <img src={selectedComment.author.avatarUrl} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%' }} />
                   <div>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '4px' }}>
+                    <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '4px', flexWrap: 'wrap' }}>
                       <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'white' }}>{selectedComment.author.displayName}</span>
                       <span style={{ fontSize: '0.65rem', color: 'hsl(var(--text-muted))' }}>{formatDateTime(selectedComment.createdAt)}</span>
                     </div>
@@ -316,7 +332,7 @@ export const Comments: React.FC = () => {
                   <div key={r._id} style={{ display: 'flex', gap: '10px', marginLeft: '30px', background: 'rgba(139, 92, 246, 0.03)', border: '1px solid hsl(var(--primary) / 0.1)', padding: '12px', borderRadius: 'var(--radius-md)' }}>
                     <img src={r.author.avatarUrl} alt="" style={{ width: '24px', height: '24px', borderRadius: '50%' }} />
                     <div>
-                      <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '4px' }}>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'baseline', marginBottom: '4px', flexWrap: 'wrap' }}>
                         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'white' }}>{r.author.displayName}</span>
                         {r.author.isSystemUser && <span style={{ fontSize: '0.55rem', background: 'hsl(var(--primary) / 0.2)', color: 'hsl(var(--primary))', padding: '1px 4px', borderRadius: '4px', textTransform: 'uppercase', fontWeight: 'bold' }}>Team</span>}
                         <span style={{ fontSize: '0.6rem', color: 'hsl(var(--text-muted))' }}>{formatDateTime(r.createdAt)}</span>

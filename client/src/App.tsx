@@ -13,10 +13,12 @@ import { Settings } from './pages/Settings';
 import { NotificationCenter } from './pages/NotificationCenter';
 import { NotificationPreferences } from './pages/NotificationPreferences';
 import { AuthCallback } from './pages/AuthCallback';
+import { Menu, Layers } from 'lucide-react';
 
 const AppContent: React.FC = () => {
   const { user, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<string>('dashboard');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   if (loading) {
     return (
@@ -67,8 +69,41 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="app-container">
+      {/* Mobile Top Bar */}
+      <header className="mobile-header-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), #00F2FE)', borderRadius: '6px', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Layers size={16} color="white" />
+          </div>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.15rem', background: 'linear-gradient(135deg, #fff, hsl(var(--text-secondary)))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            ViralDrift AI
+          </span>
+        </div>
+        <button 
+          className="mobile-menu-btn" 
+          onClick={() => setIsSidebarOpen(true)}
+          title="Open Menu"
+        >
+          <Menu size={20} />
+        </button>
+      </header>
+
+      {/* Sidebar Backdrop Overlay */}
+      <div 
+        className={`sidebar-backdrop ${isSidebarOpen ? 'show' : ''}`}
+        onClick={() => setIsSidebarOpen(false)}
+      />
+
       {/* Navigation Sidebar */}
-      <Sidebar currentTab={currentTab} setCurrentTab={setCurrentTab} />
+      <Sidebar 
+        currentTab={currentTab} 
+        setCurrentTab={(tab) => {
+          setCurrentTab(tab);
+          setIsSidebarOpen(false); // Close sidebar on selection
+        }} 
+        isOpen={isSidebarOpen}
+        setIsOpen={setIsSidebarOpen}
+      />
       
       {/* Main Workspace Frame */}
       <main className="content-wrapper">

@@ -117,7 +117,7 @@ export const Workspaces: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.75fr 1fr', gap: '30px' }}>
+      <div className="responsive-grid-175-1">
         
         {/* Left Column - Active Workspace & Member Roster */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>

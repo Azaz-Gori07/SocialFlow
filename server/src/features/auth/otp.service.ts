@@ -52,6 +52,13 @@ export class OtpService {
       ? 'Activate your SocialFlow account'
       : 'Your SocialFlow login verification code';
 
+    // NEVER send real emails during test runs.
+    // Only log the OTP to console so integration tests can read it if needed.
+    if (process.env.NODE_ENV === 'test') {
+      console.log(`[OtpService] [TEST] OTP for ${email} (${purpose}) code: ${code}`);
+      return;
+    }
+
     const smtpHost = env.OTP_EMAIL_HOST || 'smtp.gmail.com';
     const smtpPort = env.OTP_EMAIL_PORT || 587;
     const smtpUser = env.EMAIL_USER || env.OTP_EMAIL_USER;

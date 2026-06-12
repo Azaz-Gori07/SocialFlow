@@ -102,7 +102,7 @@ export const Settings: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1.25fr 1fr', gap: '30px' }}>
+      <div className="responsive-grid-125-1">
         
         {/* Left Column - Supported Integrations Grid */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -111,7 +111,7 @@ export const Settings: React.FC = () => {
           {loading ? (
             <p style={{ color: 'hsl(var(--text-secondary))' }}>Loading profiles...</p>
           ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+            <div className="responsive-grid-1-1">
               {platforms.map(plat => {
                 const Icon = plat.icon;
                 const connectedForPlat = accounts.filter(a => a.platform === plat.id);
@@ -214,7 +214,7 @@ export const Settings: React.FC = () => {
       {/* OAuth Connection Simulator Modal */}
       {showConnectModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <form onSubmit={handleConnect} className="glass-card animate-fade-in" style={{ width: '100%', maxWidth: '440px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <form onSubmit={handleConnect} className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '440px' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <div style={{ background: 'rgba(139, 92, 246, 0.1)', padding: '6px', borderRadius: '8px' }}>
                 <Link2 size={18} style={{ color: 'hsl(var(--primary))' }} />

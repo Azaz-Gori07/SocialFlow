@@ -13,16 +13,19 @@ import {
   Bell,
   ChevronDown,
   Layers,
-  BellDot
+  BellDot,
+  X
 } from 'lucide-react';
 import { onNotification, onUnreadCount } from '../services/socket';
 
 interface SidebarProps {
   currentTab: string;
   setCurrentTab: (tab: string) => void;
+  isOpen?: boolean;
+  setIsOpen?: (open: boolean) => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isOpen, setIsOpen }) => {
   const { user, workspace, workspaces, switchWorkspace, logout } = useAuth();
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -90,15 +93,37 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) =
   ];
 
   return (
-    <aside className="sidebar-wrapper">
+    <aside className={`sidebar-wrapper ${isOpen ? 'open' : ''}`}>
       {/* Brand Logo */}
-      <div style={{ padding: '24px 20px', borderBottom: '1px solid hsl(var(--border))', display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), #00F2FE)', borderRadius: '8px', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Layers size={20} color="white" />
+      <div style={{ padding: '24px 20px', borderBottom: '1px solid hsl(var(--border))', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ background: 'linear-gradient(135deg, hsl(var(--primary)), #00F2FE)', borderRadius: '8px', padding: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Layers size={20} color="white" />
+          </div>
+          <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #fff, hsl(var(--text-secondary)))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+            ViralDrift AI
+          </span>
         </div>
-        <span style={{ fontFamily: 'var(--font-display)', fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em', background: 'linear-gradient(135deg, #fff, hsl(var(--text-secondary)))', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-          ViralDrift AI
-        </span>
+        {setIsOpen && (
+          <button
+            onClick={() => setIsOpen(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'hsl(var(--text-secondary))',
+              cursor: 'pointer',
+              padding: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: 'var(--radius-sm)'
+            }}
+            className="sidebar-close-btn"
+            title="Close Menu"
+          >
+            <X size={18} />
+          </button>
+        )}
       </div>
 
       {/* Workspace Selector */}
@@ -246,6 +271,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab }) =
         }
         .logout-hover:hover {
           color: #ef4444 !important;
+        }
+        .sidebar-close-btn {
+          display: none !important;
+        }
+        @media (max-width: 1024px) {
+          .sidebar-close-btn {
+            display: flex !important;
+          }
         }
       `}</style>
     </aside>

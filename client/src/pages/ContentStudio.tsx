@@ -139,7 +139,7 @@ export const ContentStudio: React.FC = () => {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.25fr', gap: '30px' }}>
+      <div className="responsive-grid-1-125">
         
         {/* Left Column - Generation Forms */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -184,7 +184,7 @@ export const ContentStudio: React.FC = () => {
                 <span style={{ color: '#FF0000', fontWeight: 'bold', fontSize: '12px' }}>YT</span>
                 <span>YouTube Video URL</span>
               </label>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div className="flex-responsive-row">
                 <input
                   type="url"
                   className="form-input"
@@ -209,7 +209,7 @@ export const ContentStudio: React.FC = () => {
                 <BookOpen size={14} style={{ color: 'hsl(var(--secondary))' }} />
                 <span>Blog Post URL</span>
               </label>
-              <div style={{ display: 'flex', gap: '10px' }}>
+              <div className="flex-responsive-row">
                 <input
                   type="url"
                   className="form-input"
@@ -320,13 +320,13 @@ export const ContentStudio: React.FC = () => {
       {/* Scheduler Modal */}
       {showScheduleModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="glass-card animate-fade-in" style={{ width: '100%', maxWidth: '480px', padding: '28px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '480px' }}>
             <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Configure Post Schedule</h3>
             
             {/* Platform Selection Checklist */}
             <div>
               <label className="form-label">Select Platforms to Publish To</label>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginTop: '6px' }}>
+              <div className="responsive-grid-1-1" style={{ marginTop: '6px' }}>
                 {['twitter', 'linkedin', 'instagram', 'facebook'].map(plat => {
                   const isChecked = platformsToSchedule.includes(plat);
                   return (
@@ -361,7 +361,7 @@ export const ContentStudio: React.FC = () => {
             </div>
 
             {/* Date/Time Pickers */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="responsive-grid-1-1">
               <div>
                 <label className="form-label">Post Date (Optional)</label>
                 <input

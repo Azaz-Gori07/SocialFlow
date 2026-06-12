@@ -178,7 +178,7 @@ export const Scheduler: React.FC = () => {
             Coordinate your publishing schedule, manage queues, and upload bulk campaigns.
           </p>
         </div>
-        <div style={{ display: 'flex', gap: '12px' }}>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
           <button 
             onClick={() => setShowBulkModal(true)} 
             className="btn btn-secondary"
@@ -198,8 +198,7 @@ export const Scheduler: React.FC = () => {
         </div>
       </div>
 
-      {/* Tab Filter Controls */}
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
         {[
           { id: 'all', label: 'All Content' },
           { id: 'scheduled', label: 'Scheduled Queue' },
@@ -218,7 +217,8 @@ export const Scheduler: React.FC = () => {
               cursor: 'pointer',
               fontSize: '0.85rem',
               fontWeight: filter === tab.id ? 600 : 400,
-              transition: 'background 0.2s'
+              transition: 'background 0.2s',
+              flexShrink: 0
             }}
           >
             {tab.label}
@@ -244,12 +244,9 @@ export const Scheduler: React.FC = () => {
           {posts.map((post: any) => (
             <div 
               key={post._id} 
-              className="glass-card" 
+              className="glass-card scheduled-card" 
               style={{ 
                 padding: '20px', 
-                display: 'flex', 
-                justifyContent: 'space-between', 
-                alignItems: 'center',
                 borderLeft: `3px solid ${post.status === 'published' ? '#10b981' : post.status === 'failed' ? '#ef4444' : '#f59e0b'}` 
               }}
             >
@@ -306,7 +303,7 @@ export const Scheduler: React.FC = () => {
       {/* Manual Creation Modal */}
       {showCreateModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <form onSubmit={handleCreatePost} className="glass-card animate-fade-in" style={{ width: '100%', maxWidth: '500px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <form onSubmit={handleCreatePost} className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '500px' }}>
             <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Create Scheduled Post</h3>
             
             {/* Target platform selection */}
@@ -361,7 +358,7 @@ export const Scheduler: React.FC = () => {
             </div>
 
             {/* Timing */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            <div className="responsive-grid-1-1">
               <div>
                 <label className="form-label">Post Date (Optional)</label>
                 <input
@@ -414,7 +411,7 @@ export const Scheduler: React.FC = () => {
       {/* Bulk Scheduler Modal */}
       {showBulkModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="glass-card animate-fade-in" style={{ width: '100%', maxWidth: '640px', padding: '32px', display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '640px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Bulk Campaign Queue (CSV)</h3>
               <button 
