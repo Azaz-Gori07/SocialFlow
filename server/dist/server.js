@@ -34,22 +34,23 @@ require("./services/queue/post.worker");
 const app = (0, express_1.default)();
 exports.app = app;
 const LOCAL_ORIGINS = ['http://localhost:5173', 'http://localhost:5000'];
+const EXPLICIT_ORIGINS = [
+    'https://viraldrift.vercel.app',
+    'https://viraldrift-server.vercel.app',
+];
 const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)
     ? (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS).split(',').map(s => s.trim()).filter(Boolean)
     : [];
-const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...envOrigins])];
+const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...EXPLICIT_ORIGINS, ...envOrigins])];
+const vercelOriginRegex = /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/;
 app.use((0, cors_1.default)({
     origin: (origin, callback) => {
-        // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
         if (!origin)
             return callback(null, true);
-        // Check if origin is in the explicit static origins list
         if (staticOrigins.includes(origin))
             return callback(null, true);
-        // Allow any Vercel preview/production deployments
-        if (origin.startsWith('https://') && origin.endsWith('.vercel.app')) {
+        if (vercelOriginRegex.test(origin))
             return callback(null, true);
-        }
         callback(null, false);
     },
     credentials: true,
