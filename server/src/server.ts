@@ -42,19 +42,13 @@ const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)
 
 const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...EXPLICIT_ORIGINS, ...envOrigins])];
 
+const vercelOriginRegex = /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/;
+
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (e.g. mobile apps, curl, server-to-server)
     if (!origin) return callback(null, true);
-
-    // Check if origin is in the explicit static origins list
     if (staticOrigins.includes(origin)) return callback(null, true);
-
-    // Allow any Vercel preview/production deployments
-    if (origin.startsWith('https://') && origin.endsWith('.vercel.app')) {
-      return callback(null, true);
-    }
-
+    if (vercelOriginRegex.test(origin)) return callback(null, true);
     callback(null, false);
   },
   credentials: true,
