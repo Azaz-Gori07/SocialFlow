@@ -57,6 +57,7 @@ app.use(cors({
 }));
 
 // Security Middleware
+// Security Middleware
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'development' ? 10000 : 100,

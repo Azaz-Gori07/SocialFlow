@@ -18,7 +18,7 @@
       "headers": [
         {
           "key": "Access-Control-Allow-Origin",
-          "value": "https://viraldrift.vercel.app"
+          "value": "https://viraldrift.vercel.app, https://viraldrift-server.vercel.app"
         },
         {
           "key": "Access-Control-Allow-Credentials",
