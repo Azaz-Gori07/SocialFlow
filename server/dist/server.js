@@ -18,6 +18,7 @@ const social_routes_1 = __importDefault(require("./features/social/social.routes
 const post_routes_1 = __importDefault(require("./features/post/post.routes"));
 const comment_routes_1 = __importDefault(require("./features/comment/comment.routes"));
 const notification_routes_1 = __importDefault(require("./features/notification/notification.routes"));
+const draft_routes_1 = __importDefault(require("./features/draft/draft.routes"));
 const dashboardController_1 = require("./controllers/dashboardController");
 const aiController_1 = require("./controllers/aiController");
 const socialController_1 = require("./controllers/socialController");
@@ -102,6 +103,7 @@ app.use('/api/social', social_routes_1.default);
 app.use('/api/posts', post_routes_1.default);
 app.use('/api/comments', comment_routes_1.default);
 app.use('/api/notifications', notification_routes_1.default);
+app.use('/api/drafts', draft_routes_1.default);
 // Dashboard routes (mounted from legacy controller)
 app.get('/api/dashboard/overview', auth_1.authMiddleware, dashboardController_1.DashboardController.getOverview);
 app.get('/api/dashboard/growth', auth_1.authMiddleware, dashboardController_1.DashboardController.getGrowth);

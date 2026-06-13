@@ -154,6 +154,22 @@ const GrowthInsightSchema = new mongoose_1.Schema({
     platform: { type: String },
     metricImpact: { type: String }
 }, schemaOptions);
+const NotificationPreferenceSchema = new mongoose_1.Schema({
+    userId: { type: String, required: true, unique: true },
+    email: {
+        enabled: { type: Boolean, default: true },
+        types: { type: [String], default: [] }
+    },
+    push: {
+        enabled: { type: Boolean, default: true },
+        types: { type: [String], default: [] }
+    },
+    inApp: {
+        enabled: { type: Boolean, default: true },
+        types: { type: [String], default: [] }
+    }
+}, schemaOptions);
+NotificationPreferenceSchema.index({ userId: 1 });
 const UserModel = mongoose_1.default.models.User || (0, mongoose_1.model)('User', UserSchema);
 const SocialAccountModel = mongoose_1.default.models.SocialAccount || (0, mongoose_1.model)('SocialAccount', SocialAccountSchema);
 const PostModel = mongoose_1.default.models.Post || (0, mongoose_1.model)('Post', PostSchema);
@@ -165,6 +181,7 @@ const AnalyticsMetricModel = mongoose_1.default.models.AnalyticsMetric || (0, mo
 const NotificationModel = mongoose_1.default.models.Notification || (0, mongoose_1.model)('Notification', NotificationSchema);
 const ActivityLogModel = mongoose_1.default.models.ActivityLog || (0, mongoose_1.model)('ActivityLog', ActivityLogSchema);
 const GrowthInsightModel = mongoose_1.default.models.GrowthInsight || (0, mongoose_1.model)('GrowthInsight', GrowthInsightSchema);
+const NotificationPreferenceModel = mongoose_1.default.models.NotificationPreference || (0, mongoose_1.model)('NotificationPreference', NotificationPreferenceSchema);
 // Configure custom DNS servers if provided in env
 if (process.env.DNS_SERVERS) {
     try {
@@ -248,5 +265,6 @@ exports.db = {
     analytics: AnalyticsMetricModel,
     notifications: NotificationModel,
     activityLogs: ActivityLogModel,
-    insights: GrowthInsightModel
+    insights: GrowthInsightModel,
+    notificationPreferences: NotificationPreferenceModel
 };

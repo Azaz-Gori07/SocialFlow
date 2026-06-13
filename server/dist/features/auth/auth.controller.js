@@ -93,13 +93,10 @@ class AuthController {
             const result = await this.authService.handleOAuthCallback(provider, code, stateStr, this.zenuxsOAuthService);
             const frontendUrl = env_config_1.env.FRONTEND_URL;
             const params = new URLSearchParams({
-                accessToken: result.accessToken,
-                refreshToken: result.refreshToken,
-                userId: result.user.id,
                 provider: result.user.provider,
                 isNew: String(result.isNew)
             });
-            return res.redirect(`${frontendUrl}/auth/callback?${params.toString()}`);
+            return res.redirect(`${frontendUrl}/auth/callback#accessToken=${encodeURIComponent(result.accessToken)}&refreshToken=${encodeURIComponent(result.refreshToken)}&userId=${encodeURIComponent(result.user.id)}&${params.toString()}`);
         }
         catch (error) {
             const frontendUrl = env_config_1.env.FRONTEND_URL;
