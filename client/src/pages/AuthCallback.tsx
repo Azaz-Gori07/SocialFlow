@@ -6,12 +6,15 @@ export const AuthCallback: React.FC = () => {
   const [message, setMessage] = useState('Completing sign-in...');
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
+    const hash = window.location.hash.replace(/^#/, '');
+    const params = new URLSearchParams(hash);
     const accessToken = params.get('accessToken');
     const refreshToken = params.get('refreshToken');
     const userId = params.get('userId');
     const provider = params.get('provider');
-    const error = params.get('error');
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const error = searchParams.get('error');
 
     if (error) {
       setMessage(error);
@@ -23,6 +26,7 @@ export const AuthCallback: React.FC = () => {
       localStorage.setItem('access_token', accessToken);
       localStorage.setItem('refresh_token', refreshToken);
       localStorage.setItem('user', JSON.stringify({ id: userId, provider }));
+      window.location.hash = '';
       setMessage('Sign-in complete. Redirecting...');
       window.setTimeout(() => navigate('/'), 300);
       return;

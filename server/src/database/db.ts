@@ -127,6 +127,23 @@ const GrowthInsightSchema = new Schema({
   metricImpact: { type: String }
 }, schemaOptions);
 
+const NotificationPreferenceSchema = new Schema({
+  userId: { type: String, required: true, unique: true },
+  email: {
+    enabled: { type: Boolean, default: true },
+    types: { type: [String], default: [] }
+  },
+  push: {
+    enabled: { type: Boolean, default: true },
+    types: { type: [String], default: [] }
+  },
+  inApp: {
+    enabled: { type: Boolean, default: true },
+    types: { type: [String], default: [] }
+  }
+}, schemaOptions);
+NotificationPreferenceSchema.index({ userId: 1 });
+
 const UserModel = (mongoose.models.User as Model<any>) || model('User', UserSchema);
 const SocialAccountModel = (mongoose.models.SocialAccount as Model<any>) || model('SocialAccount', SocialAccountSchema);
 const PostModel = (mongoose.models.Post as Model<any>) || model('Post', PostSchema);
@@ -138,6 +155,7 @@ const AnalyticsMetricModel = (mongoose.models.AnalyticsMetric as Model<any>) || 
 const NotificationModel = (mongoose.models.Notification as Model<any>) || model('Notification', NotificationSchema);
 const ActivityLogModel = (mongoose.models.ActivityLog as Model<any>) || model('ActivityLog', ActivityLogSchema);
 const GrowthInsightModel = (mongoose.models.GrowthInsight as Model<any>) || model('GrowthInsight', GrowthInsightSchema);
+const NotificationPreferenceModel = (mongoose.models.NotificationPreference as Model<any>) || model('NotificationPreference', NotificationPreferenceSchema);
 
 // Configure custom DNS servers if provided in env
 if (process.env.DNS_SERVERS) {
@@ -224,7 +242,8 @@ export const db = {
   analytics: AnalyticsMetricModel,
   notifications: NotificationModel,
   activityLogs: ActivityLogModel,
-  insights: GrowthInsightModel
+  insights: GrowthInsightModel,
+  notificationPreferences: NotificationPreferenceModel
 };
 
 export { mongoose, connectDb };

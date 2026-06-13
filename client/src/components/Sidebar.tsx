@@ -14,7 +14,8 @@ import {
   ChevronDown,
   Layers,
   BellDot,
-  X
+  X,
+  FileText
 } from 'lucide-react';
 import { onNotification, onUnreadCount } from '../services/socket';
 
@@ -84,6 +85,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'studio', label: 'AI Content Studio', icon: Sparkles },
     { id: 'scheduler', label: 'Post Scheduler', icon: Calendar },
+    { id: 'drafts', label: 'Draft Library', icon: FileText },
     { id: 'comments', label: 'Comment Inbox', icon: MessageSquare },
     { id: 'notifications', label: 'Notification Center', icon: Bell, badge: unreadCount },
     { id: 'analytics', label: 'Analytics Hub', icon: BarChart3 },

@@ -88,13 +88,11 @@ export class SocialService {
     } else {
       // Save new connected account
       account = await this.socialRepository.createAccount(accountData);
-
-      // Seed simulation dashboard data for new account
-      await this.seedSimulationData(userId, account._id.toString(), platform);
     }
 
     return account;
   }
+
 
   /**
    * Retrieves list of social accounts for a user
@@ -144,81 +142,6 @@ export class SocialService {
     return `${redirectHost}/api/social/callback/${platform}`;
   }
 
-  /**
-   * Seeds visual mock dashboard analytics & comments to provide realistic visuals
-   */
-  private async seedSimulationData(userId: string, accountId: string, platform: string): Promise<void> {
-    try {
-      const AnalyticsModel = mongoose.models.AnalyticsMetric || mongoose.model('AnalyticsMetric');
-      const CommentModel = mongoose.models.Comment || mongoose.model('Comment');
-
-      // 1. Generate 14 days of history
-      const today = new Date();
-      for (let i = 14; i >= 0; i--) {
-        const dateString = new Date(today.getTime() - i * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-        
-        const randomModifier = Math.sin(i / 2) * 500 + (Math.random() * 200);
-        const followerCount = Math.floor(10000 + (14 - i) * 150 + randomModifier);
-        const reach = Math.floor(followerCount * 1.5 + (Math.random() * 5000));
-        const impressions = Math.floor(reach * 2 + (Math.random() * 8000));
-        const engagement = Math.floor(reach * 0.08 + (Math.random() * 400));
-        const clicks = Math.floor(engagement * 0.15 + (Math.random() * 30));
-        
-        const record = new AnalyticsModel({
-          userId,
-          accountId,
-          platform,
-          date: dateString,
-          followers: followerCount,
-          reach,
-          impressions,
-          engagement,
-          watchTime: platform === 'youtube' ? Math.floor(reach * 0.5) : 0,
-          clicks,
-          ctr: impressions > 0 ? parseFloat((clicks / impressions).toFixed(4)) : 0
-        });
-        await record.save();
-      }
-
-      // 2. Generate starting simulation comments
-      const seedComments: Record<string, string[]> = {
-        twitter: [
-          'Wow, this tool looks super useful! Is there a free trial?',
-          'Can we schedule threads or just single posts?',
-          'I need this for my SaaS launch!'
-        ],
-        linkedin: [
-          'Brilliant execution on the MVP. Looking forward to see it scale.',
-          'How does this handle LinkedIn Carousel PDFs?',
-          'Insightful update. Shared with my team.'
-        ],
-        youtube: [
-          'Amazing walkthrough video!',
-          'Subbed. Can you do a tutorial on setting up OAuth connections?',
-          'The audio quality in this video is pristine. Content is gold!'
-        ]
-      };
-
-      const platformComments = seedComments[platform] || ['Nice! Looks very promising.'];
-      for (let j = 0; j < platformComments.length; j++) {
-        const comment = new CommentModel({
-          platform,
-          accountId,
-          postId: 'pst_' + Math.random().toString(36).substring(2, 9),
-          postTitle: `Launch post for ${platform}`,
-          author: {
-            username: `user_${Math.floor(Math.random() * 1000)}`,
-            displayName: `Creator Fan ${j + 1}`,
-            avatarUrl: `https://api.dicebear.com/7.x/pixel-art/svg?seed=commenter_${platform}_${j}`
-          },
-          message: platformComments[j],
-          status: 'unresolved'
-        });
-        await comment.save();
-      }
-    } catch (error) {
-      console.error(`[SocialService] Failed to seed simulation data for account ${accountId}:`, error);
-    }
-  }
 }
 export default SocialService;
+

@@ -12,6 +12,7 @@ import socialRouter from './features/social/social.routes';
 import postRouter from './features/post/post.routes';
 import commentRouter from './features/comment/comment.routes';
 import notificationRouter from './features/notification/notification.routes';
+import draftRouter from './features/draft/draft.routes';
 import { DashboardController } from './controllers/dashboardController';
 import { AIController } from './controllers/aiController';
 import { SocialController } from './controllers/socialController';
@@ -112,6 +113,7 @@ app.use('/api/social', socialRouter);
 app.use('/api/posts', postRouter);
 app.use('/api/comments', commentRouter);
 app.use('/api/notifications', notificationRouter);
+app.use('/api/drafts', draftRouter);
 
 // Dashboard routes (mounted from legacy controller)
 app.get('/api/dashboard/overview', authMiddleware as any, DashboardController.getOverview as any);

@@ -13,6 +13,7 @@ import { Settings } from './pages/Settings';
 import { NotificationCenter } from './pages/NotificationCenter';
 import { NotificationPreferences } from './pages/NotificationPreferences';
 import { AuthCallback } from './pages/AuthCallback';
+import { DraftLibrary } from './pages/DraftLibrary';
 import { Menu, Layers } from 'lucide-react';
 
 const AppContent: React.FC = () => {
@@ -60,6 +61,8 @@ const AppContent: React.FC = () => {
         return <NotificationCenter />;
       case 'notification-preferences':
         return <NotificationPreferences />;
+      case 'drafts':
+        return <DraftLibrary />;
       case 'settings':
         return <Settings />;
       default:

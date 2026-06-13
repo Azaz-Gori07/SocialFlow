@@ -59,16 +59,10 @@ export class YouTubeProvider extends OAuth2Strategy implements SocialProvider {
   }
 
   async publishPost(accessToken: string, content: string, media?: string[], accountId?: string): Promise<string> {
-    // YouTube Data API v3 does not support text-only posts.
-    // Publishing a video requires multipart upload of the actual media file.
-    // This is a known limitation — implement via videos.insert when media upload is wired.
-    if (media && media.length > 0) {
-      // For now, return a simulated ID. In production, use:
-      // https://www.googleapis.com/upload/youtube/v3/videos?part=snippet,status
-      // with multipart body containing the media binary and video snippet metadata.
-      console.warn('[YouTubeProvider] Video upload via YouTube Data API is not yet implemented — returning simulated publish ID');
-    }
-    return `yt_video_id_${Math.random().toString(36).substring(2, 9)}`;
+    throw new Error(
+      '[YouTubeProvider] Video upload is not implemented. YouTube Data API v3 requires multipart video file upload (videos.insert). ' +
+      'Text-only posting is not supported by the platform.'
+    );
   }
 }
 export default YouTubeProvider;

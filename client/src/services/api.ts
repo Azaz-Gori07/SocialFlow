@@ -87,7 +87,6 @@ export const api = {
   
   social: {
     getAccounts: () => request<any[]>('/social/accounts'),
-    // Uses POST with body for the Settings page mock connection flow (legacy compatible)
     connect: (body: any) => request<any>('/social/connect-direct', { method: 'POST', body: JSON.stringify(body) }),
     disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' })
   },
@@ -151,5 +150,19 @@ export const api = {
   
   logs: {
     list: () => request<any[]>('/logs')
+  },
+
+  drafts: {
+    list: (params?: string) => request<any>(`/drafts${params ? `?${params}` : ''}`),
+    get: (id: string) => request<any>(`/drafts/${id}`),
+    create: (body: any) => request<any>('/drafts', { method: 'POST', body: JSON.stringify(body) }),
+    update: (id: string, body: any) => request<any>(`/drafts/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    delete: (id: string) => request<any>(`/drafts/${id}`, { method: 'DELETE' }),
+    archive: (id: string) => request<any>(`/drafts/${id}/archive`, { method: 'PUT' }),
+    uploadMedia: (id: string, body: any) => request<any>(`/drafts/${id}/media`, { method: 'POST', body: JSON.stringify(body) }),
+    queue: (id: string, body?: any) => request<any>(`/drafts/${id}/queue`, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
+    publish: (id: string) => request<any>(`/drafts/${id}/publish`, { method: 'POST' }),
+    retry: (id: string) => request<any>(`/drafts/${id}/retry`, { method: 'POST' }),
+    history: (id: string) => request<any>(`/drafts/${id}/history`)
   }
 };
