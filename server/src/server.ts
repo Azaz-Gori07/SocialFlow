@@ -31,11 +31,16 @@ import './services/queue/post.worker';
 const app = express();
 
 const LOCAL_ORIGINS = ['http://localhost:5173', 'http://localhost:5000'];
+const EXPLICIT_ORIGINS = [
+  'https://viraldrift.vercel.app',
+  'https://viraldrift-server.vercel.app',
+];
+
 const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)
   ? (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)!.split(',').map(s => s.trim()).filter(Boolean)
   : [];
 
-const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...envOrigins])];
+const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...EXPLICIT_ORIGINS, ...envOrigins])];
 
 app.use(cors({
   origin: (origin, callback) => {
