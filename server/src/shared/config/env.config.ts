@@ -61,10 +61,7 @@ const envSchema = z.object({
   OTP_EMAIL_USER: z.string().optional(),
   OTP_EMAIL_PASS: z.string().optional(),
   
-  // Redis configuration for BullMQ Post Scheduler
-  REDIS_HOST: z.string().default('localhost'),
-  REDIS_PORT: z.string().default('6379').transform(Number),
-  REDIS_PASSWORD: z.string().optional(),
+
 });
 
 const parsedEnv = envSchema.safeParse(process.env);

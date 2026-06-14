@@ -44,16 +44,18 @@ const SocialAccountSchema = new Schema({
   metadata: { type: Schema.Types.Mixed, default: {} }
 }, schemaOptions);
 
+// KEEP SYNCED with features/post/post.model.ts (single source of truth)
 const PostSchema = new Schema({
   userId: { type: String, required: true },
   platforms: { type: [String], required: true },
   content: { type: String, required: true },
   platformContent: { type: Schema.Types.Mixed, default: {} },
   media: { type: [String], default: [] },
-  status: { type: String, required: true, enum: ['draft', 'scheduled', 'published', 'failed'] },
+  status: { type: String, required: true, enum: ['draft', 'scheduled', 'publishing', 'published', 'failed'] },
   scheduledAt: { type: String },
   publishedAt: { type: String },
-  failedReason: { type: String }
+  failedReason: { type: String },
+  lastAttemptAt: { type: String }
 }, schemaOptions);
 
 const CommentSchema = new Schema({

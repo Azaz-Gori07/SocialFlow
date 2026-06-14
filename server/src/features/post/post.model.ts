@@ -6,10 +6,11 @@ export interface IPost extends Document {
   content: string;
   platformContent?: Record<string, any>;
   media?: string[];
-  status: 'draft' | 'scheduled' | 'published' | 'failed';
+  status: 'draft' | 'scheduled' | 'publishing' | 'published' | 'failed';
   scheduledAt?: string;
   publishedAt?: string;
   failedReason?: string;
+  lastAttemptAt?: string;
   createdAt: string;
 }
 
@@ -22,12 +23,13 @@ const PostSchema = new Schema<IPost>({
   status: {
     type: String,
     required: true,
-    enum: ['draft', 'scheduled', 'published', 'failed'],
+    enum: ['draft', 'scheduled', 'publishing', 'published', 'failed'],
     default: 'draft'
   },
   scheduledAt: { type: String },
   publishedAt: { type: String },
   failedReason: { type: String },
+  lastAttemptAt: { type: String },
   createdAt: { type: String, default: () => new Date().toISOString() }
 }, {
   timestamps: false,

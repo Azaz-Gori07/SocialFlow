@@ -25,8 +25,7 @@ import { SchedulerService } from './services/scheduler';
 // Import the Atlas database connection and fail fast on startup if it cannot connect.
 import { connectDb, isConnected } from './database/db';
 
-// Import worker to initialize the post scheduling queue listener
-import './services/queue/post.worker';
+
 
 const app = express();
 

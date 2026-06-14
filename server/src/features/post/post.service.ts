@@ -1,5 +1,4 @@
 import { PostRepository } from './post.repository';
-import { PostScheduler } from '../../services/queue/post.scheduler';
 import { AppError } from '../../shared/errors/appError';
 import { IPost } from './post.model';
 import { CreatePostInput, UpdatePostInput } from './post.validation';
@@ -34,11 +33,6 @@ export class PostService {
       status: input.status,
       scheduledAt: input.scheduledAt
     });
-
-    // If post is scheduled, add to the Delayed Queue
-    if (post.status === 'scheduled' && post.scheduledAt) {
-      await PostScheduler.schedule(post._id.toString(), post.scheduledAt);
-    }
 
     return post;
   }
@@ -77,21 +71,6 @@ export class PostService {
     const updatedPost = await this.postRepository.updatePost(id, updateData);
     if (!updatedPost) {
       throw AppError.internal('Failed to update post');
-    }
-
-    // Coordinate Queue Adjustments
-    const isNowScheduled = updatedPost.status === 'scheduled';
-    const newScheduledAt = updatedPost.scheduledAt;
-
-    if (wasScheduled && !isNowScheduled) {
-      // Status changed: Cancel delayed job
-      await PostScheduler.cancel(id);
-    } else if (isNowScheduled) {
-      // Re-schedule: Cancel old job and add new one
-      await PostScheduler.cancel(id);
-      if (newScheduledAt) {
-        await PostScheduler.schedule(id, newScheduledAt);
-      }
     }
 
     return updatedPost;
@@ -152,9 +131,6 @@ export class PostService {
     if (post.userId !== userId) {
       throw AppError.forbidden('Insufficient permissions to delete this post');
     }
-
-    // Cancel delayed queue job
-    await PostScheduler.cancel(id);
 
     // Delete post record
     return this.postRepository.deletePost(id);
