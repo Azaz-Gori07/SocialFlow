@@ -33,6 +33,7 @@ const LOCAL_ORIGINS = ['http://localhost:5173', 'http://localhost:5000'];
 const EXPLICIT_ORIGINS = [
   'https://viraldrift.vercel.app',
   'https://viraldrift-server.vercel.app',
+  'https://socialflow-src9.onrender.com'
 ];
 
 const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)
