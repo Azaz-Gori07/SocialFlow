@@ -10,6 +10,7 @@ server/node_modules/
 .env.production
 .env.development
 .env.example
+server/.env
 
 # Logs
 logs/
