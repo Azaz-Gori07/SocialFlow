@@ -98,7 +98,10 @@ export const api = {
   },
   
   posts: {
-    list: (status?: string) => request<any[]>(`/posts/list${status ? `?status=${status}` : ''}`),
+    list: async (status?: string) => {
+      const result = await request<any>(`/posts/list${status ? `?status=${status}` : ''}`);
+      return Array.isArray(result) ? result : (result?.items ?? []);
+    },
     get: (id: string) => request<any>(`/posts/${id}`),
     create: (body: any) => request<any>('/posts', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: any) => request<any>(`/posts/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
