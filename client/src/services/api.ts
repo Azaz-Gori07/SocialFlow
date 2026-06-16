@@ -88,7 +88,8 @@ export const api = {
   social: {
     getAccounts: () => request<any[]>('/social/accounts'),
     connect: (body: any) => request<any>('/social/connect-direct', { method: 'POST', body: JSON.stringify(body) }),
-    disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' })
+    disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' }),
+    connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`)
   },
   
   dashboard: {

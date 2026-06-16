@@ -24,13 +24,14 @@ export class PostService {
    * Creates and registers a new post (draft or scheduled)
    */
   async createPost(input: CreatePostInput, userId: string): Promise<IPost> {
+    const effectiveStatus = input.scheduledAt ? 'scheduled' : (input.status || 'draft');
     const post = await this.postRepository.createPost({
       userId,
       platforms: input.platforms,
       content: input.content,
       media: input.media,
       platformContent: input.platformContent,
-      status: input.status,
+      status: effectiveStatus,
       scheduledAt: input.scheduledAt
     });
 
@@ -117,6 +118,18 @@ export class PostService {
       ...result,
       hasMore: offset + result.items.length < result.total
     };
+  }
+
+  /**
+   * Bulk creates multiple scheduled posts
+   */
+  async bulkCreatePosts(inputs: CreatePostInput[], userId: string): Promise<IPost[]> {
+    const posts: IPost[] = [];
+    for (const input of inputs) {
+      const post = await this.createPost(input, userId);
+      posts.push(post);
+    }
+    return posts;
   }
 
   /**

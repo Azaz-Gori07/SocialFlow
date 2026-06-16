@@ -22,6 +22,11 @@ export const Scheduler: React.FC = () => {
   const [content, setContent] = useState('');
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('12:00');
+  const [timeError, setTimeError] = useState('');
+
+  // Clear time validation error when inputs change
+  const onDateChange = (val: string) => { setScheduleDate(val); setTimeError(''); };
+  const onTimeChange = (val: string) => { setScheduleTime(val); setTimeError(''); };
 
   // Bulk Scheduler Form
   const [showBulkModal, setShowBulkModal] = useState(false);
@@ -48,18 +53,47 @@ export const Scheduler: React.FC = () => {
     e.preventDefault();
     if (platforms.length === 0 || !content) return;
 
+    setTimeError('');
+
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const offset = -new Date().getTimezoneOffset();
+    const tzSign = offset >= 0 ? '+' : '-';
+    const tzHours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
+    const tzMins = String(Math.abs(offset) % 60).padStart(2, '0');
+    console.log(`[Scheduler] Timezone: ${tz} (UTC${tzSign}${tzHours}:${tzMins})`);
+
+    const targetDate = scheduleDate ? new Date(`${scheduleDate}T${scheduleTime}:00`) : undefined;
+
+    if (targetDate) {
+      console.log('[Scheduler] selectedDate:', scheduleDate);
+      console.log('[Scheduler] selectedTime:', scheduleTime);
+      console.log('[Scheduler] combined local:', `${scheduleDate}T${scheduleTime}:00`);
+      console.log('[Scheduler] parsed Date:', targetDate.toString());
+      console.log('[Scheduler] final ISO:', targetDate.toISOString());
+      console.log('[Scheduler] targetDate.getTime():', targetDate.getTime());
+      console.log('[Scheduler] Date.now():', Date.now());
+
+      if (targetDate.getTime() <= Date.now()) {
+        setTimeError(
+          `Selected time (${scheduleTime}) on ${scheduleDate} is already in the past in your timezone (${tz}). ` +
+          `After UTC conversion the post would be ${targetDate.toISOString().replace('Z', '')} UTC, which has already passed.`
+        );
+        return;
+      }
+    }
+
     try {
-      const targetDate = scheduleDate ? new Date(`${scheduleDate}T${scheduleTime}:00`) : undefined;
-      
       await api.posts.create({
         platforms,
         content,
-        scheduledAt: targetDate ? targetDate.toISOString() : undefined
+        scheduledAt: targetDate ? targetDate.toISOString() : undefined,
+        ...(targetDate ? { status: 'scheduled' } : {})
       });
 
       setShowCreateModal(false);
       setContent('');
       setScheduleDate('');
+      setTimeError('');
       loadPosts();
     } catch (err) {
       console.error(err);
@@ -360,13 +394,13 @@ export const Scheduler: React.FC = () => {
             {/* Timing */}
             <div className="responsive-grid-1-1">
               <div>
-                <label className="form-label">Post Date (Optional)</label>
+                  <label className="form-label">Post Date (Optional)</label>
                 <input
                   type="date"
                   className="form-input"
-                  min={new Date().toISOString().split('T')[0]}
+                  min={new Date().toLocaleDateString('en-CA')}
                   value={scheduleDate}
-                  onChange={e => setScheduleDate(e.target.value)}
+                  onChange={e => onDateChange(e.target.value)}
                 />
               </div>
               <div>
@@ -375,11 +409,17 @@ export const Scheduler: React.FC = () => {
                   type="time"
                   className="form-input"
                   value={scheduleTime}
-                  onChange={e => setScheduleTime(e.target.value)}
+                  onChange={e => onTimeChange(e.target.value)}
                   disabled={!scheduleDate}
                 />
               </div>
             </div>
+
+            {timeError && (
+              <div style={{ fontSize: '0.8rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '4px' }}>
+                {timeError}
+              </div>
+            )}
 
             {/* Actions */}
             <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
@@ -389,6 +429,7 @@ export const Scheduler: React.FC = () => {
                   setShowCreateModal(false);
                   setContent('');
                   setScheduleDate('');
+                  setTimeError('');
                 }}
                 className="btn btn-secondary"
                 style={{ flexGrow: 1 }}

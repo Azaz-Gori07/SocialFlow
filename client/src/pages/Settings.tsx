@@ -14,15 +14,13 @@ const FacebookIcon = ({ size }: any) => <span style={{ fontWeight: 'bold', fontS
 const YoutubeIcon = ({ size }: any) => <span style={{ fontWeight: 'bold', fontSize: `${size}px` }}>Yt</span>;
 const TiktokIcon = ({ size }: any) => <span style={{ fontWeight: 'bold', fontSize: `${size}px` }}>Tt</span>;
 
+const OAUTH_PLATFORMS = ['twitter', 'linkedin', 'youtube'];
+
 export const Settings: React.FC = () => {
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Connection Simulation state
-  const [showConnectModal, setShowConnectModal] = useState<string | null>(null); // platform name
-  const [simUsername, setSimUsername] = useState('');
-  const [simDisplayName, setSimDisplayName] = useState('');
-  const [simLoading, setSimLoading] = useState(false);
+  const [oauthLoading, setOauthLoading] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   const loadAccounts = async () => {
     try {
@@ -42,32 +40,34 @@ export const Settings: React.FC = () => {
     init();
   }, []);
 
-  const handleConnect = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!showConnectModal || !simUsername || !simDisplayName) return;
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('connection') === 'success') {
+      const platform = params.get('platform');
+      setStatusMessage(`✅ ${platform} account connected successfully!`);
+      window.history.replaceState({}, '', window.location.pathname);
+      loadAccounts();
+    } else if (params.get('connection') === 'error') {
+      const msg = decodeURIComponent(params.get('message') || 'Unknown error');
+      setStatusMessage(`❌ Connection failed: ${msg}`);
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
 
-    setSimLoading(true);
+  const handleOAuthConnect = async (platform: string) => {
+    setOauthLoading(platform);
+    setStatusMessage(null);
     try {
-      await api.social.connect({
-        platform: showConnectModal,
-        username: simUsername.trim(),
-        displayName: simDisplayName.trim()
-      });
-      
-      // Reset & Reload
-      setShowConnectModal(null);
-      setSimUsername('');
-      setSimDisplayName('');
-      await loadAccounts();
+      const res = await api.social.connectOAuth(platform);
+      window.location.href = res.url;
     } catch (err: any) {
-      alert(err.message || 'OAuth Connection Simulation failed.');
-    } finally {
-      setSimLoading(false);
+      setStatusMessage(`❌ Failed to initiate ${platform} connection: ${err.message}`);
+      setOauthLoading(null);
     }
   };
 
   const handleDisconnect = async (id: string) => {
-    const act = accounts.find(a => a._id === id);
+    const act = accounts.find(a => a.id === id);
     if (!act) return;
     if (!confirm(`Are you sure you want to disconnect @${act.username} from ${act.platform}? All associated analytics and comments will be deleted.`)) return;
 
@@ -101,6 +101,12 @@ export const Settings: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {statusMessage && (
+        <div style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: statusMessage.startsWith('✅') ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)', color: statusMessage.startsWith('✅') ? '#10b981' : '#ef4444', marginBottom: '16px', fontSize: '0.85rem' }}>
+          {statusMessage}
+        </div>
+      )}
 
       <div className="responsive-grid-125-1">
         
@@ -139,14 +145,28 @@ export const Settings: React.FC = () => {
                       {plat.desc}
                     </p>
 
-                    <button
-                      onClick={() => setShowConnectModal(plat.id)}
-                      className={isConnected ? "btn btn-secondary" : "btn btn-primary"}
-                      style={{ width: '100%', marginTop: '6px', fontSize: '0.8rem', gap: '4px' }}
-                    >
-                      <Plus size={14} />
-                      <span>{isConnected ? 'Connect Another' : 'Link Profile'}</span>
-                    </button>
+                    {OAUTH_PLATFORMS.includes(plat.id) ? (
+                      <button
+                        onClick={() => handleOAuthConnect(plat.id)}
+                        className={isConnected ? "btn btn-secondary" : "btn btn-primary"}
+                        style={{ width: '100%', marginTop: '6px', fontSize: '0.8rem', gap: '4px' }}
+                        disabled={oauthLoading === plat.id}
+                      >
+                        {oauthLoading === plat.id ? 'Connecting...' : (
+                          <><Plus size={14} /><span>{isConnected ? 'Connect Another' : 'Link Profile'}</span></>
+                        )}
+                      </button>
+                    ) : (
+                      <button
+                        disabled
+                        className="btn btn-secondary"
+                        style={{ width: '100%', marginTop: '6px', fontSize: '0.8rem', gap: '4px', opacity: 0.4 }}
+                        title="OAuth integration coming soon"
+                      >
+                        <Plus size={14} />
+                        <span>Not Available</span>
+                      </button>
+                    )}
                   </div>
                 );
               })}
@@ -195,7 +215,7 @@ export const Settings: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => handleDisconnect(act._id)}
+                      onClick={() => handleDisconnect(act.id)}
                       style={{ background: 'none', border: 'none', color: 'hsl(var(--text-muted))', cursor: 'pointer', display: 'flex' }}
                       title="Disconnect Account"
                       className="delete-hover"
@@ -210,71 +230,6 @@ export const Settings: React.FC = () => {
         </div>
 
       </div>
-
-      {/* OAuth Connection Simulator Modal */}
-      {showConnectModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <form onSubmit={handleConnect} className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '440px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{ background: 'rgba(139, 92, 246, 0.1)', padding: '6px', borderRadius: '8px' }}>
-                <Link2 size={18} style={{ color: 'hsl(var(--primary))' }} />
-              </div>
-              <h3 style={{ fontSize: '1.2rem', fontWeight: 600 }}>Link {showConnectModal === 'twitter' ? 'X (Twitter)' : showConnectModal} Account</h3>
-            </div>
-            
-            <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', lineHeight: '1.4' }}>
-              We'll simulate an OAuth2 validation flow for <strong>{showConnectModal}</strong>. Enter the username and display name to link.
-            </p>
-
-            <div>
-              <label className="form-label">Username / Handle</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="tech_founder"
-                value={simUsername}
-                onChange={e => setSimUsername(e.target.value)}
-                required
-              />
-            </div>
-
-            <div>
-              <label className="form-label">Display Name / Channel Name</label>
-              <input
-                type="text"
-                className="form-input"
-                placeholder="Alex Morgan | SaaS Builder"
-                value={simDisplayName}
-                onChange={e => setSimDisplayName(e.target.value)}
-                required
-              />
-            </div>
-
-            <div style={{ display: 'flex', gap: '12px', marginTop: '6px' }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowConnectModal(null);
-                  setSimUsername('');
-                  setSimDisplayName('');
-                }}
-                className="btn btn-secondary"
-                style={{ flexGrow: 1 }}
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ flexGrow: 1 }}
-                disabled={simLoading || !simUsername || !simDisplayName}
-              >
-                {simLoading ? 'Authorizing OAuth...' : 'Confirm Link'}
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
 
       <style>{`
         .delete-hover:hover {

@@ -16,7 +16,8 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
     return this.getBaseAuthorizationUrl(state, redirectUri, [
       'openid',
       'profile',
-      'email'
+      'email',
+      'w_member_social'
     ]);
   }
 

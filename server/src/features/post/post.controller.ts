@@ -66,6 +66,18 @@ export class PostController {
     }
   };
 
+  bulkSchedule = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { posts } = req.body;
+      if (!Array.isArray(posts) || posts.length === 0) {
+        return next(AppError.badRequest('Request body must contain a non-empty "posts" array'));
+      }
+      const results = await this.postService.bulkCreatePosts(posts, req.user.id);
+      return ApiResponse.success(res, results, 'Posts scheduled successfully', 201);
+    } catch (error) { next(error); }
+  };
+
   delete = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {

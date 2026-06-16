@@ -47,6 +47,13 @@ router.put(
   postController.update as any
 );
 
+// POST /api/posts/schedule - Bulk schedule multiple posts
+router.post(
+  '/schedule',
+  authenticate as any,
+  postController.bulkSchedule as any
+);
+
 // DELETE /api/posts/:id - Cancel schedule and delete post
 router.delete(
   '/:id',

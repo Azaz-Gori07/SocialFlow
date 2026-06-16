@@ -16,17 +16,29 @@ export class TwitterProvider extends OAuth2Strategy implements SocialProvider {
   }
 
   getAuthorizationUrl(state: string, redirectUri: string): string {
-    const verifier = crypto.randomBytes(32).toString('hex');
+    const verifier = crypto.randomBytes(32)
+      .toString('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
+    const codeChallenge = crypto
+      .createHash('sha256')
+      .update(verifier)
+      .digest('base64')
+      .replace(/\+/g, '-')
+      .replace(/\//g, '_')
+      .replace(/=+$/, '');
     const timer = setTimeout(() => TwitterProvider.verifierStore.delete(state), 15 * 60 * 1000);
     TwitterProvider.verifierStore.set(state, { verifier, timer });
 
     return this.getBaseAuthorizationUrl(state, redirectUri, [
       'tweet.read',
+      'tweet.write',
       'users.read',
       'offline.access'
     ], {
-      code_challenge: verifier,
-      code_challenge_method: 'plain'
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256'
     });
   }
 
