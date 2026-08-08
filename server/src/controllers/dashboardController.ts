@@ -58,8 +58,8 @@ export const DashboardController = {
       let prevEngagement = 0;
 
       for (const act of accounts) {
-        const latest = latestRecordsByAccount[act._id];
-        const prev = previousRecordsByAccount[act._id];
+        const latest = latestRecordsByAccount[String(act._id)];
+        const prev = previousRecordsByAccount[String(act._id)];
 
         if (latest) {
           totalFollowers += latest.followers;
@@ -194,7 +194,7 @@ export const DashboardController = {
       }> = {} as any;
 
       for (const act of accounts) {
-        const latest = latestRecords[act._id];
+        const latest = latestRecords[String(act._id)];
         if (!latest) continue;
 
         const platform = act.platform as SocialPlatform;

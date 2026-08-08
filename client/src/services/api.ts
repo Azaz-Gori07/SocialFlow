@@ -81,13 +81,13 @@ export const api = {
     register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     login: (body: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     verifyOtp: (body: any) => request<any>('/auth/verify-otp', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
+    exchange: (code: string) => request<any>('/auth/exchange', { method: 'POST', body: JSON.stringify({ code }), skipAuth: true }),
     logout: () => request<any>('/auth/logout', { method: 'POST', skipAuth: true }),
     me: () => request<any>('/auth/me')
   },
   
   social: {
     getAccounts: () => request<any[]>('/social/accounts'),
-    connect: (body: any) => request<any>('/social/connect-direct', { method: 'POST', body: JSON.stringify(body) }),
     disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' }),
     connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`)
   },
@@ -152,10 +152,6 @@ export const api = {
     updatePreferences: (body: any) => request<any>('/notifications/preferences', { method: 'PUT', body: JSON.stringify(body) })
   },
   
-  logs: {
-    list: () => request<any[]>('/logs')
-  },
-
   drafts: {
     list: (params?: string) => request<any>(`/drafts${params ? `?${params}` : ''}`),
     get: (id: string) => request<any>(`/drafts/${id}`),

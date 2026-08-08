@@ -8,6 +8,21 @@ import mongoose from 'mongoose';
 jest.mock('../../user/user.repository');
 jest.mock('../otp.service');
 jest.mock('bcryptjs');
+// Deterministic token persistence: never touches a real DB connection.
+jest.mock('../../../database/db', () => ({
+  db: {
+    refreshTokens: {
+      create: jest.fn().mockResolvedValue({}),
+      findOne: jest.fn().mockResolvedValue(null),
+      updateOne: jest.fn().mockResolvedValue({})
+    },
+    authCodes: {
+      create: jest.fn().mockResolvedValue({}),
+      findOne: jest.fn().mockResolvedValue(null),
+      updateOne: jest.fn().mockResolvedValue({})
+    }
+  }
+}));
 
 describe('AuthService Unit Tests', () => {
   let authService: AuthService;

@@ -13,10 +13,9 @@ import postRouter from './features/post/post.routes';
 import commentRouter from './features/comment/comment.routes';
 import notificationRouter from './features/notification/notification.routes';
 import draftRouter from './features/draft/draft.routes';
+import webhookRouter from './features/webhooks/metaWebhook.routes';
 import { DashboardController } from './controllers/dashboardController';
 import { AIController } from './controllers/aiController';
-import { SocialController } from './controllers/socialController';
-import { WorkspaceController } from './controllers/workspaceController';
 import { authMiddleware } from './middleware/auth';
 import swaggerDocument from './docs/swagger.json';
 import { initSocketIO } from './services/socket/socket.service';
@@ -70,6 +69,13 @@ app.use(helmet());
 
 app.use(express.json());
 
+// Raw body capture for webhook signature verification (before json parsing consumes it)
+app.use('/api/webhooks/meta', express.raw({ type: '*/*' }), (req: any, _res: any, next: any) => {
+  req.rawBody = req.body;
+  next();
+});
+app.use('/api/webhooks/meta', express.json({ type: '*/*' }));
+
 // Database connection check middleware for serverless/production requests
 app.use(async (req, res, next) => {
   // Skip check for root health check, API health route, and swagger UI assets/docs
@@ -115,6 +121,9 @@ app.use('/api/comments', commentRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/drafts', draftRouter);
 
+// Webhooks (no auth middleware - verified via signature/challenge)
+app.use('/api/webhooks', webhookRouter);
+
 // Dashboard routes (mounted from legacy controller)
 app.get('/api/dashboard/overview', authMiddleware as any, DashboardController.getOverview as any);
 app.get('/api/dashboard/growth', authMiddleware as any, DashboardController.getGrowth as any);
@@ -128,12 +137,6 @@ app.post('/api/repurpose/youtube', authMiddleware as any, AIController.repurpose
 app.post('/api/repurpose/blog', authMiddleware as any, AIController.repurposeBlog as any);
 app.get('/api/insights', authMiddleware as any, AIController.getInsights as any);
 app.post('/api/insights/generate', authMiddleware as any, AIController.generateInsights as any);
-
-// Legacy social connect direct (used by Settings page for mock connection)
-app.post('/api/social/connect-direct', authMiddleware as any, SocialController.connectAccount as any);
-
-// Legacy workspace role update (not yet migrated to features/workspace/)
-app.put('/api/workspace/role', authMiddleware as any, WorkspaceController.updateRole as any);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

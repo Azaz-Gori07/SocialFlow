@@ -1,16 +1,16 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 
 export const AuthCallback: React.FC = () => {
   const navigate = useNavigate();
+  const { exchangeCode } = useAuth();
   const [message, setMessage] = useState('Completing sign-in...');
 
   useEffect(() => {
     const hash = window.location.hash.replace(/^#/, '');
     const params = new URLSearchParams(hash);
-    const accessToken = params.get('accessToken');
-    const refreshToken = params.get('refreshToken');
-    const userId = params.get('userId');
+    const code = params.get('code');
     const provider = params.get('provider');
 
     const searchParams = new URLSearchParams(window.location.search);
@@ -22,19 +22,23 @@ export const AuthCallback: React.FC = () => {
       return;
     }
 
-    if (accessToken && refreshToken && userId) {
-      localStorage.setItem('access_token', accessToken);
-      localStorage.setItem('refresh_token', refreshToken);
-      localStorage.setItem('user', JSON.stringify({ id: userId, provider }));
-      window.location.hash = '';
-      setMessage('Sign-in complete. Redirecting...');
-      window.setTimeout(() => navigate('/'), 300);
+    if (code) {
+      exchangeCode(code)
+        .then(() => {
+          window.location.hash = '';
+          setMessage(`Sign-in with ${provider || 'your provider'} complete. Redirecting...`);
+          window.setTimeout(() => navigate('/'), 300);
+        })
+        .catch((err) => {
+          setMessage(err?.message || 'Sign-in failed. Please try again.');
+          window.setTimeout(() => navigate('/'), 1500);
+        });
       return;
     }
 
     setMessage('Sign-in did not return the required session data.');
     window.setTimeout(() => navigate('/'), 1500);
-  }, [navigate]);
+  }, [exchangeCode, navigate]);
 
   return (
     <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-primary))' }}>

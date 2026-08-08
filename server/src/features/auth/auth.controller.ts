@@ -54,6 +54,21 @@ export class AuthController {
     }
   };
 
+  /** One-time code exchange: OAuth callback hands the client a short-lived
+   *  single-use code; tokens are issued here, never in the redirect URL. */
+  exchange = async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const { code } = req.body;
+      if (!code || typeof code !== 'string') {
+        return ApiResponse.error(res, 'Code is required', null, 400);
+      }
+      const result = await this.authService.exchangeAuthCode(code);
+      return ApiResponse.success(res, result, 'Authenticated successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
   me = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {
@@ -68,6 +83,8 @@ export class AuthController {
 
   logout = async (req: any, res: Response, next: NextFunction) => {
     try {
+      const { refreshToken } = req.body || {};
+      await this.authService.logout(refreshToken);
       return ApiResponse.success(res, null, 'Logged out successfully');
     } catch (error) {
       next(error);
@@ -102,7 +119,9 @@ export class AuthController {
         provider: result.user.provider,
         isNew: String(result.isNew)
       });
-      return res.redirect(`${frontendUrl}/auth/callback#accessToken=${encodeURIComponent(result.accessToken)}&refreshToken=${encodeURIComponent(result.refreshToken)}&userId=${encodeURIComponent(result.user.id)}&${params.toString()}`);
+      // Tokens are never placed in the URL. The client exchanges the
+      // one-time code for tokens via POST /api/auth/exchange.
+      return res.redirect(`${frontendUrl}/auth/callback#code=${encodeURIComponent(result.code)}&${params.toString()}`);
     } catch (error: any) {
       const frontendUrl = env.FRONTEND_URL;
       return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(error.message || 'OAuth login failed')}`);

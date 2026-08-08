@@ -2,8 +2,25 @@ import { Server as HttpServer } from 'http';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { Notification } from '../../features/notification/notification.types';
+import { env } from '../../shared/config/env.config';
+import { db } from '../../database/db';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'supersecret_socialflow_token_key_123!';
+const JWT_SECRET = env.JWT_SECRET;
+
+const LOCAL_ORIGINS = [
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+];
+const vercelOriginRegex = /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/;
+
+const isAllowedOrigin = (origin: string | undefined): boolean => {
+  if (!origin) return true;
+  if (LOCAL_ORIGINS.includes(origin)) return true;
+  if (env.corsOrigins.includes(origin)) return true;
+  return vercelOriginRegex.test(origin);
+};
 
 interface AuthenticatedSocket extends Socket {
   userId?: string;
@@ -14,7 +31,7 @@ let io: Server | null = null;
 export function initSocketIO(httpServer: HttpServer): Server {
   io = new Server(httpServer, {
     cors: {
-      origin: '*',
+      origin: isAllowedOrigin,
       methods: ['GET', 'POST'],
       credentials: true,
     },
@@ -79,16 +96,21 @@ export function getIO(): Server {
 
 /**
  * Send a real-time notification to a specific user.
- * If the user is offline, the notification will be stored in the database
- * and delivered when they reconnect (offline recovery).
+ * If the user is offline, the notification stays in the database and is
+ * delivered when they reconnect (offline recovery).
  */
-export function sendNotification(userId: string, notification: Notification): void {
+export async function sendNotification(userId: string, notification: Notification): Promise<void> {
   if (!io) {
     console.warn('⚠️ Socket.IO not initialized. Cannot send notification.');
     return;
   }
   io.to(`user:${userId}`).emit('notification', notification);
-  io.to(`user:${userId}`).emit('notifications:unread_count', { count: 1 });
+  try {
+    const count = await db.notifications.countDocuments({ userId, read: false }).exec();
+    io.to(`user:${userId}`).emit('notifications:unread_count', { count });
+  } catch (err) {
+    console.warn('⚠️ Failed to compute unread count:', err);
+  }
 }
 
 /**

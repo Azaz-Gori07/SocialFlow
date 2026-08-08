@@ -2,56 +2,136 @@ import { CommentRepository } from './comment.repository';
 import { WorkspaceRepository } from '../workspace/workspace.repository';
 import { SocialRepository } from '../social/social.repository';
 import { UserRepository } from '../user/user.repository';
+import { SocialService } from '../social/social.service';
+import { OAuthConnectionRepository } from '../social/oauthConnection.repository';
+import { OAuthTransactionRepository } from '../social/oauthTransaction.repository';
+import { NotificationService } from '../notification/notification.service';
+import { NotificationType } from '../notification/notification.types';
 import { AppError } from '../../shared/errors/appError';
 import { IComment, ICommentReply } from './comment.model';
 import { ListCommentsQuery } from './comment.validation';
+import { ProviderFactory } from '../../services/social/providers/provider.factory';
+import { ProviderError } from '../../services/social/errors/providerError';
+import { ProviderCapabilities } from '../../services/social/interfaces/socialProvider.interface';
 import mongoose from 'mongoose';
 import { env } from '../../shared/config/env.config';
 
 export class CommentService {
+  private socialService: SocialService;
+  private notificationService = new NotificationService();
+
   constructor(
     private commentRepository: CommentRepository,
     private workspaceRepository: WorkspaceRepository,
     private socialRepository: SocialRepository,
     private userRepository: UserRepository
-  ) {}
+  ) {
+    this.socialService = new SocialService(
+      this.socialRepository,
+      new OAuthConnectionRepository(),
+      new OAuthTransactionRepository()
+    );
+  }
 
   /**
-   * Retrieves comments across all social accounts connected by members of a given workspace
+   * Retrieves comments across all social accounts connected by members of a given workspace.
    */
   async listComments(
     workspaceId: string,
     callerId: string,
     filters: ListCommentsQuery
   ): Promise<IComment[]> {
-    // 1. Verify caller is a member of the workspace
     const callerMember = await this.workspaceRepository.findMember(workspaceId, callerId);
     if (!callerMember) {
       throw AppError.forbidden('Unauthorized access to workspace data');
     }
 
-    // 2. Fetch all members of the workspace
-    const members = await this.workspaceRepository.listMembers(workspaceId);
-    const memberIds = members.map(m => m.userId);
-
-    // 3. Fetch social accounts connected by these workspace members
-    const accounts = await Promise.all(
-      memberIds.map(userId => this.socialRepository.findAccountsByUserId(userId))
-    );
-    const flatAccounts = accounts.flat();
-    if (flatAccounts.length === 0) {
-      return [];
-    }
-
-    // 4. Extract platform accountIds
-    const accountIds = flatAccounts.map(a => a.accountId);
-
-    // 5. Query comments matching the account IDs
-    return this.commentRepository.findCommentsByAccountIds(accountIds, filters);
+    return this.commentRepository.findCommentsByWorkspaceId(workspaceId, filters);
   }
 
   /**
-   * Appends a reply subdocument, sets comment status to 'resolved', and logs activity
+   * Ingests comments from every connected provider account (guideline §10):
+   * paginated fetch -> dedupe upsert by externalCommentId -> mark account synced.
+   * Honest per-account errors; one failing account does not block the rest.
+   */
+  async syncComments(workspaceId: string, callerId: string): Promise<{ accounts: number; comments: number; errors: string[] }> {
+    const callerMember = await this.workspaceRepository.findMember(workspaceId, callerId);
+    if (!callerMember) {
+      throw AppError.forbidden('Unauthorized access to workspace data');
+    }
+
+    const members = await this.workspaceRepository.listMembers(workspaceId);
+    const accounts = (await Promise.all(
+      members.map(m => this.socialRepository.findAccountsByUserId(m.userId))
+    )).flat();
+
+    const errors: string[] = [];
+    let syncedComments = 0;
+    let syncedAccounts = 0;
+
+    for (const account of accounts) {
+      try {
+        const provider = ProviderFactory.getConfiguredProvider(account.platform);
+        const caps: ProviderCapabilities = provider.getCapabilities(account as any);
+
+        if (!caps.commentsRead || !provider.listComments) {
+          errors.push(`${account.platform}/${account.username}: comment sync not supported`);
+          continue;
+        }
+
+        const bundle = await this.socialService.resolveAccountTokenBundle(account._id.toString());
+        const ctx = {
+          tokens: { accessToken: bundle.accessToken, refreshToken: bundle.refreshToken },
+          account: {
+            providerAccountId: account.providerAccountId,
+            accountType: account.accountType,
+            username: account.username,
+            displayName: account.displayName
+          }
+        };
+
+        let cursor: string | undefined;
+        let page = 0;
+        do {
+          const result = await provider.listComments(ctx, { cursor, limit: 50 });
+          for (const c of result.items) {
+            await this.commentRepository.upsertComment({
+              workspaceId,
+              platform: account.platform,
+              accountId: account._id.toString(),
+              externalAccountId: account.providerAccountId,
+              externalPostId: c.parentExternalCommentId ? '' : (c as any).externalPostId || '',
+              externalCommentId: c.externalCommentId,
+              postTitle: undefined,
+              author: {
+                username: c.author.username,
+                displayName: c.author.displayName,
+                avatarUrl: c.author.avatarUrl
+              },
+              message: c.message,
+              status: 'unresolved'
+            });
+            syncedComments += 1;
+          }
+          cursor = result.nextCursor;
+          page += 1;
+        } while (cursor && page < 5); // bound: max 5 pages per account per sync
+
+        await this.socialRepository.updateAccount(account._id.toString(), {
+          lastSyncedAt: new Date().toISOString()
+        });
+        syncedAccounts += 1;
+      } catch (error: any) {
+        errors.push(`${account.platform}/${account.username}: ${error.message}`);
+      }
+    }
+
+    return { accounts: syncedAccounts, comments: syncedComments, errors };
+  }
+
+  /**
+   * Sends a reply to the provider FIRST; the local reply is stored only after
+   * the platform confirms it (externalReplyId). Never fakes delivery.
    */
   async replyToComment(
     commentId: string,
@@ -59,265 +139,227 @@ export class CommentService {
     workspaceId: string,
     callerId: string
   ): Promise<IComment> {
-    // 1. Verify caller is a member of the workspace
     const callerMember = await this.workspaceRepository.findMember(workspaceId, callerId);
     if (!callerMember) {
       throw AppError.forbidden('Unauthorized access to workspace data');
     }
 
-    // 2. Fetch the comment
     const comment = await this.commentRepository.findCommentById(commentId);
     if (!comment) {
       throw AppError.notFound('Comment not found');
     }
-
-    // 3. Verify workspace access
-    const members = await this.workspaceRepository.listMembers(workspaceId);
-    const memberIds = members.map(m => m.userId);
-
-    const accounts = await Promise.all(
-      memberIds.map(userId => this.socialRepository.findAccountsByUserId(userId))
-    );
-    const flatAccounts = accounts.flat();
-    const isAccessible = flatAccounts.some(acc => acc.accountId === comment.accountId);
-
-    if (!isAccessible) {
+    if (comment.workspaceId !== workspaceId) {
       throw AppError.forbidden('Access denied to comment');
     }
 
-    // 4. Retrieve caller details to construct reply author
     const user = await this.userRepository.findById(callerId);
     if (!user) {
       throw AppError.notFound('User not found');
+    }
+
+    const account = await this.socialRepository.findAccountById(comment.accountId);
+    if (!account) {
+      throw AppError.notFound('Connected social account no longer exists');
+    }
+
+    const provider = ProviderFactory.getConfiguredProvider(comment.platform);
+    const caps: ProviderCapabilities = provider.getCapabilities(account as any);
+    if (!caps.commentsWrite || !provider.replyToComment) {
+      throw AppError.badRequest(`Replying to comments is not supported for ${comment.platform} (${account.accountType})`);
+    }
+
+    const bundle = await this.socialService.resolveAccountTokenBundle(account._id.toString());
+
+    let externalReplyId: string;
+    try {
+      const result = await provider.replyToComment(
+        {
+          tokens: { accessToken: bundle.accessToken, refreshToken: bundle.refreshToken },
+          account: {
+            providerAccountId: account.providerAccountId,
+            accountType: account.accountType,
+            username: account.username,
+            displayName: account.displayName
+          }
+        },
+        comment.externalCommentId,
+        message
+      );
+      externalReplyId = result.externalReplyId;
+    } catch (error: any) {
+      if (error instanceof ProviderError) {
+        throw AppError.providerError(`Reply rejected by ${comment.platform}: ${error.message}`);
+      }
+      throw AppError.providerError(`Failed to reach ${comment.platform}: ${error.message}`);
     }
 
     const reply: ICommentReply = {
       author: {
         username: user.email.split('@')[0] || 'admin',
         displayName: user.fullName || 'Admin',
-        avatarUrl: user.avatarUrl || `https://api.dicebear.com/7.x/adventurer/svg?seed=${callerId}`,
+        avatarUrl: user.avatarUrl,
         isSystemUser: true
       },
       message,
+      externalReplyId,
+      sentToProvider: true,
       createdAt: new Date().toISOString()
     };
 
-    // 5. Push reply and auto-resolve
     const updatedComment = await this.commentRepository.pushReply(commentId, reply);
     if (!updatedComment) {
       throw AppError.internal('Failed to submit reply');
     }
 
-    // 6. Log activity
     const ActivityLogModel = mongoose.models.ActivityLog || mongoose.model('ActivityLog');
-    const log = new ActivityLogModel({
-      userId: callerId,
-      workspaceId,
-      action: 'COMMENT_REPLIED',
-      details: `Replied to comment by @${comment.author.username} on ${comment.platform}`
-    });
-    await log.save();
+    try {
+      const log = new ActivityLogModel({
+        userId: callerId,
+        workspaceId,
+        action: 'COMMENT_REPLIED',
+        details: `Replied to comment by @${comment.author.username} on ${comment.platform}`
+      });
+      await log.save();
+    } catch (err: any) {
+      console.warn('[CommentService] Failed to log activity:', err.message);
+    }
 
-    // 7. Create notification for tracking
-    const NotificationModel = mongoose.models.Notification || mongoose.model('Notification');
-    const notification = new NotificationModel({
-      userId: callerId,
-      title: 'Comment Replied',
-      message: `Replied to comment by @${comment.author.username} on ${comment.platform}`,
-      read: false,
-      type: 'comment'
-    });
-    await notification.save();
+    try {
+      await this.notificationService.create({
+        userId: callerId,
+        type: NotificationType.NEW_COMMENT,
+        title: 'Comment Replied',
+        message: `Replied to comment by @${comment.author.username} on ${comment.platform}`
+      });
+    } catch (err: any) {
+      console.warn('[CommentService] Failed to send notification:', err.message);
+    }
 
     return updatedComment;
   }
 
-  /**
-   * Switches comment resolution status
-   */
+  /** Switches comment resolution status. */
   async resolveComment(
     commentId: string,
     status: 'resolved' | 'unresolved',
     workspaceId: string,
     callerId: string
   ): Promise<IComment> {
-    // 1. Verify caller is a member of the workspace
     const callerMember = await this.workspaceRepository.findMember(workspaceId, callerId);
     if (!callerMember) {
       throw AppError.forbidden('Unauthorized access to workspace data');
     }
 
-    // 2. Fetch the comment
     const comment = await this.commentRepository.findCommentById(commentId);
     if (!comment) {
       throw AppError.notFound('Comment not found');
     }
-
-    // 3. Verify workspace access
-    const members = await this.workspaceRepository.listMembers(workspaceId);
-    const memberIds = members.map(m => m.userId);
-
-    const accounts = await Promise.all(
-      memberIds.map(userId => this.socialRepository.findAccountsByUserId(userId))
-    );
-    const flatAccounts = accounts.flat();
-    const isAccessible = flatAccounts.some(acc => acc.accountId === comment.accountId);
-
-    if (!isAccessible) {
+    if (comment.workspaceId !== workspaceId) {
       throw AppError.forbidden('Access denied to comment');
     }
 
-    // 4. Update status
     const updatedComment = await this.commentRepository.updateComment(commentId, { status });
     if (!updatedComment) {
       throw AppError.internal('Failed to update comment status');
     }
 
-    // 5. Log activity
     const ActivityLogModel = mongoose.models.ActivityLog || mongoose.model('ActivityLog');
-    const log = new ActivityLogModel({
-      userId: callerId,
-      workspaceId,
-      action: 'COMMENT_STATUS_UPDATED',
-      details: `Marked comment by @${comment.author.username} as ${status}`
-    });
-    await log.save();
+    try {
+      const log = new ActivityLogModel({
+        userId: callerId,
+        workspaceId,
+        action: 'COMMENT_STATUS_UPDATED',
+        details: `Marked comment by @${comment.author.username} as ${status}`
+      });
+      await log.save();
+    } catch (err: any) {
+      console.warn('[CommentService] Failed to log activity:', err.message);
+    }
 
     return updatedComment;
   }
 
-  /**
-   * Assigns comment to a workspace teammate
-   */
+  /** Assigns comment to a workspace teammate. */
   async assignComment(
     commentId: string,
     assignedToUserId: string,
     workspaceId: string,
     callerId: string
   ): Promise<IComment> {
-    // 1. Verify caller is a member of the workspace
     const callerMember = await this.workspaceRepository.findMember(workspaceId, callerId);
     if (!callerMember) {
       throw AppError.forbidden('Unauthorized access to workspace data');
     }
 
-    // 2. Fetch the comment
     const comment = await this.commentRepository.findCommentById(commentId);
     if (!comment) {
       throw AppError.notFound('Comment not found');
     }
-
-    // 3. Verify workspace access
-    const members = await this.workspaceRepository.listMembers(workspaceId);
-    const memberIds = members.map(m => m.userId);
-
-    const accounts = await Promise.all(
-      memberIds.map(userId => this.socialRepository.findAccountsByUserId(userId))
-    );
-    const flatAccounts = accounts.flat();
-    const isAccessible = flatAccounts.some(acc => acc.accountId === comment.accountId);
-
-    if (!isAccessible) {
+    if (comment.workspaceId !== workspaceId) {
       throw AppError.forbidden('Access denied to comment');
     }
 
-    // 4. Verify that the assigned user is a member of the workspace
     const assignedMember = await this.workspaceRepository.findMember(workspaceId, assignedToUserId);
     if (!assignedMember) {
       throw AppError.badRequest('Assigned user is not a member of this workspace');
     }
 
-    // 5. Update assignment
     const updatedComment = await this.commentRepository.updateComment(commentId, { assignedTo: assignedToUserId });
     if (!updatedComment) {
       throw AppError.internal('Failed to assign comment');
     }
 
-    // 6. Log activity
     const ActivityLogModel = mongoose.models.ActivityLog || mongoose.model('ActivityLog');
-    const log = new ActivityLogModel({
-      userId: callerId,
-      workspaceId,
-      action: 'COMMENT_ASSIGNED',
-      details: `Assigned comment by @${comment.author.username} to workspace member`
-    });
-    await log.save();
+    try {
+      const log = new ActivityLogModel({
+        userId: callerId,
+        workspaceId,
+        action: 'COMMENT_ASSIGNED',
+        details: `Assigned comment by @${comment.author.username} to workspace member`
+      });
+      await log.save();
+    } catch (err: any) {
+      console.warn('[CommentService] Failed to log activity:', err.message);
+    }
 
     return updatedComment;
   }
 
   /**
-   * Generates AI suggestions for comment replies in Professional, Friendly, and Brand tones
+   * Generates AI suggestions for comment replies. Requires a real AI key —
+   * never falls back to canned mock templates.
    */
   async suggestReply(
     commentId: string,
     workspaceId: string,
     callerId: string
   ): Promise<{ professional: string; friendly: string; brand: string }> {
-    // 1. Verify caller is a member of the workspace
     const callerMember = await this.workspaceRepository.findMember(workspaceId, callerId);
     if (!callerMember) {
       throw AppError.forbidden('Unauthorized access to workspace data');
     }
 
-    // 2. Fetch the comment
     const comment = await this.commentRepository.findCommentById(commentId);
     if (!comment) {
       throw AppError.notFound('Comment not found');
     }
-
-    // 3. Verify workspace access
-    const members = await this.workspaceRepository.listMembers(workspaceId);
-    const memberIds = members.map(m => m.userId);
-
-    const accounts = await Promise.all(
-      memberIds.map(userId => this.socialRepository.findAccountsByUserId(userId))
-    );
-    const flatAccounts = accounts.flat();
-    const isAccessible = flatAccounts.some(acc => acc.accountId === comment.accountId);
-
-    if (!isAccessible) {
+    if (comment.workspaceId !== workspaceId) {
       throw AppError.forbidden('Access denied to comment');
     }
 
     const message = comment.message;
-    const lowerMessage = message.toLowerCase();
+    const username = comment.author.username;
 
-    // Check if we have API Keys configured
     if (env.OPENAI_API_KEY) {
-      try {
-        return await this.generateSuggestionsWithOpenAI(message, comment.author.username);
-      } catch (err) {
-        console.warn('[CommentService] OpenAI reply generation failed, falling back to mock templates:', err);
-      }
-    } else if (env.CLAUDE_API_KEY) {
-      try {
-        return await this.generateSuggestionsWithClaude(message, comment.author.username);
-      } catch (err) {
-        console.warn('[CommentService] Claude reply generation failed, falling back to mock templates:', err);
-      }
+      return this.generateSuggestionsWithOpenAI(message, username);
+    }
+    if (env.CLAUDE_API_KEY) {
+      return this.generateSuggestionsWithClaude(message, username);
     }
 
-    // Mock Fallback
-    if (lowerMessage.includes('free') || lowerMessage.includes('trial') || lowerMessage.includes('cost') || lowerMessage.includes('price') || lowerMessage.includes('pricing')) {
-      return {
-        professional: `Thank you for your inquiry. SocialFlow offers a comprehensive free tier supporting up to 3 social media accounts along with standard analytics features. No credit card is required to begin, and you can evaluate our features at your convenience.`,
-        friendly: `Hi @${comment.author.username}! 😊 Yes, we absolutely do! You can connect up to 3 accounts on our free plan without entering any card info. Feel free to give it a spin and let us know what you think!`,
-        brand: `Start growing your social presence today with SocialFlow's free plan! Manage 3 accounts at zero cost, and upgrade to Pro for advanced AI features whenever you are ready.`
-      };
-    } else if (lowerMessage.includes('agency') || lowerMessage.includes('client') || lowerMessage.includes('multiple') || lowerMessage.includes('team') || lowerMessage.includes('collaborate')) {
-      return {
-        professional: `SocialFlow provides dedicated support for agency workflows, including multi-tenant workspaces, granular team permission roles, and white-label reporting. We would be pleased to schedule a demonstration for your team.`,
-        friendly: `Oh, absolutely! 🚀 Our Agency workspace is built for this—you can manage multiple client accounts and assign custom roles to your teammates. Let us know if you'd like a quick walkthrough!`,
-        brand: `Scale your agency effortlessly. SocialFlow's multi-tenant workspaces and custom teammate roles keep your client management seamless and professional. Try our Agency features today!`
-      };
-    } else {
-      return {
-        professional: `We appreciate your feedback regarding SocialFlow. Please let us know if you require any assistance or have additional inquiries about our features.`,
-        friendly: `Thank you so much for the support! ❤️ We are constantly rolling out updates, so keep an eye out. Let us know if there's anything else you'd like to see!`,
-        brand: `Thanks for connecting with SocialFlow! We're here to help you automate and optimize your content strategy. Have you connected your first platform yet?`
-      };
-    }
+    throw AppError.badRequest(
+      'AI reply suggestions require an API key. Configure OPENAI_API_KEY or CLAUDE_API_KEY to use this feature.'
+    );
   }
 
   private async generateSuggestionsWithOpenAI(message: string, username: string) {
@@ -346,12 +388,17 @@ Respond with ONLY the JSON object, no markdown wrappers, no introductory or conc
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API returned status ${response.status}`);
+      throw AppError.providerError(`OpenAI API returned status ${response.status}`);
     }
 
     const data = await response.json() as any;
     const content = data.choices?.[0]?.message?.content?.trim();
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    return {
+      professional: String(parsed.professional || ''),
+      friendly: String(parsed.friendly || ''),
+      brand: String(parsed.brand || '')
+    };
   }
 
   private async generateSuggestionsWithClaude(message: string, username: string) {
@@ -382,12 +429,17 @@ Respond with ONLY the JSON object, no markdown wrappers, no introductory or conc
     });
 
     if (!response.ok) {
-      throw new Error(`Claude API returned status ${response.status}`);
+      throw AppError.providerError(`Claude API returned status ${response.status}`);
     }
 
     const data = await response.json() as any;
     const content = data.content?.[0]?.text?.trim();
-    return JSON.parse(content);
+    const parsed = JSON.parse(content);
+    return {
+      professional: String(parsed.professional || ''),
+      friendly: String(parsed.friendly || ''),
+      brand: String(parsed.brand || '')
+    };
   }
 }
 export default CommentService;

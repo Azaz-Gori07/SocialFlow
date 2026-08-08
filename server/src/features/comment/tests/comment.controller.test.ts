@@ -41,8 +41,8 @@ describe('CommentController Integration Tests', () => {
     await UserModel.deleteMany({ email: { $regex: /comment_/i } });
     await WorkspaceModel.deleteMany({ name: { $regex: /Comment Workspace/i } });
     await WorkspaceMemberModel.deleteMany({});
-    await SocialAccountModel.deleteMany({ accountId: 'tw_integration_123' });
-    await CommentModel.deleteMany({ postId: 'post_integration_123' });
+    await SocialAccountModel.deleteMany({ providerAccountId: 'tw_integration_123' });
+    await CommentModel.deleteMany({ externalPostId: 'post_integration_123' });
 
     // Register owner (creates user + workspace, sends OTP — extract userId, generate JWT directly)
     const ownerReg = await request(app).post('/api/auth/register').send(ownerUser);
@@ -59,20 +59,24 @@ describe('CommentController Integration Tests', () => {
     guestToken = jwt.sign({ id: guestId, email: guestUser.email }, env.JWT_SECRET, { expiresIn: '15m' });
 
     // Link a social account for owner
-    await SocialAccountModel.create({
+    const account = await SocialAccountModel.create({
       userId: ownerId,
       platform: 'twitter',
-      accountId: 'tw_integration_123',
+      providerAccountId: 'tw_integration_123',
       username: 'test_user',
       displayName: 'Test User',
-      accessToken: 'encrypted_token'
+      encryptedAccessToken: 'encrypted_token'
     });
 
     // Seed comment linked to that social account
     const comment = await CommentModel.create({
+      workspaceId,
       platform: 'twitter',
-      accountId: 'tw_integration_123',
-      postId: 'post_integration_123',
+      accountId: account._id.toString(),
+      externalAccountId: 'tw_integration_123',
+      externalPostId: 'post_integration_123',
+      externalCommentId: 'ext_comment_integration_1',
+      postTitle: 'Integration Post',
       author: {
         username: 'fan_123',
         displayName: 'Fan 123'
@@ -90,8 +94,8 @@ describe('CommentController Integration Tests', () => {
     await UserModel.deleteMany({ email: { $regex: /comment_/i } });
     await WorkspaceModel.deleteMany({ name: { $regex: /Comment Workspace/i } });
     await WorkspaceMemberModel.deleteMany({});
-    await SocialAccountModel.deleteMany({ accountId: 'tw_integration_123' });
-    await CommentModel.deleteMany({ postId: 'post_integration_123' });
+    await SocialAccountModel.deleteMany({ providerAccountId: 'tw_integration_123' });
+    await CommentModel.deleteMany({ externalPostId: 'post_integration_123' });
   });
 
   describe('GET /api/comments', () => {
@@ -138,7 +142,7 @@ describe('CommentController Integration Tests', () => {
   });
 
   describe('POST /api/comments/reply', () => {
-    it('should reply to a comment and mark it resolved', async () => {
+    it('should fail with 503 when the platform provider is not configured (no fake replies)', async () => {
       const response = await request(app)
         .post('/api/comments/reply')
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -148,11 +152,10 @@ describe('CommentController Integration Tests', () => {
           message: 'Yes! We have a completely free tier.'
         });
 
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.data.status).toBe('resolved');
-      expect(response.body.data.replies).toHaveLength(1);
-      expect(response.body.data.replies[0].message).toBe('Yes! We have a completely free tier.');
+      // Real reply flow requires Twitter client credentials; the API must
+      // never fake a delivery, so it reports the provider as unconfigured.
+      expect(response.status).toBe(503);
+      expect(response.body.success).toBe(false);
     });
 
     it('should fail if message is empty', async () => {
@@ -226,7 +229,7 @@ describe('CommentController Integration Tests', () => {
   });
 
   describe('POST /api/comments/ai-suggestions', () => {
-    it('should return professional, friendly, and brand suggestion replies', async () => {
+    it('should return 400 when no AI provider key is configured', async () => {
       const response = await request(app)
         .post('/api/comments/ai-suggestions')
         .set('Authorization', `Bearer ${ownerToken}`)
@@ -235,11 +238,10 @@ describe('CommentController Integration Tests', () => {
           commentId: testCommentId
         });
 
-      expect(response.status).toBe(200);
-      expect(response.body.success).toBe(true);
-      expect(response.body.data).toHaveProperty('professional');
-      expect(response.body.data).toHaveProperty('friendly');
-      expect(response.body.data).toHaveProperty('brand');
+      // No OPENAI_API_KEY/CLAUDE_API_KEY in test env: honest error, no templates.
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toContain('AI reply suggestions require an API key');
     });
   });
 });

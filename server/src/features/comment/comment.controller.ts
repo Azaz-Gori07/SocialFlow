@@ -91,6 +91,29 @@ export class CommentController {
     }
   };
 
+  sync = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return next(AppError.unauthorized());
+      }
+
+      const { workspaceId } = req.body;
+      if (!workspaceId) {
+        return next(AppError.badRequest('workspaceId is required'));
+      }
+
+      const result = await this.commentService.syncComments(workspaceId, req.user.id);
+      return ApiResponse.success(
+        res,
+        result,
+        `Synced ${result.comments} comment(s) across ${result.accounts} account(s)`,
+        200
+      );
+    } catch (error) {
+      next(error);
+    }
+  };
+
   suggestReply = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) {

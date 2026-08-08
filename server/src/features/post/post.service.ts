@@ -1,7 +1,15 @@
 import { PostRepository } from './post.repository';
 import { AppError } from '../../shared/errors/appError';
-import { IPost } from './post.model';
+import { IPost, IPostMediaRef } from './post.model';
 import { CreatePostInput, UpdatePostInput } from './post.validation';
+
+/** Maps client-provided media URLs to post media refs (kind inferred from URL). */
+function toMediaRefs(media: string[]): IPostMediaRef[] {
+  return media.map(url => ({
+    url,
+    kind: /\.(mp4|mov|webm|mkv)(\?|$)/i.test(url) ? 'video' : 'image'
+  }));
+}
 
 export interface ListPostsOptions {
   limit: number;
@@ -29,7 +37,7 @@ export class PostService {
       userId,
       platforms: input.platforms,
       content: input.content,
-      media: input.media,
+      media: toMediaRefs(input.media || []),
       platformContent: input.platformContent,
       status: effectiveStatus,
       scheduledAt: input.scheduledAt
@@ -63,7 +71,7 @@ export class PostService {
     const updateData: Partial<IPost> = {};
     if (input.content !== undefined) updateData.content = input.content;
     if (input.platforms !== undefined) updateData.platforms = input.platforms;
-    if (input.media !== undefined) updateData.media = input.media;
+    if (input.media !== undefined) updateData.media = toMediaRefs(input.media || []);
     if (input.platformContent !== undefined) updateData.platformContent = input.platformContent;
     if (input.status !== undefined) updateData.status = input.status;
     if (input.scheduledAt !== undefined) updateData.scheduledAt = input.scheduledAt;

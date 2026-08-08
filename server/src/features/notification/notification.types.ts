@@ -1,10 +1,13 @@
 export enum NotificationType {
   POST_PUBLISHED = 'post_published',
   POST_FAILED = 'post_failed',
+  DRAFT_PUBLISHED = 'draft_published',
+  DRAFT_FAILED = 'draft_failed',
   NEW_COMMENT = 'new_comment',
   WORKSPACE_INVITE = 'workspace_invite',
   SUBSCRIPTION_UPDATE = 'subscription_update',
   ANALYTICS_ALERT = 'analytics_alert',
+  INSIGHT = 'insight',
 }
 
 export interface Notification {

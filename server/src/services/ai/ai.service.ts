@@ -3,11 +3,11 @@ import { OpenRouterProvider } from './openrouter.provider';
 import { AIRequest, AIResponse, ProviderConfig } from './ai.types';
 
 /**
- * Central AI service that handles primary OpenRouter, fallback OpenRouter,
- * and legacy OpenAI/Claude providers (kept for backward compatibility).
+ * Central AI service. Real provider calls only:
+ * - primary OpenRouter key, then fallback OpenRouter key
+ * - if no key is configured, calls throw instead of returning fabricated data
  */
 export class AIService {
-  // Primary and fallback provider configs
   private primaryConfig: ProviderConfig | null = null;
   private fallbackConfig: ProviderConfig | null = null;
 
@@ -26,9 +26,15 @@ export class AIService {
     }
   }
 
-  /** Execute request with retry, timeout and fail‑over logic */
+  get isConfigured(): boolean {
+    return this.primaryConfig !== null || this.fallbackConfig !== null;
+  }
+
+  /**
+   * Execute request with retry and fail-over. The returned data is the raw
+   * provider response body.
+   */
   async execute(request: AIRequest): Promise<AIResponse> {
-    // Try primary OpenRouter first
     if (this.primaryConfig) {
       try {
         return await this.callWithRetry(new OpenRouterProvider(this.primaryConfig), request, 2);
@@ -37,28 +43,33 @@ export class AIService {
       }
     }
 
-    // Fallback OpenRouter
     if (this.fallbackConfig) {
       try {
         return await this.callWithRetry(new OpenRouterProvider(this.fallbackConfig), request, 1);
       } catch (e) {
-        // fall through to legacy
+        // fall through to error
       }
     }
 
-    // Legacy OpenAI
-    if (env.OPENAI_API_KEY) {
-      // Placeholder: legacy provider would be implemented similarly.
-      // For migration we keep compatibility but do not perform a real call.
-      return { data: { legacy: 'openai', prompt: request.prompt } } as AIResponse;
-    }
+    throw new Error('No AI provider configured. Set OPENROUTER_API_KEY (and OPENROUTER_API_KEY_MODEL) to enable AI features.');
+  }
 
-    // Legacy Claude
-    if (env.CLAUDE_API_KEY) {
-      return { data: { legacy: 'claude', prompt: request.prompt } } as AIResponse;
-    }
+  /** Extracts the text content from an OpenRouter chat-completions response. */
+  static extractText(data: any): string {
+    const content = data?.choices?.[0]?.message?.content;
+    if (typeof content === 'string') return content;
+    throw new Error('AI provider returned an unexpected response shape');
+  }
 
-    throw new Error('No AI provider configuration available');
+  /** Parses a JSON payload from model output, tolerating markdown fences. */
+  static parseJson(text: string): any {
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
+    const start = cleaned.indexOf('{');
+    const end = cleaned.lastIndexOf('}');
+    if (start === -1 || end === -1 || end <= start) {
+      throw new Error('AI provider did not return valid JSON');
+    }
+    return JSON.parse(cleaned.slice(start, end + 1));
   }
 
   /** Helper to perform retries with exponential backoff (base 200ms) */
@@ -68,7 +79,7 @@ export class AIService {
     retries: number,
   ): Promise<AIResponse> {
     let attempt = 0;
-    const maxAttempts = retries + 1; // initial try + retries
+    const maxAttempts = retries + 1;
     while (attempt < maxAttempts) {
       try {
         return await provider.call(request, 30000);
@@ -77,12 +88,10 @@ export class AIService {
         if (attempt >= maxAttempts) {
           throw err;
         }
-        // exponential backoff
         const delay = 200 * Math.pow(2, attempt - 1);
         await new Promise((res) => setTimeout(res, delay));
       }
     }
-    // Should never reach here
     throw new Error('Retry exhausted');
   }
 }

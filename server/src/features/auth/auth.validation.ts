@@ -21,7 +21,12 @@ export const refreshSchema = z.object({
   refreshToken: z.string().min(1, 'Refresh token is required')
 });
 
+export const exchangeCodeSchema = z.object({
+  code: z.string().min(32, 'Invalid code')
+});
+
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type VerifyOtpInput = z.infer<typeof verifyOtpSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RefreshInput = z.infer<typeof refreshSchema>;
+export type ExchangeCodeInput = z.infer<typeof exchangeCodeSchema>;

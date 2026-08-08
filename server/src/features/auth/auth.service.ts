@@ -1,16 +1,23 @@
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { createHash, randomBytes } from 'crypto';
 import mongoose from 'mongoose';
 import { UserRepository } from '../user/user.repository';
 import { OtpService } from './otp.service';
 import { AppError } from '../../shared/errors/appError';
 import { env } from '../../shared/config/env.config';
+import { db } from '../../database/db';
 import { RegisterInput, LoginInput } from './auth.validation';
 
 interface TokenPayload {
   id: string;
   email: string;
 }
+
+const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
+
+const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export class AuthService {
   constructor(
@@ -86,7 +93,7 @@ export class AuthService {
     user.lastLogin = new Date();
     await user.save();
 
-    const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
+    const tokens = await this.generateTokens({ id: user._id.toString(), email: user.email });
 
     return {
       user: {
@@ -124,7 +131,7 @@ export class AuthService {
     user.lastLogin = new Date();
     await user.save();
 
-    const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
+    const tokens = await this.generateTokens({ id: user._id.toString(), email: user.email });
 
     return {
       user: {
@@ -154,7 +161,7 @@ export class AuthService {
     user.lastLogin = new Date();
     await user.save();
 
-    const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
+    const tokens = await this.generateTokens({ id: user._id.toString(), email: user.email });
 
     return {
       user: {
@@ -173,19 +180,92 @@ export class AuthService {
 
     try {
       const decoded = jwt.verify(refreshToken, env.JWT_REFRESH_SECRET) as TokenPayload;
+      const tokenHash = hashToken(refreshToken);
+
+      // Rotation + revocation: the presented token must exist, be unrevoked,
+      // and unexpired. It is revoked and replaced by a fresh token.
+      const stored = await db.refreshTokens.findOne({ tokenHash });
+      if (!stored) {
+        throw AppError.unauthorized('Invalid session');
+      }
+      if (stored.revokedAt || (stored.expiresAt && new Date(stored.expiresAt).getTime() < Date.now())) {
+        throw AppError.unauthorized('Session expired');
+      }
+
       const user = await this.userRepository.findById(decoded.id);
       if (!user) {
         throw AppError.unauthorized('Invalid session');
       }
 
+      await db.refreshTokens.updateOne(
+        { _id: stored._id },
+        { $set: { revokedAt: new Date() } }
+      );
+
       user.lastLogin = new Date();
       await user.save();
 
-      const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
-      return tokens;
+      return await this.generateTokens({ id: user._id.toString(), email: user.email }, tokenHash);
     } catch (err) {
+      if (err instanceof AppError) throw err;
       throw AppError.unauthorized('Invalid or expired refresh token');
     }
+  }
+
+  /** Revoke a refresh token (logout). Idempotent for unknown tokens. */
+  async logout(refreshToken?: string) {
+    this.requireDb();
+    if (!refreshToken) return;
+    await db.refreshTokens.updateOne(
+      { tokenHash: hashToken(refreshToken) },
+      { $set: { revokedAt: new Date() } }
+    );
+  }
+
+  /**
+   * Issue a one-time, short-lived code that can be exchanged for tokens.
+   * Used by the OAuth callback so tokens never appear in the redirect URL.
+   */
+  async issueAuthCode(userId: string): Promise<string> {
+    this.requireDb();
+    const code = randomBytes(32).toString('hex');
+    await db.authCodes.create({
+      userId,
+      codeHash: hashToken(code),
+      expiresAt: new Date(Date.now() + AUTH_CODE_TTL_MS),
+    });
+    return code;
+  }
+
+  /** Exchange a one-time code for fresh tokens. Single use. */
+  async exchangeAuthCode(code: string) {
+    this.requireDb();
+
+    const stored = await db.authCodes.findOne({ codeHash: hashToken(code) });
+    if (!stored || stored.usedAt) {
+      throw AppError.unauthorized('Invalid or already-used code');
+    }
+    if (new Date(stored.expiresAt).getTime() < Date.now()) {
+      throw AppError.unauthorized('Code expired');
+    }
+
+    await db.authCodes.updateOne({ _id: stored._id }, { $set: { usedAt: new Date() } });
+
+    const user = await this.userRepository.findById(stored.userId);
+    if (!user) {
+      throw AppError.unauthorized('Invalid session');
+    }
+
+    return {
+      user: {
+        id: user._id.toString(),
+        email: user.email,
+        fullName: user.fullName,
+        avatarUrl: user.avatarUrl,
+        provider: user.provider
+      },
+      ...(await this.generateTokens({ id: user._id.toString(), email: user.email }))
+    };
   }
 
   async getProfile(userId: string) {
@@ -221,7 +301,7 @@ export class AuthService {
       );
     }
 
-    const tokens = this.generateTokens({ id: user._id.toString(), email: user.email });
+    const tokens = await this.generateTokens({ id: user._id.toString(), email: user.email });
 
     return {
       user: {
@@ -233,13 +313,21 @@ export class AuthService {
       },
       workspace,
       isNew,
-      ...tokens
+      code: await this.issueAuthCode(user._id.toString()),
     };
   }
 
-  private generateTokens(payload: TokenPayload) {
+  private async generateTokens(payload: TokenPayload, rotatedFrom?: string) {
     const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '15m' });
     const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: '30d' });
+
+    await db.refreshTokens.create({
+      userId: payload.id,
+      tokenHash: hashToken(refreshToken),
+      expiresAt: new Date(Date.now() + REFRESH_TTL_MS),
+      rotatedFrom,
+    });
+
     return { accessToken, refreshToken, expiresIn: 900 };
   }
 }

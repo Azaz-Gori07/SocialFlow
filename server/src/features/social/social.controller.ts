@@ -1,108 +1,105 @@
 import { Response, NextFunction } from 'express';
 import { SocialService } from './social.service';
 import { ApiResponse } from '../../shared/utils/response.util';
-import { AuthenticatedRequest as AuthenticatedUserRequest } from '../../shared/middleware/rbac.middleware';
+import { AuthenticatedRequest } from '../../shared/middleware/rbac.middleware';
 import { AppError } from '../../shared/errors/appError';
-
-export class SocialAccountDto {
-  static toResponse(account: any) {
-    return {
-      id: account._id.toString(),
-      userId: account.userId,
-      platform: account.platform,
-      accountId: account.accountId,
-      username: account.username,
-      displayName: account.displayName,
-      avatarUrl: account.avatarUrl,
-      metadata: account.metadata,
-      createdAt: account.createdAt
-    };
-  }
-}
+import { env } from '../../shared/config/env.config';
 
 export class SocialController {
   constructor(private socialService: SocialService) {}
 
   /**
-   * Generates authorization URL for a social platform connection
+   * POST /api/social/connect/:platform
+   * Returns a real provider authorization URL (server-side OAuth transaction).
    */
-  connect = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+  connect = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      if (!req.user) {
-        return next(AppError.unauthorized());
-      }
-
+      if (!req.user) return next(AppError.unauthorized());
       const { platform } = req.params;
-      
-      // Determine base URL dynamically (e.g. http://localhost:5000)
       const redirectHost = `${req.protocol}://${req.get('host')}`;
-      
-      const authUrl = await this.socialService.getConnectUrl(platform, req.user.id, redirectHost);
-      
-      return ApiResponse.success(res, { url: authUrl }, 'Authorization URL generated successfully');
+      const result = await this.socialService.getConnectUrl(platform, req.user.id, redirectHost);
+      return ApiResponse.success(res, result, 'Authorization URL generated');
     } catch (error) {
       next(error);
     }
   };
 
   /**
-   * Receives redirect from the social provider callback
+   * GET /api/social/callback/:platform
+   * Provider redirect target. Exchanges the code server-side and redirects the
+   * browser back to the SPA — no tokens ever appear in the URL fragment.
    */
-  callback = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+  callback = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { platform } = req.params;
-      const { code, state } = req.query as { code: string; state: string };
-
+      const { code, state } = req.query as { code?: string; state?: string };
       if (!code || !state) {
         throw AppError.badRequest('Authorization code and state are required parameters');
       }
 
       const redirectHost = `${req.protocol}://${req.get('host')}`;
-      
       await this.socialService.handleCallback(platform, code, state, redirectHost);
 
-      // Redirect browser back to React SPA dashboard upon successful connection
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      return res.redirect(`${frontendUrl}/settings?connection=success&platform=${platform}`);
+      return res.redirect(`${env.FRONTEND_URL}/settings?connection=success&platform=${platform}`);
     } catch (error: any) {
-      // In case of callback errors (e.g. user cancelled), redirect back with details
-      console.error('[SocialController] Callback error:', error);
-      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-      const encodedMsg = encodeURIComponent(error.message || 'OAuth Connection Failed');
-      return res.redirect(`${frontendUrl}/settings?connection=error&message=${encodedMsg}`);
+      const message = encodeURIComponent(error?.message || 'OAuth Connection Failed');
+      return res.redirect(`${env.FRONTEND_URL}/settings?connection=error&message=${message}`);
     }
   };
 
-  /**
-   * Lists all connected accounts for the authenticated user
-   */
-  listAccounts = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+  /** GET /api/social/accounts */
+  listAccounts = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      if (!req.user) {
-        return next(AppError.unauthorized());
-      }
-
-      const accounts = await this.socialService.getAccounts(req.user.id);
-      const output = accounts.map(SocialAccountDto.toResponse);
-      
-      return ApiResponse.success(res, output, 'Connected social accounts retrieved');
+      if (!req.user) return next(AppError.unauthorized());
+      const accounts = await this.socialService.listAccounts(req.user.id);
+      return ApiResponse.success(res, accounts, 'Connected social accounts retrieved');
     } catch (error) {
       next(error);
     }
   };
 
-  /**
-   * Disconnects a social account
-   */
-  disconnect = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+  /** GET /api/social/connections/:platform/discover — accounts the provider exposes. */
+  discover = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
-      if (!req.user) {
-        return next(AppError.unauthorized());
-      }
+      if (!req.user) return next(AppError.unauthorized());
+      const { platform } = req.params;
+      const accounts = await this.socialService.listDiscoverableAccounts(req.user.id, platform);
+      return ApiResponse.success(res, accounts, 'Discoverable accounts retrieved');
+    } catch (error) {
+      next(error);
+    }
+  };
 
+  /** POST /api/social/accounts/select — persist one discovered provider account. */
+  selectAccount = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { platform, providerAccountId } = req.body;
+      const account = await this.socialService.selectAccount(req.user.id, platform, providerAccountId);
+      return ApiResponse.success(res, account, 'Social account connected');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** POST /api/social/connections/:id/refresh — refresh provider tokens. */
+  refresh = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { id } = req.params;
+      const connection = await this.socialService.refreshConnection(id, req.user.id);
+      return ApiResponse.success(res, connection, 'Connection refreshed');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** DELETE /api/social/accounts/:id */
+  disconnect = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
       const { id } = req.params;
       await this.socialService.disconnectAccount(id, req.user.id);
-      
       return ApiResponse.success(res, null, 'Social account disconnected successfully');
     } catch (error) {
       next(error);

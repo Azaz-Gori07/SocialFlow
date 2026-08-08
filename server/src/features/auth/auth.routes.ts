@@ -10,7 +10,7 @@ import { WorkspaceService } from '../workspace/workspace.service';
 import { WorkspaceRepository } from '../workspace/workspace.repository';
 import { validate } from '../../shared/middleware/validate.middleware';
 import { authenticate } from '../../shared/middleware/rbac.middleware';
-import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema } from './auth.validation';
+import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema, exchangeCodeSchema } from './auth.validation';
 
 const router = Router();
 
@@ -38,6 +38,9 @@ router.post('/register', authLimiterHandler, validate({ body: registerSchema }),
 router.post('/verify-otp', authLimiterHandler, validate({ body: verifyOtpSchema }), authController.verifyOtp as any);
 router.post('/login', authLimiterHandler, validate({ body: loginSchema }), authController.login as any);
 router.post('/refresh', authLimiterHandler, validate({ body: refreshSchema }), authController.refresh as any);
+
+// One-time code exchange (issued by the OAuth callback redirect)
+router.post('/exchange', authLimiterHandler, validate({ body: exchangeCodeSchema }), authController.exchange as any);
 
 router.post('/logout', authController.logout as any);
 

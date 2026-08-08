@@ -40,13 +40,21 @@ router.get(
   commentController.list as any
 );
 
-// 2. Submit a reply to a comment
+// 2. Submit a reply to a comment (sent to the platform, never faked)
 router.post(
   '/reply',
   authenticate as any,
   validate({ body: replyCommentSchema }),
   requireRole(['owner', 'admin', 'editor']) as any,
   commentController.reply as any
+);
+
+// 2b. Pull comments from all connected provider accounts (guideline §10)
+router.post(
+  '/sync',
+  authenticate as any,
+  requireRole(['owner', 'admin', 'editor']) as any,
+  commentController.sync as any
 );
 
 // 3. Mark resolved / unresolved

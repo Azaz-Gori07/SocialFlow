@@ -9,6 +9,7 @@ interface AuthContextType {
   loading: boolean;
   pendingOtp: { userId: string; purpose: 'account_activation' } | null;
   login: (email: string, password: string) => Promise<any>;
+  exchangeCode: (code: string) => Promise<any>;
   register: (email: string, password: string, fullName: string) => Promise<any>;
   verifyOtp: (userId: string, code: string, purpose: 'account_activation') => Promise<any>;
   logout: () => Promise<void>;
@@ -133,8 +134,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const register = async (email: string, password: string, fullName: string) => {
+  const exchangeCode = async (code: string) => {
     setLoading(true);
+    try {
+      const res = await api.auth.exchange(code);
+
+      if (res?.accessToken) {
+        setupUserSession(res);
+        setUser(res.user);
+
+        const wsList = await api.workspaces.list();
+        setWorkspaces(wsList);
+        if (wsList.length > 0) {
+          setWorkspace(wsList[0]);
+          localStorage.setItem('workspace', JSON.stringify(wsList[0]));
+        }
+      }
+
+      return res;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const register = async (email: string, password: string, fullName: string) => {    setLoading(true);
     try {
       const res = await api.auth.register({ email, password, fullName });
       if (res?.userId) {
@@ -216,6 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       loading,
       pendingOtp,
       login,
+      exchangeCode,
       register,
       verifyOtp,
       logout,

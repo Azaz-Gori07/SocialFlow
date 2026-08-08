@@ -29,7 +29,7 @@ export class NotificationService {
     })) as unknown as Notification;
 
     try {
-      sendNotification(data.userId, notification);
+      await sendNotification(data.userId, notification);
     } catch (err) {
       console.warn('Failed to send real-time notification:', err);
     }
@@ -48,11 +48,7 @@ export class NotificationService {
   }
 
   async getUnreadCount(userId: string): Promise<number> {
-    const notifications = (await db.notifications.find({
-      userId,
-      read: false,
-    })) as unknown as Notification[];
-    return notifications.length;
+    return db.notifications.countDocuments({ userId, read: false }).exec();
   }
 
   async markRead(

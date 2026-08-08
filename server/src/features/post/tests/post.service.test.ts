@@ -1,10 +1,8 @@
 import { PostService } from '../post.service';
 import { PostRepository } from '../post.repository';
-import { PostScheduler } from '../../../services/queue/post.scheduler';
 import { AppError } from '../../../shared/errors/appError';
 
 jest.mock('../post.repository');
-jest.mock('../../../services/queue/post.scheduler');
 
 describe('PostService Unit Tests', () => {
   let postService: PostService;
@@ -28,7 +26,7 @@ describe('PostService Unit Tests', () => {
   });
 
   describe('createPost', () => {
-    it('should create a draft successfully without scheduling delayed jobs', async () => {
+    it('should create a draft without scheduling (scheduling is DB-driven)', async () => {
       mockPostRepository.createPost.mockResolvedValue(mockPost);
 
       const result = await postService.createPost({
@@ -42,14 +40,14 @@ describe('PostService Unit Tests', () => {
         content: 'Hello World Post',
         platforms: ['twitter'],
         status: 'draft',
-        media: undefined,
-        platformContent: undefined
+        media: [],
+        platformContent: undefined,
+        scheduledAt: undefined
       });
-      expect(PostScheduler.schedule).not.toHaveBeenCalled();
       expect(result).toBe(mockPost);
     });
 
-    it('should create and schedule post delayed job if status is scheduled', async () => {
+    it('should derive scheduled status when scheduledAt is provided', async () => {
       const scheduledTime = new Date(Date.now() + 3600 * 1000).toISOString();
       const scheduledPost = { ...mockPost, status: 'scheduled', scheduledAt: scheduledTime };
       mockPostRepository.createPost.mockResolvedValue(scheduledPost);
@@ -57,27 +55,26 @@ describe('PostService Unit Tests', () => {
       const result = await postService.createPost({
         content: 'Hello World Post',
         platforms: ['twitter'],
-        status: 'scheduled',
         scheduledAt: scheduledTime
       } as any, mockUserId);
 
-      expect(mockPostRepository.createPost).toHaveBeenCalled();
-      expect(PostScheduler.schedule).toHaveBeenCalledWith('pst_111', scheduledTime);
+      expect(mockPostRepository.createPost).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'scheduled', scheduledAt: scheduledTime })
+      );
       expect(result.status).toBe('scheduled');
     });
   });
 
   describe('updatePost', () => {
-    it('should update draft successfully and cancel scheduling if status changes to draft', async () => {
+    it('should update a scheduled post back to draft', async () => {
       const scheduledPost = { ...mockPost, status: 'scheduled', scheduledAt: new Date().toISOString() };
+      const draftPost = { ...mockPost, status: 'draft' };
       mockPostRepository.findPostById.mockResolvedValue(scheduledPost);
-      mockPostRepository.updatePost.mockResolvedValue(mockPost); // returns draft
+      mockPostRepository.updatePost.mockResolvedValue(draftPost);
 
-      const result = await postService.updatePost('pst_111', {
-        status: 'draft'
-      }, mockUserId);
+      const result = await postService.updatePost('pst_111', { status: 'draft' }, mockUserId);
 
-      expect(PostScheduler.cancel).toHaveBeenCalledWith('pst_111');
+      expect(mockPostRepository.updatePost).toHaveBeenCalledWith('pst_111', { status: 'draft' });
       expect(result.status).toBe('draft');
     });
 
@@ -89,16 +86,23 @@ describe('PostService Unit Tests', () => {
         postService.updatePost('pst_111', { content: 'New Content' }, mockUserId)
       ).rejects.toThrow(new AppError('Published posts cannot be edited', 400));
     });
+
+    it('should throw forbidden if the post belongs to another user', async () => {
+      mockPostRepository.findPostById.mockResolvedValue(mockPost);
+
+      await expect(
+        postService.updatePost('pst_111', { content: 'New Content' }, 'other_user')
+      ).rejects.toThrow(new AppError('Insufficient permissions to modify this post', 403));
+    });
   });
 
   describe('deletePost', () => {
-    it('should cancel schedule job and delete post', async () => {
+    it('should delete the post', async () => {
       mockPostRepository.findPostById.mockResolvedValue(mockPost);
       mockPostRepository.deletePost.mockResolvedValue(true);
 
       const result = await postService.deletePost('pst_111', mockUserId);
 
-      expect(PostScheduler.cancel).toHaveBeenCalledWith('pst_111');
       expect(mockPostRepository.deletePost).toHaveBeenCalledWith('pst_111');
       expect(result).toBe(true);
     });

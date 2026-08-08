@@ -2,6 +2,15 @@ import mongoose, { Schema, model, Model } from 'mongoose';
 import dotenv from 'dotenv';
 import dns from 'dns';
 
+// Feature models are the single source of truth. Importing them here
+// registers their schemas first, so the model() fallbacks below never
+// re-register a conflicting schema for the same model name.
+import UserModel from '../features/user/user.model';
+import { SocialAccountModel } from '../features/social/social.model';
+import PostModel from '../features/post/post.model';
+import CommentModel from '../features/comment/comment.model';
+import { WorkspaceModel, WorkspaceMemberModel } from '../features/workspace/workspace.model';
+
 dotenv.config();
 
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/socialflow';
@@ -18,68 +27,6 @@ const schemaOptions = {
   },
   toObject: { virtuals: true }
 };
-
-const UserSchema = new Schema({
-  email: { type: String, required: true, unique: true, lowercase: true, trim: true, index: true },
-  passwordHash: { type: String },
-  fullName: { type: String, required: true, trim: true },
-  avatarUrl: { type: String },
-  provider: { type: String, enum: ['local', 'zenuxs-google', 'zenuxs-github'], default: 'local' },
-  emailVerified: { type: Boolean, default: false },
-  lastLogin: { type: Date },
-  otpVerifiedAt: { type: Date },
-  oauthProviderId: { type: String }
-}, schemaOptions);
-
-const SocialAccountSchema = new Schema({
-  userId: { type: String, required: true },
-  platform: { type: String, required: true },
-  accountId: { type: String, required: true },
-  username: { type: String, required: true },
-  displayName: { type: String, required: true },
-  avatarUrl: { type: String },
-  accessToken: { type: String, required: true },
-  refreshToken: { type: String },
-  expiresAt: { type: String },
-  metadata: { type: Schema.Types.Mixed, default: {} }
-}, schemaOptions);
-
-// KEEP SYNCED with features/post/post.model.ts (single source of truth)
-const PostSchema = new Schema({
-  userId: { type: String, required: true },
-  platforms: { type: [String], required: true },
-  content: { type: String, required: true },
-  platformContent: { type: Schema.Types.Mixed, default: {} },
-  media: { type: [String], default: [] },
-  status: { type: String, required: true, enum: ['draft', 'scheduled', 'publishing', 'published', 'failed'] },
-  scheduledAt: { type: String },
-  publishedAt: { type: String },
-  failedReason: { type: String },
-  lastAttemptAt: { type: String }
-}, schemaOptions);
-
-const CommentSchema = new Schema({
-  platform: { type: String, required: true },
-  accountId: { type: String, required: true },
-  postId: { type: String, required: true },
-  postTitle: { type: String },
-  author: { username: String, displayName: String, avatarUrl: String },
-  message: { type: String, required: true },
-  status: { type: String, required: true, enum: ['unresolved', 'resolved'] },
-  assignedTo: { type: String },
-  replies: { type: [{ author: { username: String, displayName: String, avatarUrl: String, isSystemUser: Boolean }, message: String, createdAt: String }], default: [] }
-}, schemaOptions);
-
-const WorkspaceSchema = new Schema({
-  name: { type: String, required: true },
-  ownerId: { type: String, required: true }
-}, schemaOptions);
-
-const WorkspaceMemberSchema = new Schema({
-  workspaceId: { type: String, required: true },
-  userId: { type: String, required: true },
-  role: { type: String, required: true, enum: ['owner', 'admin', 'editor', 'viewer'] }
-}, schemaOptions);
 
 const AIGenerationSchema = new Schema({
   userId: { type: String, required: true },
@@ -98,7 +45,8 @@ const AnalyticsMetricSchema = new Schema({
   engagement: { type: Number, default: 0 },
   watchTime: { type: Number, default: 0 },
   clicks: { type: Number, default: 0 },
-  ctr: { type: Number, default: 0 }
+  ctr: { type: Number, default: 0 },
+  source: { type: String, enum: ['provider', 'webhook'], default: 'provider' }
 }, schemaOptions);
 AnalyticsMetricSchema.index({ accountId: 1, date: -1 });
 AnalyticsMetricSchema.index({ userId: 1, date: -1 });
@@ -108,7 +56,8 @@ const NotificationSchema = new Schema({
   title: { type: String, required: true },
   message: { type: String, required: true },
   read: { type: Boolean, default: false },
-  type: { type: String, required: true }
+  type: { type: String, required: true },
+  metadata: { type: Schema.Types.Mixed, default: {} }
 }, schemaOptions);
 NotificationSchema.index({ userId: 1, read: 1, createdAt: -1 });
 
@@ -146,18 +95,47 @@ const NotificationPreferenceSchema = new Schema({
 }, schemaOptions);
 NotificationPreferenceSchema.index({ userId: 1 });
 
-const UserModel = (mongoose.models.User as Model<any>) || model('User', UserSchema);
-const SocialAccountModel = (mongoose.models.SocialAccount as Model<any>) || model('SocialAccount', SocialAccountSchema);
-const PostModel = (mongoose.models.Post as Model<any>) || model('Post', PostSchema);
-const CommentModel = (mongoose.models.Comment as Model<any>) || model('Comment', CommentSchema);
-const WorkspaceModel = (mongoose.models.Workspace as Model<any>) || model('Workspace', WorkspaceSchema);
-const WorkspaceMemberModel = (mongoose.models.WorkspaceMember as Model<any>) || model('WorkspaceMember', WorkspaceMemberSchema);
+const WebhookEventSchema = new Schema({
+  provider: { type: String, required: true },
+  eventId: { type: String, required: true },
+  eventType: { type: String, required: true },
+  payload: { type: Schema.Types.Mixed, default: {} },
+  processed: { type: Boolean, default: false },
+  processedAt: { type: Date },
+  error: { type: String },
+  userId: { type: String },
+}, schemaOptions);
+WebhookEventSchema.index({ provider: 1, eventId: 1 }, { unique: true });
+WebhookEventSchema.index({ processed: 1, createdAt: -1 });
+
+const RefreshTokenSchema = new Schema({
+  userId: { type: String, required: true },
+  tokenHash: { type: String, required: true, unique: true },
+  expiresAt: { type: Date, required: true },
+  revokedAt: { type: Date },
+  rotatedFrom: { type: String },
+  createdAt: { type: Date, default: Date.now }
+}, schemaOptions);
+RefreshTokenSchema.index({ userId: 1, revokedAt: 1 });
+
+const AuthCodeSchema = new Schema({
+  userId: { type: String, required: true },
+  codeHash: { type: String, required: true, unique: true },
+  usedAt: { type: Date },
+  expiresAt: { type: Date, required: true },
+  createdAt: { type: Date, default: Date.now }
+}, schemaOptions);
+AuthCodeSchema.index({ usedAt: 1 });
+
 const AIGenerationModel = (mongoose.models.AIGeneration as Model<any>) || model('AIGeneration', AIGenerationSchema);
 const AnalyticsMetricModel = (mongoose.models.AnalyticsMetric as Model<any>) || model('AnalyticsMetric', AnalyticsMetricSchema);
 const NotificationModel = (mongoose.models.Notification as Model<any>) || model('Notification', NotificationSchema);
 const ActivityLogModel = (mongoose.models.ActivityLog as Model<any>) || model('ActivityLog', ActivityLogSchema);
 const GrowthInsightModel = (mongoose.models.GrowthInsight as Model<any>) || model('GrowthInsight', GrowthInsightSchema);
 const NotificationPreferenceModel = (mongoose.models.NotificationPreference as Model<any>) || model('NotificationPreference', NotificationPreferenceSchema);
+const WebhookEventModel = (mongoose.models.WebhookEvent as Model<any>) || model('WebhookEvent', WebhookEventSchema);
+const RefreshTokenModel = (mongoose.models.RefreshToken as Model<any>) || model('RefreshToken', RefreshTokenSchema);
+const AuthCodeModel = (mongoose.models.AuthCode as Model<any>) || model('AuthCode', AuthCodeSchema);
 
 // Configure custom DNS servers if provided in env
 if (process.env.DNS_SERVERS) {
@@ -245,7 +223,10 @@ export const db = {
   notifications: NotificationModel,
   activityLogs: ActivityLogModel,
   insights: GrowthInsightModel,
-  notificationPreferences: NotificationPreferenceModel
+  notificationPreferences: NotificationPreferenceModel,
+  webhookEvents: WebhookEventModel,
+  refreshTokens: RefreshTokenModel,
+  authCodes: AuthCodeModel
 };
 
 export { mongoose, connectDb };
