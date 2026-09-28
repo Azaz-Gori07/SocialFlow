@@ -1,7 +1,7 @@
 import type { Config } from 'jest';
 
 const config: Config = {
-  preset: '/home/azaz/Projects/SocialFlow/server/node_modules/ts-jest/presets/default/jest-preset.js',
+  preset: 'ts-jest',
   testEnvironment: 'node',
   testMatch: ['**/tests/**/*.test.ts', '**/*.test.ts'],
   verbose: true,
