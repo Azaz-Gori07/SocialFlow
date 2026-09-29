@@ -15,7 +15,8 @@ import {
   Layers,
   BellDot,
   X,
-  FileText
+  FileText,
+  GitBranch
 } from 'lucide-react';
 import { onNotification, onUnreadCount } from '../services/socket';
 
@@ -32,6 +33,32 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
   const [unreadCount, setUnreadCount] = useState(0);
   const [showWSMenu, setShowWSMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  // Feature-gated entry: /developer/status is the only ungated route, so a
+  // failure here hides the item rather than linking to a dead page.
+  const [developerEnabled, setDeveloperEnabled] = useState(false);
+
+  const userId = user?.id;
+
+  // Keyed on the primitive id, not the `user` object: the context value is a
+  // fresh object literal on every provider render, so a [user] dep re-fires
+  // this GET on every render and burns the global apiLimiter quota (100/15min)
+  // until every API 429s. The id only changes on login/logout/user switch.
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+    api.developer
+      .status()
+      .then(res => {
+        if (!cancelled) setDeveloperEnabled(res?.enabled === true);
+      })
+      .catch(err => {
+        console.error('Developer status check failed', err);
+        if (!cancelled) setDeveloperEnabled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   // Initial fetch and real-time socket subscriptions
   useEffect(() => {
@@ -91,6 +118,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
     { id: 'analytics', label: 'Analytics Hub', icon: BarChart3 },
     { id: 'workspaces', label: 'Collaboration', icon: Users },
     { id: 'notification-preferences', label: 'Prefs & Alerts', icon: BellDot },
+    ...(developerEnabled ? [{ id: 'developer', label: 'Developer', icon: GitBranch }] : []),
     { id: 'settings', label: 'Connected Accounts', icon: Settings },
   ];
 

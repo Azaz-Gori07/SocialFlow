@@ -15,7 +15,15 @@ export const createDraftSchema = z.object({
   platform: platformEnum,
   contentType: contentTypeEnum.default('post'),
   caption: z.string().optional(),
-  media: z.array(mediaRefSchema).optional().default([])
+  media: z.array(mediaRefSchema).optional().default([]),
+  // Developer Intelligence provenance (Phase 4) — all optional, so existing
+  // create payloads keep validating and persist an identical document.
+  sourceType: z.enum(['manual', 'developer_activity']).optional(),
+  developerActivityId: z.string().optional(),
+  developerRepositoryId: z.string().optional(),
+  developerOpportunityId: z.string().optional(),
+  evidence: z.any().optional(),
+  aiMetadata: z.any().optional()
 });
 
 export const uploadMediaSchema = z.object({

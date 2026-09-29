@@ -14,6 +14,9 @@ import commentRouter from './features/comment/comment.routes';
 import notificationRouter from './features/notification/notification.routes';
 import draftRouter from './features/draft/draft.routes';
 import webhookRouter from './features/webhooks/metaWebhook.routes';
+import developerRouter from './features/developer/developer.routes';
+import githubWebhookRouter from './features/developer/github/github.webhook.routes';
+import { startDeveloperScheduler } from './features/developer/jobs/developer.scheduler';
 import { DashboardController } from './controllers/dashboardController';
 import { AIController } from './controllers/aiController';
 import { authMiddleware } from './middleware/auth';
@@ -60,12 +63,27 @@ app.use(cors({
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: process.env.NODE_ENV === 'development' ? 10000 : 100,
+  // GitHub delivers webhooks from shared outbound IPs, so a burst from many
+  // repositories exhausts this budget and GitHub disables the hook. The route
+  // is HMAC-authenticated and answers 2xx quickly, so it is not a brute-force
+  // surface. originalUrl, not path: the mount strips the /api prefix from path.
+  skip: (req) => req.originalUrl.startsWith('/api/webhooks/github'),
   message: { message: 'Too many requests, please try again later.' }
 });
 app.use('/api/', apiLimiter as unknown as RequestHandler);
 
 // Helmet for setting secure HTTP headers
 app.use(helmet());
+
+// Raw body capture for GitHub webhook signature verification (feature-flagged:
+// with the flag off the route is not mounted at all). Registered BEFORE
+// express.json() so the HMAC still sees the exact bytes GitHub signed.
+if (env.developerFlowEnabled) {
+  app.use('/api/webhooks/github', express.raw({ type: '*/*' }), (req: any, _res: any, next: any) => {
+    req.rawBody = req.body;
+    next();
+  });
+}
 
 app.use(express.json());
 
@@ -123,6 +141,13 @@ app.use('/api/drafts', draftRouter);
 
 // Webhooks (no auth middleware - verified via signature/challenge)
 app.use('/api/webhooks', webhookRouter);
+// GitHub webhook (no auth middleware - verified via HMAC signature)
+if (env.developerFlowEnabled) {
+  app.use('/api/webhooks/github', githubWebhookRouter);
+}
+
+// Developer Intelligence (gated inside the router; /status stays reachable)
+app.use('/api/developer', developerRouter);
 
 // Dashboard routes (mounted from legacy controller)
 app.get('/api/dashboard/overview', authMiddleware as any, DashboardController.getOverview as any);
@@ -175,6 +200,7 @@ if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
     try {
       await connectDb();
       SchedulerService.start();
+      if (env.developerFlowEnabled) startDeveloperScheduler();
 
       const PORT = env.PORT || 5000;
       httpServer.listen(PORT, () => {
