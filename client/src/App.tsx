@@ -13,6 +13,8 @@ import { Settings } from './pages/Settings';
 import { NotificationCenter } from './pages/NotificationCenter';
 import { NotificationPreferences } from './pages/NotificationPreferences';
 import { AuthCallback } from './pages/AuthCallback';
+import { DeveloperGitHubCallback } from './pages/developer/DeveloperGitHubCallback';
+import { DeveloperShell } from './pages/developer/DeveloperShell';
 import { DraftLibrary } from './pages/DraftLibrary';
 import { Menu, Layers } from 'lucide-react';
 
@@ -63,6 +65,8 @@ const AppContent: React.FC = () => {
         return <NotificationPreferences />;
       case 'drafts':
         return <DraftLibrary />;
+      case 'developer':
+        return <DeveloperShell />;
       case 'settings':
         return <Settings />;
       default:
@@ -121,6 +125,9 @@ export const App: React.FC = () => {
     <AuthProvider>
       <Routes>
         <Route path="/auth/callback" element={<AuthCallback />} />
+        {/* GitHub sends the developer OAuth handshake back to the app: the
+            server builds the authorize URL without a redirect_uri. */}
+        <Route path="/developer/github/callback" element={<DeveloperGitHubCallback />} />
         <Route path="*" element={<AppContent />} />
       </Routes>
     </AuthProvider>

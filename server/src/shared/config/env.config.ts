@@ -68,6 +68,13 @@ const envSchema = z.object({
   YOUTUBE_CLIENT_SECRET: z.string().optional(),
   TIKTOK_CLIENT_ID: z.string().optional(),
   TIKTOK_CLIENT_SECRET: z.string().optional(),
+
+  // Developer Intelligence (feature-gated). All optional: when the feature is
+  // off — the default — the routes 404 and no GitHub credentials are needed.
+  DEVELOPER_FLOW_ENABLED: z.string().optional().default('false'),
+  GITHUB_CLIENT_ID: z.string().optional(),
+  GITHUB_CLIENT_SECRET: z.string().optional(),
+  GITHUB_WEBHOOK_SECRET: z.string().optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
@@ -113,6 +120,9 @@ export const env = {
   ...raw,
   isProduction,
   isDevelopment: !isProduction,
+  // Feature flag for the Developer Intelligence module. Off unless explicitly
+  // set to the exact string 'true' — any other value keeps every route 404.
+  developerFlowEnabled: raw.DEVELOPER_FLOW_ENABLED === 'true',
   encryptionKey,
   corsOrigins,
   meta: {

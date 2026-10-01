@@ -26,7 +26,15 @@ export class DraftService {
       contentType: input.contentType,
       caption: input.caption,
       media: input.media,
-      status: 'draft'
+      status: 'draft',
+      // Developer Intelligence provenance — written only when supplied, so a
+      // plain create persists exactly the fields it always did.
+      ...(input.sourceType !== undefined ? { sourceType: input.sourceType } : {}),
+      ...(input.developerActivityId !== undefined ? { developerActivityId: input.developerActivityId } : {}),
+      ...(input.developerRepositoryId !== undefined ? { developerRepositoryId: input.developerRepositoryId } : {}),
+      ...(input.developerOpportunityId !== undefined ? { developerOpportunityId: input.developerOpportunityId } : {}),
+      ...(input.evidence !== undefined ? { evidence: input.evidence } : {}),
+      ...(input.aiMetadata !== undefined ? { aiMetadata: input.aiMetadata } : {})
     });
     return draft;
   }

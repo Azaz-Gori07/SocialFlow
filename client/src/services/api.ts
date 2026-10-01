@@ -152,6 +152,74 @@ export const api = {
     updatePreferences: (body: any) => request<any>('/notifications/preferences', { method: 'PUT', body: JSON.stringify(body) })
   },
   
+  // Developer Intelligence. Response shapes mirror server/src/features/developer
+  // exactly: list endpoints return {items,total}, memory returns {items,grouped,total,limit,offset}.
+  developer: {
+    status: () => request<{ enabled: boolean }>('/developer/status'),
+    overview: () => request<any>('/developer/overview'),
+
+    getGithubAuthUrl: () => request<{ url: string }>('/developer/github/auth-url'),
+    completeGithubAuth: (code: string, state: string) =>
+      request<any>('/developer/github/callback', { method: 'POST', body: JSON.stringify({ code, state }) }),
+    getGithubConnection: () => request<any>('/developer/github/connection'),
+    disconnectGithub: () => request<{ disconnected: boolean }>('/developer/github/connection', { method: 'DELETE' }),
+
+    listRepositories: () => request<any>('/developer/repositories'),
+    listAvailableRepositories: () => request<any>('/developer/repositories/available'),
+    mirrorRepositories: () => request<{ mirrored: number; total: number }>('/developer/repositories/sync', { method: 'POST' }),
+    getRepository: (id: string) => request<any>(`/developer/repositories/${id}`),
+    setRepositoryMonitoring: (id: string, enabled: boolean) =>
+      request<any>(`/developer/repositories/${id}/monitoring`, { method: 'PATCH', body: JSON.stringify({ enabled }) }),
+    deleteRepository: (id: string) => request<any>(`/developer/repositories/${id}`, { method: 'DELETE' }),
+    syncRepository: (id: string) => request<any>(`/developer/repositories/${id}/sync`, { method: 'POST' }),
+
+    // repositoryId is required by the server's zod query schema, not optional.
+    listSyncLogs: (repositoryId: string, limit = 10) =>
+      request<any>(`/developer/sync-logs?repositoryId=${encodeURIComponent(repositoryId)}&limit=${limit}`),
+
+    listActivities: (params: { repositoryId?: string; importance?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params.repositoryId) q.append('repositoryId', params.repositoryId);
+      if (params.importance) q.append('importance', params.importance);
+      q.append('limit', String(params.limit ?? 20));
+      q.append('offset', String(params.offset ?? 0));
+      return request<any>(`/developer/activities?${q.toString()}`);
+    },
+    getActivity: (id: string) => request<any>(`/developer/activities/${id}`),
+
+    listMemory: (params: { repositoryId: string; category?: string; search?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams({ repositoryId: params.repositoryId });
+      if (params.category) q.append('category', params.category);
+      // min(1) on the server: an empty search term is a 400, so only send a real one.
+      if (params.search) q.append('search', params.search);
+      q.append('limit', String(params.limit ?? 50));
+      q.append('offset', String(params.offset ?? 0));
+      return request<any>(`/developer/memory?${q.toString()}`);
+    },
+    updateMemory: (id: string, body: { value?: string; items?: string[]; category?: string }) =>
+      request<any>(`/developer/memory/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    archiveMemory: (id: string) => request<{ archived: boolean }>(`/developer/memory/${id}/archive`, { method: 'POST' }),
+    restoreMemory: (id: string) => request<{ restored: boolean }>(`/developer/memory/${id}/restore`, { method: 'POST' }),
+
+    listOpportunities: (params: { status?: string; repositoryId?: string; limit?: number; offset?: number }) => {
+      const q = new URLSearchParams();
+      if (params.status) q.append('status', params.status);
+      if (params.repositoryId) q.append('repositoryId', params.repositoryId);
+      q.append('limit', String(params.limit ?? 20));
+      q.append('offset', String(params.offset ?? 0));
+      return request<any>(`/developer/opportunities?${q.toString()}`);
+    },
+    setOpportunityStatus: (id: string, status: string) =>
+      request<any>(`/developer/opportunities/${id}/status`, { method: 'POST', body: JSON.stringify({ status }) }),
+    generateOpportunity: (id: string) =>
+      request<any>(`/developer/opportunities/${id}/generate`, { method: 'POST', body: JSON.stringify({}) }),
+    runContentAutoGeneration: () => request<any>('/developer/content/auto-run', { method: 'POST' }),
+
+    getAutomationSettings: () => request<any>('/developer/settings/automation'),
+    updateAutomationSettings: (body: any) =>
+      request<any>('/developer/settings/automation', { method: 'PATCH', body: JSON.stringify(body) })
+  },
+
   drafts: {
     list: (params?: string) => request<any>(`/drafts${params ? `?${params}` : ''}`),
     get: (id: string) => request<any>(`/drafts/${id}`),

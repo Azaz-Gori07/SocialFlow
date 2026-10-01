@@ -36,6 +36,18 @@ export interface IDraft extends Document {
   lastAttemptAt?: string;
   errorMessage?: string;
   scheduledAt?: string;
+  // Developer Intelligence provenance (Phase 4). All optional and unset for
+  // drafts created through the plain draft API, so existing documents and
+  // their shape are unaffected.
+  /** 'manual' | 'developer_activity' — absent on API-created drafts. */
+  sourceType?: 'manual' | 'developer_activity';
+  developerActivityId?: string;
+  developerRepositoryId?: string;
+  developerOpportunityId?: string;
+  /** Evidence the post was generated from (commits, PRs, issues, diff totals). */
+  evidence?: Record<string, any>;
+  /** { variant, factCheck, validation, style, opportunityTitle } */
+  aiMetadata?: Record<string, any>;
 }
 
 const MediaRefSchema = new Schema<IMediaRef>({
@@ -81,7 +93,15 @@ const DraftSchema = new Schema<IDraft>({
   platformResponse: { type: PlatformResponseSchema },
   lastAttemptAt: { type: String },
   errorMessage: { type: String },
-  scheduledAt: { type: String }
+  scheduledAt: { type: String },
+  // Developer Intelligence provenance — optional, never defaulted so that
+  // drafts created via POST /api/drafts are byte-identical to before.
+  sourceType: { type: String, enum: ['manual', 'developer_activity'] },
+  developerActivityId: { type: String },
+  developerRepositoryId: { type: String, index: true },
+  developerOpportunityId: { type: String },
+  evidence: { type: Schema.Types.Mixed },
+  aiMetadata: { type: Schema.Types.Mixed }
 }, {
   timestamps: true,
   toJSON: {
