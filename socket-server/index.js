@@ -13,6 +13,7 @@
  * client sends its JWT in handshake.auth.token and lands in `user:<id>`.
  */
 const http = require('http');
+const https = require('https');
 const express = require('express');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
@@ -146,4 +147,41 @@ server.listen(PORT, () => {
   console.log(`🔔 SocialFlow Socket.IO service listening on :${PORT}`);
   console.log(`   CORS origins: ${CORS_ORIGINS.join(', ') || '(vercel.app only)'}`);
   console.log(`   transport: polling + websocket upgrade`);
+  startKeepAlive();
 });
+
+/**
+ * Render free instances spin down after 15 min with no incoming HTTP traffic.
+ * Ping our own public URL every 60s so the instance never idles out. The
+ * request leaves the process and re-enters through Render's router, so it
+ * counts as incoming traffic. RENDER_EXTERNAL_URL is injected by Render;
+ * KEEPALIVE_URL overrides for local testing (self-ping is skipped there).
+ *
+ * Note: this keeps an awake instance awake. It cannot revive a sleeping
+ * instance (no process running) — that role belongs to the external
+ * GitHub Actions cron in .github/workflows/keep-awake.yml.
+ */
+function startKeepAlive() {
+  const target = process.env.KEEPALIVE_URL || process.env.RENDER_EXTERNAL_URL;
+  if (!target) {
+    console.log('   keep-alive: skipped (no KEEPALIVE_URL/RENDER_EXTERNAL_URL)');
+    return;
+  }
+  const url = new URL('/health', target);
+  const ping = () => {
+    const req = https.get(
+      { hostname: url.hostname, path: '/health', family: 4, timeout: 10000 },
+      (res) => {
+        res.resume();
+        if (res.statusCode !== 200) {
+          console.warn(`⚠️ keep-alive ping -> HTTP ${res.statusCode}`);
+        }
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('keep-alive timeout')));
+    req.on('error', (err) => console.warn(`⚠️ keep-alive ping failed: ${err.message}`));
+  };
+  ping();
+  setInterval(ping, 60_000);
+  console.log(`   keep-alive: self-ping every 60s -> ${url.origin}`);
+}

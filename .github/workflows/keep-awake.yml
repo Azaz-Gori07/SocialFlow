@@ -1,0 +1,39 @@
+# Keeps the Render free-tier Socket.IO service awake.
+#
+# Render spins free instances down after 15 min without incoming HTTP traffic.
+# Two layers protect it:
+#   1. In-service self-ping (socket-server/index.js, every 60s) — keeps an
+#      awake instance awake, but cannot revive a stopped one.
+#   2. This workflow — external hit every minute that wakes a sleeping
+#      instance (cold start ~30-60s) and doubles as uptime monitoring.
+#
+# Runs on a schedule from GitHub's infra; needs no server, no token beyond
+# the repo itself, and never expires. GitHub auto-disables scheduled
+# workflows after 60 days of zero repo activity — any push/reactivate
+# re-enables it (check the Actions tab if uptime looks off).
+name: Keep Render socket service awake
+
+on:
+  schedule:
+    - cron: '* * * * *' # every minute, UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Hit /health (retry on failure)
+        run: |
+          URL="https://socialflow-socket.onrender.com/health"
+          for attempt in 1 2 3 4; do
+            code=$(curl -4 -s -o /tmp/health.json -w '%{http_code}' --max-time 45 "$URL" || echo 000)
+            echo "attempt $attempt -> HTTP $code"
+            if [ "$code" = "200" ]; then
+              cat /tmp/health.json
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::Render socket service unreachable after 4 attempts"
+          exit 1
