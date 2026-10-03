@@ -111,90 +111,74 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setPendingOtp(null);
   };
 
+  // NOTE: `loading` gates only the initial auth bootstrap (App.tsx boot
+  // spinner). Auth actions must NOT toggle it — App replaces the whole tree
+  // while loading=true, unmounting Auth and discarding its error state.
+
   const login = async (email: string, password: string) => {
-    setLoading(true);
-    try {
-      const res = await api.auth.login({ email, password });
+    const res = await api.auth.login({ email, password });
 
-      if (res?.accessToken) {
-        setupUserSession(res);
-        setUser(res.user);
+    if (res?.accessToken) {
+      setupUserSession(res);
+      setUser(res.user);
 
-        const wsList = await api.workspaces.list();
-        setWorkspaces(wsList);
-        if (wsList.length > 0) {
-          setWorkspace(wsList[0]);
-          localStorage.setItem('workspace', JSON.stringify(wsList[0]));
-        }
+      const wsList = await api.workspaces.list();
+      setWorkspaces(wsList);
+      if (wsList.length > 0) {
+        setWorkspace(wsList[0]);
+        localStorage.setItem('workspace', JSON.stringify(wsList[0]));
       }
-
-      return res;
-    } finally {
-      setLoading(false);
     }
+
+    return res;
   };
 
   const exchangeCode = async (code: string) => {
-    setLoading(true);
-    try {
-      const res = await api.auth.exchange(code);
+    const res = await api.auth.exchange(code);
 
-      if (res?.accessToken) {
-        setupUserSession(res);
-        setUser(res.user);
+    if (res?.accessToken) {
+      setupUserSession(res);
+      setUser(res.user);
 
-        const wsList = await api.workspaces.list();
-        setWorkspaces(wsList);
-        if (wsList.length > 0) {
-          setWorkspace(wsList[0]);
-          localStorage.setItem('workspace', JSON.stringify(wsList[0]));
-        }
+      const wsList = await api.workspaces.list();
+      setWorkspaces(wsList);
+      if (wsList.length > 0) {
+        setWorkspace(wsList[0]);
+        localStorage.setItem('workspace', JSON.stringify(wsList[0]));
       }
-
-      return res;
-    } finally {
-      setLoading(false);
     }
+
+    return res;
   };
 
-  const register = async (email: string, password: string, fullName: string) => {    setLoading(true);
-    try {
-      const res = await api.auth.register({ email, password, fullName });
-      if (res?.userId) {
-        setPendingOtp({ userId: res.userId, purpose: 'account_activation' });
-        return res;
-      }
-      return null;
-    } finally {
-      setLoading(false);
+  const register = async (email: string, password: string, fullName: string) => {
+    const res = await api.auth.register({ email, password, fullName });
+    if (res?.userId) {
+      setPendingOtp({ userId: res.userId, purpose: 'account_activation' });
+      return res;
     }
+    return null;
   };
 
   const verifyOtp = async (userId: string, code: string, purpose: 'account_activation') => {
-    setLoading(true);
-    try {
-      const res = await api.auth.verifyOtp({ userId, code, purpose });
-      // Account activation returns tokens
-      if (res?.accessToken) {
-        setupUserSession(res);
-        setUser(res.user);
+    const res = await api.auth.verifyOtp({ userId, code, purpose });
+    // Account activation returns tokens
+    if (res?.accessToken) {
+      setupUserSession(res);
+      setUser(res.user);
 
-        const wsList = await api.workspaces.list();
-        setWorkspaces(wsList);
-        if (wsList.length > 0) {
-          setWorkspace(wsList[0]);
-          localStorage.setItem('workspace', JSON.stringify(wsList[0]));
-        }
+      const wsList = await api.workspaces.list();
+      setWorkspaces(wsList);
+      if (wsList.length > 0) {
+        setWorkspace(wsList[0]);
+        localStorage.setItem('workspace', JSON.stringify(wsList[0]));
       }
-      setPendingOtp(null);
-      return res;
-    } finally {
-      setLoading(false);
     }
+    setPendingOtp(null);
+    return res;
   };
 
   const logout = async () => {
-    setLoading(true);
     try {
       await api.auth.logout();
     } catch (e) {
@@ -202,7 +186,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       disconnectSocket();
       handleLogoutCleanup();
-      setLoading(false);
     }
   };
 
