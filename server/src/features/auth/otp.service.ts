@@ -50,7 +50,9 @@ export class OtpService {
   private async sendOtp(email: string, code: string, purpose: OtpPurpose): Promise<void> {
     const subject = purpose === 'account_activation'
       ? 'Activate your SocialFlow account'
-      : 'Your SocialFlow login verification code';
+      : purpose === 'password_reset'
+        ? 'Reset your SocialFlow password'
+        : 'Your SocialFlow login verification code';
 
     // NEVER send real emails during test runs.
     // Only log the OTP to console so integration tests can read it if needed.

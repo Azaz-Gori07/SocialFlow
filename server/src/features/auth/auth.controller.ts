@@ -44,6 +44,29 @@ export class AuthController {
     }
   };
 
+  forgotPassword = async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const result = await this.authService.forgotPassword(req.body.email);
+      if (result) {
+        return ApiResponse.success(res, result, 'OTP sent to email address');
+      }
+      // Same-shaped 404 either way; client only advances on success.
+      return ApiResponse.error(res, 'No account found with this email. Please sign up first.', null, 404);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  resetPassword = async (req: any, res: Response, next: NextFunction) => {
+    try {
+      const { userId, code, newPassword } = req.body;
+      const result = await this.authService.resetPassword(userId, code, newPassword);
+      return ApiResponse.success(res, result, 'Password reset successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
   refresh = async (req: any, res: Response, next: NextFunction) => {
     try {
       const { refreshToken } = req.body;

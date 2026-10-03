@@ -268,6 +268,53 @@ export class AuthService {
     };
   }
 
+  /** Step 1 of password reset: mail an OTP if the account exists.
+   *  Response is identical whether or not the email is registered — the
+   *  userId is only echoed back when an OTP was actually issued, and the
+   *  client uses that to move to step 2. */
+  async forgotPassword(email: string) {
+    this.requireDb();
+
+    const user = await this.userRepository.findByEmail(email);
+    if (user && user.passwordHash) {
+      await this.otpService.generateAndSendOtp(
+        user._id.toString(),
+        user.email,
+        'password_reset'
+      );
+      return { userId: user._id.toString(), email: user.email };
+    }
+    // OAuth-only accounts have no local password to reset.
+    return null;
+  }
+
+  /** Step 2: verify the OTP and set the new password. Revokes every
+   *  existing refresh token so hijacked sessions die with the old password. */
+  async resetPassword(userId: string, code: string, newPassword: string) {
+    this.requireDb();
+
+    const isValid = await this.otpService.verifyOtp(userId, code, 'password_reset');
+    if (!isValid) {
+      throw AppError.badRequest('Invalid or expired OTP');
+    }
+
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw AppError.notFound('User not found');
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    user.passwordHash = await bcrypt.hash(newPassword, salt);
+    await user.save();
+
+    await db.refreshTokens.updateMany(
+      { userId },
+      { $set: { revokedAt: new Date() } }
+    );
+
+    return { email: user.email };
+  }
+
   async getProfile(userId: string) {
     this.requireDb();
 

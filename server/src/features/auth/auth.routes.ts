@@ -10,7 +10,7 @@ import { WorkspaceService } from '../workspace/workspace.service';
 import { WorkspaceRepository } from '../workspace/workspace.repository';
 import { validate } from '../../shared/middleware/validate.middleware';
 import { authenticate } from '../../shared/middleware/rbac.middleware';
-import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema, exchangeCodeSchema } from './auth.validation';
+import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema, exchangeCodeSchema, forgotPasswordSchema, resetPasswordSchema } from './auth.validation';
 
 const router = Router();
 
@@ -37,6 +37,8 @@ const authController = new AuthController(authService, zenuxsOAuthService);
 router.post('/register', authLimiterHandler, validate({ body: registerSchema }), authController.register as any);
 router.post('/verify-otp', authLimiterHandler, validate({ body: verifyOtpSchema }), authController.verifyOtp as any);
 router.post('/login', authLimiterHandler, validate({ body: loginSchema }), authController.login as any);
+router.post('/forgot-password', authLimiterHandler, validate({ body: forgotPasswordSchema }), authController.forgotPassword as any);
+router.post('/reset-password', authLimiterHandler, validate({ body: resetPasswordSchema }), authController.resetPassword as any);
 router.post('/refresh', authLimiterHandler, validate({ body: refreshSchema }), authController.refresh as any);
 
 // One-time code exchange (issued by the OAuth callback redirect)

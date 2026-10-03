@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 import { useNavigate } from 'react-router-dom';
 import { 
   Layers, 
@@ -25,6 +26,12 @@ export const Auth: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [otpCode, setOtpCode] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  // Password reset flow: 'auth' = normal login/register, 'forgot' = email
+  // entry, 'reset' = OTP + new password.
+  const [view, setView] = useState<'auth' | 'forgot' | 'reset'>('auth');
+  const [resetUserId, setResetUserId] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [notice, setNotice] = useState('');
 
   React.useEffect(() => {
     if (user) {
@@ -76,6 +83,63 @@ export const Auth: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    setLoading(true);
+
+    try {
+      const res = await api.auth.forgotPassword(email);
+      if (res?.userId) {
+        setResetUserId(res.userId);
+        setOtpCode('');
+        setNewPassword('');
+        setView('reset');
+        setNotice(`We sent an 8-digit code to ${email}. It expires in 10 minutes.`);
+      } else {
+        setError('No account found with this email. Please sign up first.');
+      }
+    } catch (err: any) {
+      setError(err.message || 'Could not send the reset code.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResetSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    setLoading(true);
+
+    try {
+      await api.auth.resetPassword(resetUserId, otpCode, newPassword);
+      setView('auth');
+      setIsLogin(true);
+      setPassword('');
+      setOtpCode('');
+      setNewPassword('');
+      setNotice('Password reset successfully. Sign in with your new password.');
+    } catch (err: any) {
+      setError(err.message || 'Password reset failed.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const startForgotPassword = () => {
+    setError('');
+    setNotice('');
+    setView('forgot');
+  };
+
+  const backToLogin = () => {
+    setError('');
+    setNotice('');
+    setView('auth');
   };
 
   return (
@@ -199,7 +263,11 @@ export const Auth: React.FC = () => {
               marginBottom: '4px',
               lineHeight: 1.2
             }}>
-              {pendingOtp ? 'Two-Factor Verification' : isLogin ? 'Welcome back' : 'Create your workspace'}
+              {view === 'forgot'
+                ? 'Reset your password'
+                : view === 'reset'
+                  ? 'Check your email'
+                  : pendingOtp ? 'Two-Factor Verification' : isLogin ? 'Welcome back' : 'Create your workspace'}
             </h2>
             <p style={{
               fontSize: '0.85rem',
@@ -207,11 +275,15 @@ export const Auth: React.FC = () => {
               lineHeight: 1.45,
               marginBottom: '18px'
             }}>
-              {pendingOtp 
-                ? 'Enter the 8-digit OTP code sent to your email.'
-                : isLogin 
-                  ? 'Sign in to manage your content, accounts and automation.' 
-                  : 'Start turning shipped commits into compounding audience reach.'}
+              {view === 'forgot'
+                ? 'Enter your account email and we will send you a verification code.'
+                : view === 'reset'
+                  ? 'Enter the 8-digit code and choose a new password.'
+                  : pendingOtp 
+                    ? 'Enter the 8-digit OTP code sent to your email.'
+                    : isLogin 
+                      ? 'Sign in to manage your content, accounts and automation.' 
+                      : 'Start turning shipped commits into compounding audience reach.'}
             </p>
 
             {/* Error Message */}
@@ -230,8 +302,24 @@ export const Auth: React.FC = () => {
               </div>
             )}
 
+            {/* Success Notice */}
+            {notice && (
+              <div style={{
+                background: '#f0fdf4',
+                border: '1px solid #bbf7d0',
+                color: '#15803d',
+                padding: '9px 12px',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                marginBottom: '14px',
+                lineHeight: 1.4
+              }}>
+                {notice}
+              </div>
+            )}
+
             {/* Tabs: Sign In | Create Account */}
-            {!pendingOtp && (
+            {!pendingOtp && view === 'auth' && (
               <div style={{
                 display: 'flex',
                 width: '100%',
@@ -301,7 +389,7 @@ export const Auth: React.FC = () => {
             )}
 
             {/* OAuth Buttons */}
-            {!pendingOtp && (
+            {!pendingOtp && view === 'auth' && (
               <>
                 {/* Continue with Zenuxs (Google OAuth) */}
                 <button
@@ -406,8 +494,243 @@ export const Auth: React.FC = () => {
               </>
             )}
 
-            {/* OTP Mode Form */}
-            {pendingOtp ? (
+            {/* Password Reset: Step 1 — email entry */}
+            {view === 'forgot' ? (
+              <form onSubmit={handleForgotSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>
+                    Work Email
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Mail size={15} style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      type="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      required
+                      autoFocus
+                      style={{
+                        width: '100%',
+                        height: '44px',
+                        paddingLeft: '38px',
+                        paddingRight: '14px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        fontSize: '0.875rem',
+                        color: '#0f172a',
+                        outline: 'none',
+                        boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.02)',
+                        transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+                      }}
+                      onFocus={e => {
+                        e.target.style.borderColor = '#4f47ee';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(79, 71, 238, 0.12)';
+                      }}
+                      onBlur={e => {
+                        e.target.style.borderColor = '#e2e8f0';
+                        e.target.style.boxShadow = 'inset 0 1px 2px rgba(0, 0, 0, 0.02)';
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    background: '#4f47ee',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    marginTop: '4px',
+                    boxShadow: '0 4px 14px rgba(79, 71, 238, 0.35)',
+                    opacity: loading ? 0.7 : 1,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{loading ? 'Sending code...' : 'Send reset code'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={backToLogin}
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Back to Sign In
+                </button>
+              </form>
+            ) : view === 'reset' ? (
+              /* Password Reset: Step 2 — OTP + new password */
+              <form onSubmit={handleResetSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>
+                    8-Digit Code
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <KeyRound size={15} style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="00000000"
+                      value={otpCode}
+                      onChange={e => setOtpCode(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                      required
+                      autoFocus
+                      style={{
+                        width: '100%',
+                        height: '44px',
+                        paddingLeft: '38px',
+                        paddingRight: '14px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        fontSize: '0.95rem',
+                        letterSpacing: '0.35em',
+                        fontVariantNumeric: 'tabular-nums',
+                        color: '#0f172a',
+                        outline: 'none',
+                        boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.02)',
+                        transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+                      }}
+                      onFocus={e => {
+                        e.target.style.borderColor = '#4f47ee';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(79, 71, 238, 0.12)';
+                      }}
+                      onBlur={e => {
+                        e.target.style.borderColor = '#e2e8f0';
+                        e.target.style.boxShadow = 'inset 0 1px 2px rgba(0, 0, 0, 0.02)';
+                      }}
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 500, color: '#334155', marginBottom: '4px' }}>
+                    New Password
+                  </label>
+                  <div style={{ position: 'relative' }}>
+                    <Lock size={15} style={{ position: 'absolute', left: '13px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="At least 8 characters"
+                      value={newPassword}
+                      onChange={e => setNewPassword(e.target.value)}
+                      required
+                      minLength={8}
+                      style={{
+                        width: '100%',
+                        height: '44px',
+                        paddingLeft: '38px',
+                        paddingRight: '38px',
+                        background: '#ffffff',
+                        border: '1px solid #e2e8f0',
+                        borderRadius: '10px',
+                        fontSize: '0.875rem',
+                        color: '#0f172a',
+                        outline: 'none',
+                        boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.02)',
+                        transition: 'border-color 0.15s ease, box-shadow 0.15s ease'
+                      }}
+                      onFocus={e => {
+                        e.target.style.borderColor = '#4f47ee';
+                        e.target.style.boxShadow = '0 0 0 3px rgba(79, 71, 238, 0.12)';
+                      }}
+                      onBlur={e => {
+                        e.target.style.borderColor = '#e2e8f0';
+                        e.target.style.boxShadow = 'inset 0 1px 2px rgba(0, 0, 0, 0.02)';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      style={{
+                        position: 'absolute',
+                        right: '12px',
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        background: 'none',
+                        border: 'none',
+                        color: '#94a3b8',
+                        cursor: 'pointer',
+                        padding: '4px',
+                        display: 'flex',
+                        alignItems: 'center'
+                      }}
+                    >
+                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={loading || otpCode.length !== 8 || newPassword.length < 8}
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    background: '#4f47ee',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontSize: '0.9rem',
+                    fontWeight: 600,
+                    cursor: loading || otpCode.length !== 8 || newPassword.length < 8 ? 'not-allowed' : 'pointer',
+                    marginTop: '4px',
+                    boxShadow: '0 4px 14px rgba(79, 71, 238, 0.35)',
+                    opacity: loading || otpCode.length !== 8 || newPassword.length < 8 ? 0.7 : 1,
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  <span>{loading ? 'Resetting...' : 'Reset password'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={backToLogin}
+                  style={{
+                    width: '100%',
+                    height: '44px',
+                    background: '#ffffff',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: '10px',
+                    fontSize: '0.875rem',
+                    fontWeight: 600,
+                    color: '#0f172a',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease'
+                  }}
+                >
+                  Back to Sign In
+                </button>
+              </form>
+            ) : pendingOtp ? (
               <form onSubmit={handleOtpSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                 <div>
                   <label style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.8rem', fontWeight: 500, color: '#334155', marginBottom: '5px' }}>
@@ -571,8 +894,8 @@ export const Auth: React.FC = () => {
                       Password
                     </label>
                     {isLogin && (
-                      <span 
-                        onClick={() => alert('Password reset link dispatched if email exists.')}
+                      <span
+                        onClick={startForgotPassword}
                         style={{ fontSize: '0.8rem', fontWeight: 500, color: '#4f47ee', cursor: 'pointer' }}
                       >
                         Forgot password?

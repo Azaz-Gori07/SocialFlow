@@ -97,6 +97,9 @@ export const api = {
     register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     login: (body: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     verifyOtp: (body: any) => request<any>('/auth/verify-otp', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
+    forgotPassword: (email: string) => request<any>('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }), skipAuth: true }),
+    resetPassword: (userId: string, code: string, newPassword: string) =>
+      request<any>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ userId, code, newPassword }), skipAuth: true }),
     exchange: (code: string) => request<any>('/auth/exchange', { method: 'POST', body: JSON.stringify({ code }), skipAuth: true }),
     logout: () => request<any>('/auth/logout', { method: 'POST', skipAuth: true }),
     me: () => request<any>('/auth/me')
