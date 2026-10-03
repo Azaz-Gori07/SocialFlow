@@ -19,6 +19,13 @@ export function connectSocket(token?: string): Socket | null {
   if (!currentToken) {
     return null;
   }
+  // Vercel serverless functions have no persistent HTTP server, so Socket.IO
+  // can never serve /socket.io/* there (404 + endless reconnect logs). Real-time
+  // notifications degrade to REST polling on that host.
+  // ponytail: swap for a dedicated WS host (Render/WS server) to re-enable.
+  if (SOCKET_URL.includes('.vercel.app')) {
+    return null;
+  }
   if (socket) {
     socket.auth = { token: currentToken };
     if (!socket.connected) {
