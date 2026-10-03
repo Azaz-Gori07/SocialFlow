@@ -190,7 +190,9 @@ export async function sendNotification(userId: string, notification: Notificatio
 
 /**
  * Send updated unread count to a user.
+ * Awaits the bridge POST: serverless functions freeze once the response is
+ * sent, killing any in-flight request — so the emit must complete first.
  */
-export function sendUnreadCount(userId: string, count: number): void {
-  void emitToUser(userId, 'notifications:unread_count', { count });
+export async function sendUnreadCount(userId: string, count: number): Promise<void> {
+  await emitToUser(userId, 'notifications:unread_count', { count });
 }

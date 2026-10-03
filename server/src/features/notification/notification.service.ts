@@ -72,7 +72,7 @@ export class NotificationService {
 
     const unreadCount = await this.getUnreadCount(userId);
     try {
-      sendUnreadCount(userId, unreadCount);
+      await sendUnreadCount(userId, unreadCount);
     } catch (err) {
       console.warn('Failed to send unread count:', err);
     }
@@ -87,7 +87,7 @@ export class NotificationService {
     );
 
     try {
-      sendUnreadCount(userId, 0);
+      await sendUnreadCount(userId, 0);
     } catch (err) {
       console.warn('Failed to send unread count:', err);
     }
