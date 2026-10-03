@@ -72,3 +72,6 @@ problem.md
 *STATUS.md
 # Mimosa scan cache
 .mimosa/
+
+# ZCode workspace metadata
+.zcode/

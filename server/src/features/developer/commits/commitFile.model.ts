@@ -21,7 +21,7 @@ const DeveloperCommitFileSchema = new Schema<IDeveloperCommitFile>(
   {
     userId: { type: String, required: true, index: true },
     repositoryId: { type: String, required: true, index: true },
-    commitId: { type: String, required: true, index: true },
+    commitId: { type: String, required: true },
     filename: { type: String, required: true },
     status: { type: String },
     additions: { type: Number, default: 0 },

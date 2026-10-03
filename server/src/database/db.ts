@@ -2,6 +2,11 @@ import mongoose, { Schema, model, Model } from 'mongoose';
 import dotenv from 'dotenv';
 import dns from 'dns';
 
+// Ensure Node resolves IPv4 addresses first to avoid NAT64/IPv6 socket timeouts on cloud Mongo clusters
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
+
 // Feature models are the single source of truth. Importing them here
 // registers their schemas first, so the model() fallbacks below never
 // re-register a conflicting schema for the same model name.
@@ -93,7 +98,6 @@ const NotificationPreferenceSchema = new Schema({
     types: { type: [String], default: [] }
   }
 }, schemaOptions);
-NotificationPreferenceSchema.index({ userId: 1 });
 
 const WebhookEventSchema = new Schema({
   provider: { type: String, required: true },
@@ -162,13 +166,11 @@ async function connectDb(): Promise<typeof mongoose> {
     try {
       console.log(`🔌 Connecting to MongoDB Atlas: ${MONGO_URI.replace(/\/\/.*@/, '//***:***@')}`);
       const conn = await mongoose.connect(MONGO_URI, {
-        // Serverless-optimized connection options
-        serverSelectionTimeoutMS: 5000,      // Quick timeout for cold starts
-        socketTimeoutMS: 10000,              // Socket timeout for long operations
-        maxPoolSize: 10,                     // Limit connection pool for serverless
-        minPoolSize: 1,                      // Minimum connections to maintain
-        waitQueueTimeoutMS: 10000,           // Max wait for available connection
-        retryWrites: true,                   // Retry writes for better reliability
+        serverSelectionTimeoutMS: 20000,
+        socketTimeoutMS: 20000,
+        maxPoolSize: 50,
+        retryWrites: true,
+        family: 4,
         dbName: process.env.MONGO_DB_NAME || undefined
       });
       console.log('✅ Database connected successfully');
@@ -180,12 +182,11 @@ async function connectDb(): Promise<typeof mongoose> {
         try {
           dns.setServers(['8.8.8.8', '1.1.1.1']);
           const conn = await mongoose.connect(MONGO_URI, {
-            serverSelectionTimeoutMS: 5000,
-            socketTimeoutMS: 10000,
-            maxPoolSize: 10,
-            minPoolSize: 1,
-            waitQueueTimeoutMS: 10000,
+            serverSelectionTimeoutMS: 20000,
+            socketTimeoutMS: 20000,
+            maxPoolSize: 50,
             retryWrites: true,
+            family: 4,
             dbName: process.env.MONGO_DB_NAME || undefined
           });
           console.log('✅ Database connected successfully');

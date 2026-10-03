@@ -3,9 +3,10 @@ import { TwitterProvider } from './twitter.provider';
 import { LinkedInProvider } from './linkedin.provider';
 import { MetaProvider } from './meta.provider';
 import { YouTubeProvider } from './youtube.provider';
+import { ThreadsProvider } from './threads.provider';
 import { AppError } from '../../../shared/errors/appError';
 
-export const SUPPORTED_PLATFORMS = ['twitter', 'linkedin', 'facebook', 'instagram', 'youtube'] as const;
+export const SUPPORTED_PLATFORMS = ['twitter', 'linkedin', 'facebook', 'instagram', 'youtube', 'threads'] as const;
 export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
 
 /**
@@ -15,6 +16,8 @@ export type SupportedPlatform = (typeof SUPPORTED_PLATFORMS)[number];
  * - There is NO mock provider. An unconfigured platform returns a hard error —
  *   never a fabricated account, token or post id.
  * - Instagram is served by the Meta provider (Facebook Login mode).
+ * - Threads is its own Meta app with its own client id/secret, served by
+ *   ThreadsProvider (not MetaProvider).
  */
 export class ProviderFactory {
   static getProvider(platform: string): SocialProvider {
@@ -32,6 +35,8 @@ export class ProviderFactory {
       case 'youtube':
       case 'google':
         return new YouTubeProvider();
+      case 'threads':
+        return new ThreadsProvider();
       default:
         throw AppError.badRequest(`Platform provider '${platform}' is not supported`);
     }

@@ -5,15 +5,21 @@ import {
   Plus, 
   Upload, 
   Trash2, 
-  CheckCircle2, 
   Clock, 
-  AlertCircle,
-  FileText
+  Search, 
+  Share2, 
+  ChevronDown
 } from 'lucide-react';
+import { PlatformBadge } from '../components/SocialIcons';
 
 export const Scheduler: React.FC = () => {
   const [posts, setPosts] = useState<any[]>([]);
-  const [filter, setFilter] = useState<string>('all');
+  const [filter, setFilter] = useState<'scheduled' | 'published' | 'failed'>('scheduled');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedChannel, setSelectedChannel] = useState('all');
+  const [showChannelDropdown, setShowChannelDropdown] = useState(false);
+  const [selectedTimeFilter, setSelectedTimeFilter] = useState('upcoming');
+  const [showTimeDropdown, setShowTimeDropdown] = useState(false);
   const [loading, setLoading] = useState(true);
 
   // New Post Form
@@ -36,8 +42,8 @@ export const Scheduler: React.FC = () => {
   const loadPosts = async () => {
     setLoading(true);
     try {
-      const data = await api.posts.list(filter === 'all' ? undefined : filter);
-      setPosts(data);
+      const data = await api.posts.list(filter);
+      setPosts(data || []);
     } catch (err) {
       console.error(err);
     } finally {
@@ -54,32 +60,11 @@ export const Scheduler: React.FC = () => {
     if (platforms.length === 0 || !content) return;
 
     setTimeError('');
-
-    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
-    const offset = -new Date().getTimezoneOffset();
-    const tzSign = offset >= 0 ? '+' : '-';
-    const tzHours = String(Math.floor(Math.abs(offset) / 60)).padStart(2, '0');
-    const tzMins = String(Math.abs(offset) % 60).padStart(2, '0');
-    console.log(`[Scheduler] Timezone: ${tz} (UTC${tzSign}${tzHours}:${tzMins})`);
-
     const targetDate = scheduleDate ? new Date(`${scheduleDate}T${scheduleTime}:00`) : undefined;
 
-    if (targetDate) {
-      console.log('[Scheduler] selectedDate:', scheduleDate);
-      console.log('[Scheduler] selectedTime:', scheduleTime);
-      console.log('[Scheduler] combined local:', `${scheduleDate}T${scheduleTime}:00`);
-      console.log('[Scheduler] parsed Date:', targetDate.toString());
-      console.log('[Scheduler] final ISO:', targetDate.toISOString());
-      console.log('[Scheduler] targetDate.getTime():', targetDate.getTime());
-      console.log('[Scheduler] Date.now():', Date.now());
-
-      if (targetDate.getTime() <= Date.now()) {
-        setTimeError(
-          `Selected time (${scheduleTime}) on ${scheduleDate} is already in the past in your timezone (${tz}). ` +
-          `After UTC conversion the post would be ${targetDate.toISOString().replace('Z', '')} UTC, which has already passed.`
-        );
-        return;
-      }
+    if (targetDate && targetDate.getTime() <= Date.now()) {
+      setTimeError('Selected date and time is in the past. Please choose a future time.');
+      return;
     }
 
     try {
@@ -111,18 +96,15 @@ export const Scheduler: React.FC = () => {
     }
   };
 
-  // Bulk scheduler simulation
   const handleBulkSchedule = async () => {
     if (!csvContent.trim()) return;
     setBulkStatus('Processing CSV rows...');
 
     try {
-      // Parse CSV rows: platforms,content,scheduledAt
-      // Example row: "twitter|linkedin,My First Product Launch Post,2026-06-15T14:30:00.000Z"
       const lines = csvContent.split('\n');
       const payload: any[] = [];
-      
       let count = 0;
+
       for (const line of lines) {
         if (!line.trim()) continue;
         const parts = line.split('|');
@@ -161,37 +143,15 @@ export const Scheduler: React.FC = () => {
     }
   };
 
-  // Pre-fill bulk schedule text with 50+ posts example
   const loadExampleCsv = () => {
     let exampleText = '';
     const today = new Date();
-    
-    // Generate 50 items
-    for (let i = 1; i <= 52; i++) {
-      const scheduledTime = new Date(today.getTime() + (i * 4 * 60 * 60 * 1000)); // Every 4 hours
+    for (let i = 1; i <= 10; i++) {
+      const scheduledTime = new Date(today.getTime() + (i * 4 * 60 * 60 * 1000));
       const p = i % 2 === 0 ? 'twitter,linkedin' : 'instagram,facebook';
-      exampleText += `${p}|🚀 Bulk Automated Post #${i}: Streamlining content operations!|${scheduledTime.toISOString()}\n`;
+      exampleText += `${p}|🚀 Automated Post #${i}: Omnichannel release with SocialFlow!|${scheduledTime.toISOString()}\n`;
     }
     setCsvContent(exampleText);
-  };
-
-  const getPlatformIcon = (plat: string, size = 14) => {
-    switch (plat) {
-      case 'twitter': return <span style={{ color: '#1DA1F2', fontWeight: 'bold', fontSize: `${size}px` }}>X</span>;
-      case 'linkedin': return <span style={{ color: '#0077B5', fontWeight: 'bold', fontSize: `${size}px` }}>In</span>;
-      case 'instagram': return <span style={{ color: '#E1306C', fontWeight: 'bold', fontSize: `${size}px` }}>Ig</span>;
-      case 'facebook': return <span style={{ color: '#1877F2', fontWeight: 'bold', fontSize: `${size}px` }}>Fb</span>;
-      default: return null;
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'published': return <CheckCircle2 size={16} style={{ color: '#10b981' }} />;
-      case 'scheduled': return <Clock size={16} style={{ color: '#f59e0b' }} />;
-      case 'failed': return <AlertCircle size={16} style={{ color: '#ef4444' }} />;
-      default: return <Clock size={16} style={{ color: 'hsl(var(--text-muted))' }} />;
-    }
   };
 
   const formatDateTime = (isoString?: string) => {
@@ -200,320 +160,733 @@ export const Scheduler: React.FC = () => {
     return d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   };
 
-  return (
-    <div className="animate-fade-in" style={{ position: 'relative' }}>
-      <div className="glow-blur" />
+  const filteredPosts = posts.filter(post => {
+    if (searchQuery.trim() && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    if (selectedChannel !== 'all' && !post.platforms.includes(selectedChannel)) {
+      return false;
+    }
+    return true;
+  });
 
-      {/* Header */}
-      <div className="header-bar">
-        <div>
-          <h1 className="page-title">Post Scheduler</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', marginTop: '4px', fontSize: '0.95rem' }}>
+  return (
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '26px' }}>
+      
+      {/* 1. Header Banner */}
+      <div style={{
+        position: 'relative',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: '14px 20px',
+        borderRadius: '16px',
+        overflow: 'hidden',
+        minHeight: '145px'
+      }}>
+        {/* Desk Calendar Scene Graphic filling 100% of header height on the right */}
+        <div style={{
+          position: 'absolute',
+          right: '10px',
+          top: 0,
+          bottom: 0,
+          width: '420px',
+          height: '100%',
+          backgroundImage: "url('/scheduler-calendar-scene.png')",
+          backgroundPosition: 'right center',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'contain',
+          pointerEvents: 'none'
+        }} />
+
+        {/* Left Heading & Fast Actions */}
+        <div style={{ position: 'relative', zIndex: 2, maxWidth: '620px' }}>
+          <div style={{
+            fontSize: '0.75rem',
+            fontWeight: 700,
+            letterSpacing: '0.1em',
+            color: '#6b7280',
+            textTransform: 'uppercase',
+            marginBottom: '6px'
+          }}>
+            SCHEDULER
+          </div>
+          <h1 style={{
+            fontSize: '2.4rem',
+            fontWeight: 700,
+            color: '#111827',
+            letterSpacing: '-0.03em',
+            marginBottom: '8px',
+            lineHeight: 1.15
+          }}>
+            Post Scheduler
+          </h1>
+          <p style={{ fontSize: '0.95rem', color: '#6b7280', lineHeight: 1.5, marginBottom: '20px' }}>
             Coordinate your publishing schedule, manage queues, and upload bulk campaigns.
           </p>
-        </div>
-        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-          <button 
-            onClick={() => setShowBulkModal(true)} 
-            className="btn btn-secondary"
-            style={{ gap: '8px' }}
-          >
-            <Upload size={16} />
-            <span>Bulk CSV Scheduler</span>
-          </button>
-          <button 
-            onClick={() => setShowCreateModal(true)} 
-            className="btn btn-primary"
-            style={{ gap: '8px' }}
-          >
-            <Plus size={16} />
-            <span>Schedule Post</span>
-          </button>
+
+          <div style={{ display: 'flex', gap: '12px' }}>
+            <button 
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: '#18181b',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.12)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              <Plus size={15} />
+              <span>Schedule Post</span>
+            </button>
+
+            <button 
+              type="button"
+              onClick={() => setShowBulkModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '10px 20px',
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: 500,
+                color: '#374151',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = '#d1d5db')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+            >
+              <Upload size={15} />
+              <span>Bulk CSV Scheduler</span>
+            </button>
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '24px', borderBottom: '1px solid hsl(var(--border))', paddingBottom: '12px', overflowX: 'auto', whiteSpace: 'nowrap' }}>
+      {/* 2. Segmented Navigation Tabs (Spacious & Clean) */}
+      <div style={{
+        display: 'flex',
+        gap: '32px',
+        borderBottom: '1px solid #e5e7eb',
+        paddingBottom: '2px',
+        width: 'fit-content'
+      }}>
         {[
-          { id: 'all', label: 'All Content' },
           { id: 'scheduled', label: 'Scheduled Queue' },
           { id: 'published', label: 'Published Archive' },
           { id: 'failed', label: 'Failed Alerts' }
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setFilter(tab.id)}
-            style={{
-              padding: '8px 16px',
-              background: filter === tab.id ? 'rgba(255,255,255,0.06)' : 'transparent',
-              border: 'none',
-              borderRadius: 'var(--radius-md)',
-              color: filter === tab.id ? 'white' : 'hsl(var(--text-secondary))',
-              cursor: 'pointer',
-              fontSize: '0.85rem',
-              fontWeight: filter === tab.id ? 600 : 400,
-              transition: 'background 0.2s',
-              flexShrink: 0
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Grid or List Queue */}
-      {loading ? (
-        <div style={{ padding: '60px 0', textAlign: 'center', color: 'hsl(var(--text-secondary))' }}>
-          Loading queue...
-        </div>
-      ) : posts.length === 0 ? (
-        <div style={{ padding: '80px 40px', textAlign: 'center', background: 'rgba(255,255,255,0.01)', border: '1px dashed var(--border-glass)', borderRadius: 'var(--radius-lg)' }}>
-          <Calendar size={48} style={{ color: 'hsl(var(--text-muted))', margin: '0 auto 16px auto', opacity: 0.3 }} />
-          <h4 style={{ fontSize: '1rem', color: 'white', marginBottom: '8px' }}>Queue is Empty</h4>
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))', maxWidth: '380px', margin: '0 auto 20px auto' }}>
-            No posts found matching the selected filter. Click "Schedule Post" or launch our AI Content Studio to queue copies.
-          </p>
-        </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {posts.map((post: any) => (
-            <div 
-              key={post._id} 
-              className="glass-card scheduled-card" 
-              style={{ 
-                padding: '20px', 
-                borderLeft: `3px solid ${post.status === 'published' ? '#10b981' : post.status === 'failed' ? '#ef4444' : '#f59e0b'}` 
+        ].map(tab => {
+          const isActive = filter === tab.id;
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => setFilter(tab.id as any)}
+              style={{
+                padding: '10px 4px 12px',
+                background: 'transparent',
+                border: 'none',
+                fontSize: '0.925rem',
+                fontWeight: isActive ? 600 : 500,
+                color: isActive ? '#111827' : '#6b7280',
+                cursor: 'pointer',
+                position: 'relative',
+                transition: 'color 0.15s ease'
               }}
             >
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flexGrow: 1, marginRight: '30px' }}>
-                
-                {/* Meta details (platforms, date, status) */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap' }}>
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    {post.platforms.map((p: string) => (
-                      <span key={p} title={p} style={{ background: 'rgba(255,255,255,0.04)', padding: '4px', borderRadius: '6px', display: 'inline-flex' }}>
-                        {getPlatformIcon(p)}
-                      </span>
-                    ))}
-                  </div>
-                  
-                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    {getStatusIcon(post.status)}
-                    <span style={{ textTransform: 'capitalize' }}>{post.status}</span>
-                  </span>
-
-                  <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-secondary))', fontWeight: 500 }}>
-                    Date: {formatDateTime(post.scheduledAt || post.publishedAt)}
-                  </span>
-                </div>
-
-                {/* Content preview */}
-                <p style={{ fontSize: '0.9rem', color: 'white', lineHeight: '1.5', whiteSpace: 'pre-wrap' }}>
-                  {post.content}
-                </p>
-
-                {post.failedReason && (
-                  <div style={{ fontSize: '0.75rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)', padding: '6px 12px', borderRadius: '4px' }}>
-                    Failure log: {post.failedReason}
-                  </div>
-                )}
-              </div>
-
-              {/* Actions (Delete/Cancel) */}
-              {post.status !== 'published' && (
-                <button
-                  onClick={() => handleDeletePost(post._id)}
-                  style={{ background: 'none', border: 'none', color: 'hsl(var(--text-muted))', cursor: 'pointer', padding: '8px' }}
-                  className="delete-hover"
-                  title="Cancel and Delete"
-                >
-                  <Trash2 size={16} />
-                </button>
+              {tab.label}
+              {isActive && (
+                <span style={{
+                  position: 'absolute',
+                  bottom: '-1px',
+                  left: 0,
+                  right: 0,
+                  height: '2px',
+                  background: '#18181b',
+                  borderRadius: '2px'
+                }} />
               )}
-            </div>
-          ))}
-        </div>
-      )}
+            </button>
+          );
+        })}
+      </div>
 
-      {/* Manual Creation Modal */}
-      {showCreateModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <form onSubmit={handleCreatePost} className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '500px' }}>
-            <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Create Scheduled Post</h3>
+      {/* 3. Main Card: Scheduled Posts (Generous & Large) */}
+      <div className="card" style={{ padding: '28px 32px', display: 'flex', flexDirection: 'column', minHeight: '480px' }}>
+        
+        {/* Card Header Row with Search & Filters */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '16px',
+          marginBottom: '28px'
+        }}>
+          {/* Left Title */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
+            <div style={{
+              width: '44px',
+              height: '44px',
+              borderRadius: '12px',
+              background: '#ffedd5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <Calendar size={22} style={{ color: '#c2410c' }} />
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111827', margin: '0 0 2px 0' }}>
+                Scheduled Posts
+              </h2>
+              <p style={{ fontSize: '0.875rem', color: '#6b7280', margin: 0 }}>
+                Manage and monitor your upcoming scheduled content.
+              </p>
+            </div>
+          </div>
+
+          {/* Right Controls: Search + Channel Filter + Time Filter */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
             
-            {/* Target platform selection */}
-            <div>
-              <label className="form-label">Publishing Channels</label>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', marginTop: '6px' }}>
-                {['twitter', 'linkedin', 'instagram', 'facebook'].map(plat => {
-                  const isChecked = platforms.includes(plat);
-                  return (
-                    <button
-                      key={plat}
-                      type="button"
-                      onClick={() => {
-                        if (isChecked) {
-                          setPlatforms(platforms.filter(p => p !== plat));
-                        } else {
-                          setPlatforms([...platforms, plat]);
-                        }
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        padding: '8px 12px',
-                        background: isChecked ? 'hsl(var(--primary) / 0.1)' : 'rgba(255,255,255,0.02)',
-                        border: `1px solid ${isChecked ? 'hsl(var(--primary))' : 'var(--border-glass)'}`,
-                        borderRadius: 'var(--radius-md)',
-                        color: isChecked ? 'white' : 'hsl(var(--text-secondary))',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem'
-                      }}
-                    >
-                      {getPlatformIcon(plat, 12)}
-                      <span style={{ textTransform: 'capitalize' }}>{plat === 'twitter' ? 'X' : plat}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Post copy */}
-            <div>
-              <label className="form-label">Post Copy</label>
-              <textarea
-                className="form-input"
-                style={{ minHeight: '120px', resize: 'vertical' }}
-                placeholder="What would you like to share with your audience?"
-                value={content}
-                onChange={e => setContent(e.target.value)}
-                required
+            {/* Search Input */}
+            <div style={{ position: 'relative' }}>
+              <Search size={15} style={{ position: 'absolute', left: '14px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input
+                type="text"
+                placeholder="Search scheduled posts..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                style={{
+                  height: '40px',
+                  paddingLeft: '38px',
+                  paddingRight: '14px',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '9px',
+                  fontSize: '0.875rem',
+                  color: '#111827',
+                  outline: 'none',
+                  minWidth: '220px',
+                  boxShadow: 'inset 0 1px 2px rgba(0, 0, 0, 0.02)'
+                }}
               />
             </div>
 
-            {/* Timing */}
-            <div className="responsive-grid-1-1">
-              <div>
-                  <label className="form-label">Post Date (Optional)</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  min={new Date().toLocaleDateString('en-CA')}
-                  value={scheduleDate}
-                  onChange={e => onDateChange(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="form-label">Post Time</label>
-                <input
-                  type="time"
-                  className="form-input"
-                  value={scheduleTime}
-                  onChange={e => onTimeChange(e.target.value)}
-                  disabled={!scheduleDate}
-                />
-              </div>
-            </div>
-
-            {timeError && (
-              <div style={{ fontSize: '0.8rem', color: '#ef4444', background: 'rgba(239, 68, 68, 0.08)', padding: '8px 12px', borderRadius: '4px' }}>
-                {timeError}
-              </div>
-            )}
-
-            {/* Actions */}
-            <div style={{ display: 'flex', gap: '12px', marginTop: '8px' }}>
+            {/* Channel Filter Dropdown */}
+            <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                onClick={() => {
-                  setShowCreateModal(false);
-                  setContent('');
-                  setScheduleDate('');
-                  setTimeError('');
+                onClick={() => setShowChannelDropdown(!showChannelDropdown)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  height: '40px',
+                  padding: '0 14px',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '9px',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  color: '#374151',
+                  cursor: 'pointer'
                 }}
-                className="btn btn-secondary"
-                style={{ flexGrow: 1 }}
               >
-                Cancel
+                <Share2 size={14} style={{ color: '#6b7280' }} />
+                <span style={{ textTransform: 'capitalize' }}>{selectedChannel === 'all' ? 'All Channels' : selectedChannel}</span>
+                <ChevronDown size={14} style={{ color: '#9ca3af' }} />
               </button>
+
+              {showChannelDropdown && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  right: 0,
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
+                  zIndex: 30,
+                  minWidth: '150px',
+                  padding: '4px'
+                }}>
+                  {['all', 'twitter', 'linkedin', 'instagram', 'facebook', 'youtube', 'threads'].map(ch => (
+                    <button
+                      key={ch}
+                      type="button"
+                      onClick={() => {
+                        setSelectedChannel(ch);
+                        setShowChannelDropdown(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 12px',
+                        background: selectedChannel === ch ? '#f3f4f6' : 'transparent',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.825rem',
+                        color: '#111827',
+                        cursor: 'pointer',
+                        textTransform: 'capitalize'
+                      }}
+                    >
+                      {ch === 'all' ? 'All Channels' : ch}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Time Filter Dropdown */}
+            <div style={{ position: 'relative' }}>
               <button
-                type="submit"
-                className="btn btn-primary"
-                style={{ flexGrow: 1 }}
-                disabled={platforms.length === 0 || !content}
+                type="button"
+                onClick={() => setShowTimeDropdown(!showTimeDropdown)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  height: '40px',
+                  padding: '0 14px',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '9px',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  color: '#374151',
+                  cursor: 'pointer'
+                }}
               >
-                {scheduleDate ? 'Schedule Queue' : 'Post Now'}
+                <Calendar size={14} style={{ color: '#6b7280' }} />
+                <span style={{ textTransform: 'capitalize' }}>{selectedTimeFilter}</span>
+                <ChevronDown size={14} style={{ color: '#9ca3af' }} />
+              </button>
+
+              {showTimeDropdown && (
+                <div style={{
+                  position: 'absolute',
+                  top: 'calc(100% + 4px)',
+                  right: 0,
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.08)',
+                  zIndex: 30,
+                  minWidth: '140px',
+                  padding: '4px'
+                }}>
+                  {['upcoming', 'today', 'this week', 'this month'].map(tf => (
+                    <button
+                      key={tf}
+                      type="button"
+                      onClick={() => {
+                        setSelectedTimeFilter(tf);
+                        setShowTimeDropdown(false);
+                      }}
+                      style={{
+                        width: '100%',
+                        textAlign: 'left',
+                        padding: '8px 12px',
+                        background: selectedTimeFilter === tf ? '#f3f4f6' : 'transparent',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontSize: '0.825rem',
+                        color: '#111827',
+                        cursor: 'pointer',
+                        textTransform: 'capitalize'
+                      }}
+                    >
+                      {tf}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+          </div>
+        </div>
+
+        {/* Card Body: Empty State or Populated Posts List */}
+        {loading ? (
+          <div style={{ display: 'flex', flexGrow: 1, alignItems: 'center', justifyContent: 'center', color: '#9ca3af', fontSize: '0.875rem' }}>
+            Loading queue...
+          </div>
+        ) : filteredPosts.length === 0 ? (
+          /* Exact 100% Empty State matching the screenshot (Large & Centered) */
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexGrow: 1,
+            padding: '50px 20px 60px'
+          }}>
+            {/* Soft Organic Blob Background with Calendar & Clock icon */}
+            <div style={{
+              width: '100px',
+              height: '88px',
+              borderRadius: '38% 62% 63% 37% / 41% 44% 56% 59%',
+              background: '#fbf5eb',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px',
+              position: 'relative'
+            }}>
+              <div style={{ position: 'relative' }}>
+                <Calendar size={38} style={{ color: '#9a3412', strokeWidth: 1.8 }} />
+                <Clock size={19} style={{ position: 'absolute', right: '-4px', bottom: '-4px', color: '#9a3412', background: '#fbf5eb', borderRadius: '50%', strokeWidth: 2 }} />
+              </div>
+            </div>
+
+            <h3 style={{
+              fontSize: '1.15rem',
+              fontWeight: 700,
+              color: '#111827',
+              marginBottom: '6px'
+            }}>
+              No scheduled posts yet
+            </h3>
+
+            <p style={{
+              fontSize: '0.9rem',
+              color: '#6b7280',
+              textAlign: 'center',
+              maxWidth: '460px',
+              lineHeight: 1.6,
+              marginBottom: '22px'
+            }}>
+              Schedule your first post to get started. You can also bulk upload multiple posts using CSV.
+            </p>
+
+            <div style={{ display: 'flex', gap: '12px' }}>
+              <button
+                type="button"
+                onClick={() => setShowCreateModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  padding: '10px 20px',
+                  background: '#18181b',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <Plus size={15} />
+                <span>Schedule Post</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowBulkModal(true)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '7px',
+                  padding: '10px 20px',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '0.875rem',
+                  fontWeight: 500,
+                  color: '#374151',
+                  cursor: 'pointer',
+                  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
+                }}
+              >
+                <Upload size={15} />
+                <span>Upload CSV</span>
               </button>
             </div>
-          </form>
+          </div>
+        ) : (
+          /* Populated Scheduled Posts Listing */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            {filteredPosts.map((post: any) => (
+              <div 
+                key={post._id}
+                style={{
+                  padding: '18px 22px',
+                  background: '#fafaf9',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '12px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '16px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexGrow: 1 }}>
+                  {/* Channels Badge list */}
+                  <div style={{ display: 'flex', gap: '6px' }}>
+                    {post.platforms.map((p: string) => (
+                      <PlatformBadge key={p} platform={p} size={28} iconSize={14} />
+                    ))}
+                  </div>
+
+                  {/* Content Preview */}
+                  <div style={{ flexGrow: 1 }}>
+                    <div style={{ fontSize: '0.9rem', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
+                      {post.content.length > 90 ? `${post.content.substring(0, 90)}...` : post.content}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', fontSize: '0.78rem', color: '#6b7280' }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <Clock size={13} />
+                        <span>{formatDateTime(post.scheduledAt)}</span>
+                      </span>
+                      <span style={{
+                        padding: '2px 8px',
+                        borderRadius: '9999px',
+                        fontSize: '0.72rem',
+                        fontWeight: 600,
+                        textTransform: 'capitalize',
+                        background: post.status === 'published' ? '#ecfdf5' : post.status === 'failed' ? '#fef2f2' : '#fef3c7',
+                        color: post.status === 'published' ? '#10b981' : post.status === 'failed' ? '#ef4444' : '#b45309'
+                      }}>
+                        {post.status || 'scheduled'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <button
+                  type="button"
+                  onClick={() => handleDeletePost(post._id)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: '#9ca3af',
+                    cursor: 'pointer',
+                    padding: '6px',
+                    borderRadius: '6px'
+                  }}
+                  title="Delete post"
+                  onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
+                  onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+      </div>
+
+      {/* 4. Schedule Post Modal */}
+      {showCreateModal && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <div className="card" style={{ maxWidth: '520px', width: '92%', padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+              Schedule New Post
+            </h3>
+            
+            <form onSubmit={handleCreatePost} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+                  Target Channels
+                </label>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                  {['twitter', 'linkedin', 'instagram', 'facebook', 'youtube', 'threads'].map(plat => (
+                    <label key={plat} style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: '#f9fafb',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      fontSize: '0.825rem'
+                    }}>
+                      <input
+                        type="checkbox"
+                        checked={platforms.includes(plat)}
+                        onChange={e => {
+                          if (e.target.checked) setPlatforms(prev => [...prev, plat]);
+                          else setPlatforms(prev => prev.filter(p => p !== plat));
+                        }}
+                      />
+                      <PlatformBadge platform={plat} size={20} iconSize={12} />
+                      <span style={{ textTransform: 'capitalize' }}>{plat === 'twitter' ? 'X' : plat}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+                  Post Content
+                </label>
+                <textarea
+                  className="form-input"
+                  style={{ minHeight: '90px', resize: 'vertical' }}
+                  placeholder="Share updates, releases, or developer notes..."
+                  value={content}
+                  onChange={e => setContent(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Schedule Date</label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={scheduleDate}
+                    onChange={e => onDateChange(e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Schedule Time</label>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={scheduleTime}
+                    onChange={e => onTimeChange(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {timeError && (
+                <div style={{ padding: '8px 12px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px', color: '#b91c1c', fontSize: '0.8rem' }}>
+                  {timeError}
+                </div>
+              )}
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary"
+                  disabled={platforms.length === 0 || !content.trim()}
+                >
+                  Confirm & Schedule
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* Bulk Scheduler Modal */}
+      {/* 5. Bulk CSV Modal */}
       {showBulkModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '640px' }}>
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          background: 'rgba(0,0,0,0.5)',
+          backdropFilter: 'blur(4px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 100
+        }}>
+          <div className="card" style={{ maxWidth: '580px', width: '92%', padding: '28px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 600 }}>Bulk Campaign Queue (CSV)</h3>
-              <button 
-                onClick={loadExampleCsv} 
-                className="btn btn-secondary"
-                style={{ fontSize: '0.75rem', padding: '4px 10px', gap: '4px' }}
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+                Bulk CSV Post Scheduler
+              </h3>
+              <button
+                type="button"
+                onClick={loadExampleCsv}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: '#4f47ee',
+                  fontSize: '0.8rem',
+                  fontWeight: 600,
+                  cursor: 'pointer'
+                }}
               >
-                <FileText size={12} />
-                <span>Load 50+ Post Simulator</span>
+                Load 10 Posts Sample
               </button>
             </div>
 
-            <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', lineHeight: '1.4' }}>
-              Paste your posts in the following delimiter format: <code>platforms|content|scheduledAt</code>.<br />
-              Example: <code>twitter,linkedin|We are launching a new product!|2026-06-15T14:30:00Z</code>
+            <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: 0 }}>
+              Format: <code>platforms|content|ISOtime</code> (one post per line, separated by vertical bar).
             </p>
 
             <textarea
               className="form-input"
-              style={{ minHeight: '220px', resize: 'vertical', fontFamily: 'monospace', fontSize: '0.8rem' }}
-              placeholder="twitter|My first scheduled post!|2026-06-12T10:00:00.000Z&#10;instagram,facebook|Visual layout teaser|2026-06-12T16:00:00.000Z"
+              style={{ minHeight: '150px', fontFamily: 'var(--font-mono)', fontSize: '0.8rem', resize: 'vertical' }}
+              placeholder="twitter,linkedin|Announcing our new feature!|2026-10-15T14:00:00.000Z"
               value={csvContent}
               onChange={e => setCsvContent(e.target.value)}
             />
 
             {bulkStatus && (
-              <div style={{ fontSize: '0.85rem', fontWeight: 600, color: bulkStatus.includes('Error') || bulkStatus.includes('failed') ? '#ef4444' : '#10b981', textAlign: 'center' }}>
+              <div style={{
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '0.8rem',
+                background: bulkStatus.includes('failed') || bulkStatus.includes('Error') ? '#fef2f2' : '#ecfdf5',
+                color: bulkStatus.includes('failed') || bulkStatus.includes('Error') ? '#ef4444' : '#10b981'
+              }}>
                 {bulkStatus}
               </div>
             )}
 
-            <div style={{ display: 'flex', gap: '12px' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
               <button
-                onClick={() => {
-                  setShowBulkModal(false);
-                  setCsvContent('');
-                  setBulkStatus('');
-                }}
+                type="button"
                 className="btn btn-secondary"
-                style={{ flexGrow: 1 }}
+                onClick={() => setShowBulkModal(false)}
               >
                 Cancel
               </button>
               <button
-                onClick={handleBulkSchedule}
+                type="button"
                 className="btn btn-primary"
-                style={{ flexGrow: 1 }}
+                onClick={handleBulkSchedule}
                 disabled={!csvContent.trim()}
               >
-                Upload & Schedule Queue
+                Upload & Queue Batch
               </button>
             </div>
           </div>
         </div>
       )}
 
-      <style>{`
-        .delete-hover:hover {
-          color: #ef4444 !important;
-        }
-      `}</style>
     </div>
   );
 };

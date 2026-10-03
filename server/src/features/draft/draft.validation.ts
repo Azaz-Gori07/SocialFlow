@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const platformEnum = z.enum(['instagram', 'facebook', 'linkedin', 'twitter', 'youtube']);
+export const platformEnum = z.enum(['instagram', 'facebook', 'linkedin', 'twitter', 'youtube', 'threads']);
 export const contentTypeEnum = z.enum(['post', 'story', 'reel', 'video', 'carousel', 'thread']);
 export const draftStatusEnum = z.enum(['draft', 'ready', 'publishing', 'archived', 'published', 'failed']);
 

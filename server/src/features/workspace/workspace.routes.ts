@@ -32,6 +32,12 @@ router.get(
   workspaceController.listWorkspaces as any
 );
 
+router.get(
+  '/',
+  authenticate as any,
+  workspaceController.listWorkspaces as any
+);
+
 router.post(
   '/invite',
   authenticate as any,

@@ -92,9 +92,19 @@ export class AuthController {
   };
 
   oauthRedirect = async (req: any, res: Response, next: NextFunction) => {
+    const { provider } = req.params;
     try {
-      const { provider } = req.params;
       const url = await this.zenuxsOAuthService.getAuthorizationUrl(provider);
+
+      // The Zenuxs auth server rejects an unregistered redirect URI with a 400 and
+      // a raw JSON body. Probing it here turns that into an actionable message on
+      // SocialFlow instead of an unstyled JSON page. Only a configuration
+      // rejection is intercepted; every other response passes straight through.
+      const probe = await this.zenuxsOAuthService.checkAuthorizationEndpoint(url).catch(() => null);
+      if (probe && !probe.ok) {
+        return res.status(502).send(renderOAuthFailurePage(provider, probe.reason));
+      }
+
       return res.redirect(url);
     } catch (error) {
       next(error);
@@ -103,7 +113,9 @@ export class AuthController {
 
   oauthCallback = async (req: any, res: Response, next: NextFunction) => {
     try {
-      const { provider } = req.params;
+      // The provider is a path segment on the API route, and a query param when
+      // the request arrives from the registered callback.html page.
+      const provider: string = req.params?.provider || String(req.query.provider || 'google');
       const { code, state } = req.query;
 
       if (!code || typeof code !== 'string') {
@@ -127,6 +139,44 @@ export class AuthController {
       return res.redirect(`${frontendUrl}/auth/callback?error=${encodeURIComponent(error.message || 'OAuth login failed')}`);
     }
   };
+}
+
+/**
+ * Readable failure page for an OAuth start-up failure. Escapes provider text and
+ * states the actual cause; never dumps a raw provider payload at the user.
+ */
+export function renderOAuthFailurePage(provider: string, reason: string): string {
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const label = provider === 'github' ? 'GitHub' : provider === 'google' ? 'Google' : provider;
+  return `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign-in unavailable &middot; SocialFlow</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0a0a0b;color:#f4f4f5;
+       font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;padding:24px}
+  .card{max-width:34rem;width:100%;border:1px solid #27272a;border-radius:14px;padding:32px;background:#111113}
+  h1{margin:0 0 10px;font-size:1.15rem;letter-spacing:-0.01em}
+  p{margin:0 0 12px;line-height:1.6;color:#a1a1aa;font-size:0.92rem}
+  code{background:#1c1c1f;border:1px solid #27272a;border-radius:6px;padding:2px 6px;font-size:0.85em;color:#e4e4e7}
+  a{display:inline-block;margin-top:12px;padding:10px 18px;border-radius:8px;background:#f4f4f5;
+    color:#09090b;text-decoration:none;font-weight:600;font-size:0.9rem}
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Could not start ${esc(label)} sign-in</h1>
+    <p>${esc(reason)}</p>
+    <p>This is a configuration issue on the Zenuxs OAuth client, not something you did wrong.
+       The callback URL registered with the Zenuxs dashboard does not match what this server sends.</p>
+    <p>Expected callback shape: <code>/api/auth/oauth/zenuxs/${esc(provider)}/callback</code></p>
+    <a href="/">Back to sign in</a>
+  </div>
+</body>
+</html>`;
 }
 
 export default AuthController;

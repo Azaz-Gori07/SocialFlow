@@ -9,7 +9,7 @@ const GENERATION_PROMPT = (prompt: string) =>
   `You are a social media copywriter. Write a short post for each platform for this announcement: "${prompt}".
 
 Return ONLY valid JSON with this exact shape, one key per platform:
-{"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "tiktok": "..."}
+{"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}
 
 Rules:
 - Twitter: under 280 characters, no hashtag stuffing.
@@ -17,7 +17,7 @@ Rules:
 - Instagram: casual, 2-5 lines.
 - Facebook: friendly, 2-4 lines.
 - YouTube: a video title plus a 2-3 sentence description.
-- TikTok: 1-3 punchy lines.
+- Threads: conversational, 1-3 punchy lines, under 500 characters.
 - No markdown, no commentary outside the JSON.`;
 
 const SUGGESTION_PROMPT = (message: string, author: string) =>

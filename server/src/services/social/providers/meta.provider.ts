@@ -49,6 +49,10 @@ export class MetaProvider extends OAuth2Strategy implements SocialProvider {
       tokenUrl: `${GRAPH_URL}/oauth/access_token`,
       clientAuthMethod: 'client_secret_post',
       platform: 'facebook',
+      // Facebook Login for Business: when a configuration ID is set, Meta binds
+      // the login to that configuration. Omitted entirely when unset, so the
+      // standard Facebook Login flow continues unchanged.
+      ...(env.meta.loginConfigId ? { extraAuthParams: { config_id: env.meta.loginConfigId } } : {}),
     });
   }
 

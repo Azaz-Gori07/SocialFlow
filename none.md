@@ -21,8 +21,8 @@ Verification method: Read `.env` file directly + tested `ProviderFactory` resolu
 | `GOOGLE_CLIENT_SECRET` | **Present** | Real credentials | Token exchange will work |
 | `FACEBOOK_CLIENT_ID` | **Placeholder** | Mock value | No provider class exists |
 | `FACEBOOK_CLIENT_SECRET` | **Placeholder** | Mock value | No provider class exists |
-| `TIKTOK_CLIENT_ID` | **Placeholder** | Mock value | No provider class exists |
-| `TIKTOK_CLIENT_SECRET` | **Placeholder** | Mock value | No provider class exists |
+| `Threads_CLIENT_ID` | **Real** | Threads app id | Threads provider |
+| `Threads_CLIENT_SECRET` | **Real** | Threads app secret | Threads provider |
 | `ENCRYPTION_KEY` | **Missing** | Falls back to `JWT_SECRET` hash | Encryption works via derived key |
 | `JWT_SECRET` | **Present** | Custom value | Auth tokens + encryption key derivation |
 | `MONGO_URI` | **Present** | MongoDB Atlas SRV | Connection confirmed |
@@ -213,7 +213,7 @@ DraftModel.find({ status: 'ready', $or: [{ scheduledAt: null }, { scheduledAt: {
 | **YouTube** | YES — Google OAuth 2.0 | **NO** — never connected via OAuth | **NO** | **NO** — `publishPost()` throws "video upload not implemented" | **NO** — publishing not implemented |
 | **Instagram** | **NO** — no provider class exists | Only through mock flow | Only through mock flow | **NO** | **NO** |
 | **Facebook** | **NO** — no provider class exists | Only through mock flow | Only through mock flow | **NO** | **NO** |
-| **TikTok** | **NO** — no provider class exists | Only through mock flow | Only through mock flow | **NO** | **NO** |
+| **Threads** | **YES** — `threads.provider.ts` | Real Graph API | Real Graph API | **YES** | **YES** |
 
 ---
 

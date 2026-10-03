@@ -52,7 +52,29 @@ export class PostRepository {
   }
 
   async updatePost(id: string, postData: Partial<IPost>): Promise<IPost | null> {
-    return PostModel.findByIdAndUpdate(id, { $set: postData }, { new: true }).exec();
+    // `setDefaultsOnInsert` only affects inserts, but Mongoose still applies schema
+    // defaults to the hydrated update document. Without `omitUndefined`+a strict
+    // field list, a partial update silently writes `status: 'draft'` (the schema
+    // default) over a scheduled post. Only the fields the caller actually
+    // supplied are written; nothing else is touched.
+    const allowed: (keyof IPost)[] = [
+      'content',
+      'platforms',
+      'media',
+      'platformContent',
+      'status',
+      'scheduledAt',
+      'failedReason',
+      'deliveries'
+    ];
+    const $set: Record<string, unknown> = {};
+    for (const field of allowed) {
+      if (postData[field] !== undefined) $set[field] = postData[field];
+    }
+    if (Object.keys($set).length === 0) {
+      return PostModel.findById(id).exec();
+    }
+    return PostModel.findByIdAndUpdate(id, { $set }, { new: true, runValidators: true }).exec();
   }
 
   async deletePost(id: string): Promise<boolean> {
@@ -85,7 +107,7 @@ export class PostRepository {
   /** Posts with failed deliveries eligible for retry (backoff elapsed, attempts left). */
   async findRetryablePosts(nowIso: string): Promise<IPost[]> {
     return PostModel.find({
-      deliveries: { $elemMatch: { status: 'failed', nextRetryAt: { $lte: nowIso } } }
+      deliveries: { $elemMatch: { status: 'failed', deadLettered: { $ne: true }, nextRetryAt: { $lte: nowIso } } }
     } as any)
       .sort({ updatedAt: 1 })
       .exec();
@@ -94,6 +116,7 @@ export class PostRepository {
   /**
    * Guideline §20 — atomic claim of a single delivery.
    * Transitions pending|failed -> publishing; only one runner wins per delivery.
+   * Dead-lettered deliveries are excluded so a permanent failure is never retried.
    */
   async claimDelivery(
     postId: string,
@@ -103,7 +126,9 @@ export class PostRepository {
     return PostModel.findOneAndUpdate(
       {
         _id: postId,
-        deliveries: { $elemMatch: { socialAccountId, status: { $in: ['pending', 'failed'] } } }
+        deliveries: {
+          $elemMatch: { socialAccountId, status: { $in: ['pending', 'failed'] }, deadLettered: { $ne: true } }
+        }
       },
       {
         $set: {
@@ -112,7 +137,7 @@ export class PostRepository {
           lastAttemptAt: nowIso
         }
       },
-      { arrayFilters: [{ 'd.socialAccountId': socialAccountId }], new: true }
+      { arrayFilters: [{ 'd.socialAccountId': socialAccountId, 'd.deadLettered': { $ne: true } }], new: true }
     ).exec();
   }
 
@@ -150,11 +175,24 @@ export class PostRepository {
     return PostModel.findByIdAndUpdate(postId, { $set: set }, { new: true }).exec();
   }
 
-  /** Stale-lock recovery: publishing posts older than the cutoff return to scheduled. */
+  /**
+   * Stale-lock recovery: publishing posts older than the cutoff return to
+   * scheduled. Only deliveries that never reached a terminal state are reclaimed —
+   * resetting `published` or dead-lettered deliveries would republish content that
+   * already went out.
+   */
   async releaseStaleClaims(cutoffIso: string, nowIso: string): Promise<number> {
     const result = await PostModel.updateMany(
       { status: 'publishing', lastAttemptAt: { $lt: cutoffIso } } as any,
-      { $set: { status: 'scheduled', 'deliveries.$[].status': 'pending', updatedAt: nowIso } }
+      {
+        $set: {
+          status: 'scheduled',
+          'deliveries.$[d].status': 'pending',
+          'deliveries.$[d].nextRetryAt': undefined,
+          updatedAt: nowIso
+        }
+      },
+      { arrayFilters: [{ 'd.status': { $nin: ['published', 'failed'] } }] }
     ).exec();
     return result.modifiedCount || 0;
   }

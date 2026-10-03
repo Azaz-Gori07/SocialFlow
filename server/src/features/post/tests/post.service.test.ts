@@ -1,14 +1,18 @@
 import { PostService } from '../post.service';
 import { PostRepository } from '../post.repository';
+import { SocialRepository } from '../../social/social.repository';
 import { AppError } from '../../../shared/errors/appError';
 
 jest.mock('../post.repository');
+jest.mock('../../social/social.repository');
 
 describe('PostService Unit Tests', () => {
   let postService: PostService;
   let mockPostRepository: jest.Mocked<PostRepository>;
+  let mockSocialRepository: jest.Mocked<SocialRepository>;
 
   const mockUserId = 'usr_alex_123';
+  const mockAccount = { _id: 'acc_twitter_1', platform: 'twitter' };
   const mockPost: any = {
     _id: 'pst_111',
     userId: mockUserId,
@@ -21,8 +25,10 @@ describe('PostService Unit Tests', () => {
 
   beforeEach(() => {
     mockPostRepository = new PostRepository() as jest.Mocked<PostRepository>;
-    postService = new PostService(mockPostRepository);
+    mockSocialRepository = new SocialRepository() as jest.Mocked<SocialRepository>;
+    postService = new PostService(mockPostRepository, mockSocialRepository);
     jest.clearAllMocks();
+    mockSocialRepository.findAccountsByUserId.mockResolvedValue([mockAccount] as any);
   });
 
   describe('createPost', () => {
@@ -42,7 +48,8 @@ describe('PostService Unit Tests', () => {
         status: 'draft',
         media: [],
         platformContent: undefined,
-        scheduledAt: undefined
+        scheduledAt: undefined,
+        deliveries: []
       });
       expect(result).toBe(mockPost);
     });
@@ -62,6 +69,63 @@ describe('PostService Unit Tests', () => {
         expect.objectContaining({ status: 'scheduled', scheduledAt: scheduledTime })
       );
       expect(result.status).toBe('scheduled');
+    });
+
+    // Regression: a scheduled post with zero deliveries is claimed by the
+    // scheduler, and deriveStatus([]) settles it as `failed`.
+    it('creates one pending delivery per connected account when scheduling', async () => {
+      const scheduledTime = new Date(Date.now() + 3600 * 1000).toISOString();
+      mockPostRepository.createPost.mockResolvedValue(mockPost);
+
+      await postService.createPost({
+        content: 'Scheduled',
+        platforms: ['twitter'],
+        scheduledAt: scheduledTime
+      } as any, mockUserId);
+
+      const arg = mockPostRepository.createPost.mock.calls[0][0] as any;
+      expect(arg.deliveries).toHaveLength(1);
+      expect(arg.deliveries[0]).toMatchObject({
+        socialAccountId: 'acc_twitter_1',
+        platform: 'twitter',
+        status: 'pending',
+        attempts: 0,
+        maxAttempts: 5,
+        deadLettered: false
+      });
+      expect(arg.deliveries[0].idempotencyKey).toMatch(/^post:[a-f0-9]{24}:acc_twitter_1:1$/);
+    });
+
+    it('fans out one delivery per account across multiple platforms', async () => {
+      mockSocialRepository.findAccountsByUserId.mockResolvedValue([
+        { _id: 'acc_tw', platform: 'twitter' },
+        { _id: 'acc_li', platform: 'linkedin' },
+        { _id: 'acc_ig', platform: 'instagram' }
+      ] as any);
+      mockPostRepository.createPost.mockResolvedValue(mockPost);
+
+      await postService.createPost({
+        content: 'Multi',
+        platforms: ['twitter', 'linkedin'],
+        scheduledAt: new Date(Date.now() + 3600 * 1000).toISOString()
+      } as any, mockUserId);
+
+      const arg = mockPostRepository.createPost.mock.calls[0][0] as any;
+      expect(arg.deliveries.map((d: any) => d.platform).sort()).toEqual(['linkedin', 'twitter']);
+      const keys = arg.deliveries.map((d: any) => d.idempotencyKey);
+      expect(new Set(keys).size).toBe(keys.length);
+    });
+
+    it('refuses to schedule when no connected account matches the platforms', async () => {
+      mockSocialRepository.findAccountsByUserId.mockResolvedValue([] as any);
+
+      await expect(postService.createPost({
+        content: 'Orphan',
+        platforms: ['twitter'],
+        scheduledAt: new Date(Date.now() + 3600 * 1000).toISOString()
+      } as any, mockUserId)).rejects.toThrow(AppError);
+
+      expect(mockPostRepository.createPost).not.toHaveBeenCalled();
     });
   });
 

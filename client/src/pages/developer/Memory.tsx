@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Archive, Pencil, Search, Brain, X } from 'lucide-react';
+import { Archive, Pencil, Search, Brain, X, ChevronDown } from 'lucide-react';
 import { api } from '../../services/api';
 
 interface MemoryEntry {
@@ -14,10 +14,10 @@ interface MemoryEntry {
 
 const CATEGORY_LABELS: Record<string, string> = {
   feature: 'Features',
-  problem_solved: 'Problems solved',
+  problem_solved: 'Problems Solved',
   milestone: 'Milestones',
   architecture: 'Architecture',
-  tech_stack: 'Tech stack',
+  tech_stack: 'Tech Stack',
   stage: 'Stage',
   history: 'History',
   custom: 'Custom'
@@ -26,7 +26,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 function formatDate(value?: string): string {
   if (!value) return 'Unknown';
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export const Memory: React.FC = () => {
@@ -50,7 +50,6 @@ export const Memory: React.FC = () => {
         const items = res?.items ?? [];
         setRepos(items);
         setRepoId(prev => prev || (items[0]?._id ?? ''));
-        // No repositories to load from: stop the spinner so the empty state shows.
         if (items.length === 0) setLoading(false);
       })
       .catch(err => {
@@ -60,9 +59,6 @@ export const Memory: React.FC = () => {
       });
   }, []);
 
-  // No setState before the first await: called from an effect, where
-  // react-hooks/set-state-in-effect rejects synchronous state updates.
-  // Handlers set the loading flag before triggering a reload.
   const load = useCallback(async () => {
     if (!repoId) return;
     try {
@@ -87,8 +83,6 @@ export const Memory: React.FC = () => {
     run();
   }, [load]);
 
-  // Group client-side: the search endpoint returns {items,total} with no
-  // `grouped` map, so grouping from items is the one shape that works for both.
   const grouped = entries.reduce<Record<string, MemoryEntry[]>>((acc, entry) => {
     (acc[entry.category] ??= []).push(entry);
     return acc;
@@ -136,53 +130,82 @@ export const Memory: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="header-bar">
-        <div>
-          <h1 className="page-title">Memory</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', marginTop: '4px', fontSize: '0.95rem' }}>
-            What the system has learned about a repository, derived only from detected work.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* Filters Toolbar */}
+      <div style={{ display: 'flex', gap: '14px', alignItems: 'flex-end', flexWrap: 'wrap' }}>
+        <div style={{ minWidth: '220px' }}>
+          <label htmlFor="dev-memory-repo" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+            Repository
+          </label>
+          <div style={{ position: 'relative' }}>
+            <select
+              id="dev-memory-repo"
+              value={repoId}
+              onChange={e => {
+                setRepoId(e.target.value);
+                setLoading(true);
+              }}
+              style={{
+                width: '100%',
+                height: '38px',
+                paddingLeft: '12px',
+                paddingRight: '30px',
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                fontSize: '0.825rem',
+                color: '#111827',
+                outline: 'none',
+                cursor: 'pointer',
+                appearance: 'none'
+              }}
+            >
+              <option value="">Select a repository</option>
+              {repos.map(r => (
+                <option key={r._id} value={r._id}>{r.fullName}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+          </div>
         </div>
-      </div>
 
-      <div style={{ display: 'flex', gap: '16px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'flex-end' }}>
-        <div style={{ minWidth: '240px' }}>
-          <label htmlFor="dev-memory-repo" className="form-label" style={{ fontSize: '0.8rem' }}>Repository</label>
-          <select
-            id="dev-memory-repo"
-            className="form-input"
-            style={{ padding: '10px 14px', fontSize: '0.85rem' }}
-            value={repoId}
-            onChange={e => {
-              setRepoId(e.target.value);
-              setLoading(true);
-            }}
-          >
-            <option value="">Select a repository</option>
-            {repos.map(r => (
-              <option key={r._id} value={r._id}>{r.fullName}</option>
-            ))}
-          </select>
+        <div style={{ minWidth: '180px' }}>
+          <label htmlFor="dev-memory-category" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+            Category
+          </label>
+          <div style={{ position: 'relative' }}>
+            <select
+              id="dev-memory-category"
+              value={category}
+              onChange={e => {
+                setCategory(e.target.value);
+                setLoading(true);
+              }}
+              style={{
+                width: '100%',
+                height: '38px',
+                paddingLeft: '12px',
+                paddingRight: '30px',
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                fontSize: '0.825rem',
+                color: '#111827',
+                outline: 'none',
+                cursor: 'pointer',
+                appearance: 'none'
+              }}
+            >
+              <option value="">All categories</option>
+              {Object.entries(CATEGORY_LABELS).map(([val, label]) => (
+                <option key={val} value={val}>{label}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+          </div>
         </div>
-        <div style={{ minWidth: '200px' }}>
-          <label htmlFor="dev-memory-category" className="form-label" style={{ fontSize: '0.8rem' }}>Category</label>
-          <select
-            id="dev-memory-category"
-            className="form-input"
-            style={{ padding: '10px 14px', fontSize: '0.85rem' }}
-            value={category}
-            onChange={e => {
-              setCategory(e.target.value);
-              setLoading(true);
-            }}
-          >
-            <option value="">All categories</option>
-            {Object.entries(CATEGORY_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
-            ))}
-          </select>
-        </div>
+
         <form
           style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', flexGrow: 1, minWidth: '220px' }}
           onSubmit={e => {
@@ -192,30 +215,64 @@ export const Memory: React.FC = () => {
           }}
         >
           <div style={{ flexGrow: 1 }}>
-            <label htmlFor="dev-memory-search" className="form-label" style={{ fontSize: '0.8rem' }}>Search</label>
-            <input
-              id="dev-memory-search"
-              className="form-input"
-              style={{ padding: '10px 14px', fontSize: '0.85rem' }}
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search keys, values and items"
-            />
+            <label htmlFor="dev-memory-search" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
+              Search Knowledge
+            </label>
+            <div style={{ position: 'relative' }}>
+              <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af' }} />
+              <input
+                id="dev-memory-search"
+                style={{
+                  width: '100%',
+                  height: '38px',
+                  paddingLeft: '34px',
+                  paddingRight: '12px',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '8px',
+                  fontSize: '0.825rem',
+                  color: '#111827',
+                  outline: 'none'
+                }}
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search keys, values, problems..."
+              />
+            </div>
           </div>
-          <button type="submit" className="btn btn-secondary" style={{ fontSize: '0.8rem', gap: '6px' }} aria-label="Search memory">
-            <Search size={14} />
-            <span>Search</span>
+          <button
+            type="submit"
+            style={{
+              height: '38px',
+              padding: '0 16px',
+              background: '#18181b',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: '0.825rem',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            Search
           </button>
           {activeSearch && (
             <button
               type="button"
-              className="btn btn-secondary"
-              style={{ fontSize: '0.8rem' }}
+              style={{
+                height: '38px',
+                padding: '0 12px',
+                background: '#ffffff',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                color: '#6b7280',
+                cursor: 'pointer'
+              }}
               onClick={() => {
                 setSearch('');
                 setActiveSearch('');
               }}
-              aria-label="Clear search"
+              title="Clear search"
             >
               <X size={14} />
             </button>
@@ -224,104 +281,146 @@ export const Memory: React.FC = () => {
       </div>
 
       {error && (
-        <div role="alert" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', marginBottom: '16px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.85rem' }}>
           {error}
         </div>
       )}
       {notice && (
-        <div role="status" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', marginBottom: '16px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #d1fae5', color: '#059669', fontSize: '0.85rem' }}>
           {notice}
         </div>
       )}
 
       {loading ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Loading memory...</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', color: '#9ca3af', fontSize: '0.875rem' }}>
+          Loading repository memory...
+        </div>
       ) : !repoId ? (
-        <div className="glass-card" style={{ padding: '60px', textAlign: 'center' }}>
-          <Brain size={40} style={{ color: 'hsl(var(--text-muted) / 0.4)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '1.1rem', color: 'hsl(var(--text-secondary))', marginBottom: '8px' }}>No repository selected</h3>
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))' }}>
-            Memory is stored per repository. Mirror one from the Repositories tab first.
+        <div className="card" style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#f4f4f5', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+            <Brain size={28} style={{ color: '#71717a' }} />
+          </div>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+            No repository selected
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '380px', lineHeight: 1.5, margin: 0 }}>
+            Memory is stored per repository. Mirror a repository from the Repositories tab first.
           </p>
         </div>
       ) : entries.length === 0 ? (
-        <div className="glass-card" style={{ padding: '60px', textAlign: 'center' }}>
-          <Brain size={40} style={{ color: 'hsl(var(--text-muted) / 0.4)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '1.1rem', color: 'hsl(var(--text-secondary))', marginBottom: '8px' }}>No memory entries</h3>
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))' }}>
-            {activeSearch || category ? 'No entries match the current filters.' : 'Sync this repository to build memory from its detected work.'}
+        <div className="card" style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+            <Brain size={28} style={{ color: '#b45309' }} />
+          </div>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+            No memory entries recorded
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '380px', lineHeight: 1.5, margin: 0 }}>
+            {activeSearch || category ? 'No entries match the current filters.' : 'Sync this repository to build memory facts and architectural knowledge.'}
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-          {Object.entries(grouped).map(([group, groupEntries]) => (
-            <div key={group}>
-              <h2 style={{ fontSize: '0.85rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--text-muted))', marginBottom: '10px' }}>
-                {CATEGORY_LABELS[group] ?? group} ({groupEntries.length})
-              </h2>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+          {Object.entries(grouped).map(([grp, grpEntries]) => (
+            <div key={grp} style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: '#6b7280',
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                paddingLeft: '4px'
+              }}>
+                {CATEGORY_LABELS[grp] ?? grp} ({grpEntries.length})
+              </div>
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                {groupEntries.map(entry => (
-                  <div key={entry._id} className="glass-card" style={{ padding: '16px 20px' }}>
-                    <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
-                      <div style={{ flexGrow: 1, minWidth: 0 }}>
+                {grpEntries.map(entry => (
+                  <div key={entry._id} className="card" style={{ padding: '18px 22px' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '16px', flexWrap: 'wrap' }}>
+                      <div style={{ flexGrow: 1, minWidth: '240px' }}>
                         {editingId === entry._id ? (
-                          <div>
-                            <label htmlFor={`dev-memory-edit-${entry._id}`} className="form-label" style={{ fontSize: '0.8rem' }}>
-                              Edit value
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                            <label style={{ fontSize: '0.8rem', fontWeight: 600, color: '#374151' }}>
+                              Edit Knowledge Fact
                             </label>
                             <textarea
-                              id={`dev-memory-edit-${entry._id}`}
                               className="form-input"
-                              style={{ minHeight: '80px', fontSize: '0.85rem' }}
+                              style={{ minHeight: '80px', fontSize: '0.875rem', resize: 'vertical' }}
                               value={editValue}
                               onChange={e => setEditValue(e.target.value)}
                               maxLength={2000}
                             />
-                            <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-                              <button onClick={() => handleSaveEdit(entry)} disabled={busyId === entry._id} className="btn btn-primary" style={{ fontSize: '0.8rem' }}>
+                            <div style={{ display: 'flex', gap: '8px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveEdit(entry)}
+                                disabled={busyId === entry._id}
+                                className="btn btn-primary"
+                                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                              >
                                 Save
                               </button>
-                              <button onClick={() => setEditingId(null)} className="btn btn-secondary" style={{ fontSize: '0.8rem' }}>
+                              <button
+                                type="button"
+                                onClick={() => setEditingId(null)}
+                                className="btn btn-secondary"
+                                style={{ fontSize: '0.8rem', padding: '6px 14px' }}
+                              >
                                 Cancel
                               </button>
                             </div>
                           </div>
                         ) : (
                           <>
-                            <div style={{ fontWeight: 600, color: 'white', marginBottom: '4px' }}>{entry.value}</div>
-                            <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginBottom: '8px' }}>
-                              {entry.key} | source: {entry.source} | updated {formatDate(entry.updatedAt)}
+                            <div style={{ fontSize: '0.925rem', fontWeight: 600, color: '#111827', marginBottom: '4px' }}>
+                              {entry.value}
                             </div>
-                            {entry.items.length > 0 && (
-                              <ul style={{ paddingLeft: '18px', fontSize: '0.8rem', color: 'hsl(var(--text-secondary))' }}>
+                            <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginBottom: '8px' }}>
+                              Key: <code>{entry.key}</code> • Source: {entry.source} • Updated {formatDate(entry.updatedAt)}
+                            </div>
+                            {entry.items && entry.items.length > 0 && (
+                              <ul style={{ paddingLeft: '18px', fontSize: '0.8rem', color: '#4b5563', margin: 0 }}>
                                 {entry.items.map((item, i) => <li key={i}>{item}</li>)}
                               </ul>
                             )}
                           </>
                         )}
                       </div>
+
                       {editingId !== entry._id && (
                         <div style={{ display: 'flex', gap: '8px' }}>
                           <button
+                            type="button"
                             onClick={() => {
                               setEditingId(entry._id);
                               setEditValue(entry.value);
                             }}
                             className="btn btn-secondary"
-                            style={{ fontSize: '0.8rem', gap: '6px' }}
-                            aria-label={`Edit memory entry ${entry.key}`}
+                            style={{ fontSize: '0.78rem', gap: '6px', padding: '6px 12px' }}
                           >
-                            <Pencil size={14} />
+                            <Pencil size={13} />
                             <span>Edit</span>
                           </button>
                           <button
+                            type="button"
                             onClick={() => handleArchive(entry)}
                             disabled={busyId === entry._id}
-                            className="btn btn-danger"
-                            style={{ fontSize: '0.8rem', gap: '6px' }}
-                            aria-label={`Archive memory entry ${entry.key}`}
+                            style={{
+                              padding: '6px 12px',
+                              background: '#ffffff',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              fontSize: '0.78rem',
+                              fontWeight: 500,
+                              color: '#ef4444',
+                              cursor: busyId === entry._id ? 'not-allowed' : 'pointer',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '6px'
+                            }}
                           >
-                            <Archive size={14} />
+                            <Archive size={13} />
                             <span>Archive</span>
                           </button>
                         </div>
@@ -334,6 +433,7 @@ export const Memory: React.FC = () => {
           ))}
         </div>
       )}
+
     </div>
   );
 };

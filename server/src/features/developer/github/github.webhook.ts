@@ -4,6 +4,7 @@ import { logger } from '../../../shared/utils/logger';
 import { AppError } from '../../../shared/errors/appError';
 import DeveloperRepositoryModel from '../repositories/repository.model';
 import { syncAndProcess } from '../jobs/syncOrchestrator';
+import { db } from '../../../database/db';
 
 /**
  * Webhook verification and dispatch. The HTTP route itself is mounted in a
@@ -71,6 +72,30 @@ export interface GitHubWebhookResult {
 }
 
 /**
+ * Claims a GitHub delivery id in the shared webhook-events collection. Returns
+ * true when the delivery was already seen, so the caller can drop the replay.
+ */
+async function claimDelivery(deliveryId: string, event: string, repositoryFullName: string): Promise<boolean> {
+  try {
+    await db.webhookEvents.create({
+      provider: 'github',
+      eventId: deliveryId,
+      eventType: event,
+      payload: { repositoryFullName },
+      processed: false,
+    } as any);
+    return false;
+  } catch (error: any) {
+    if (error?.code === 11000) return true;
+    // A dedupe-store failure must not silently drop a real event.
+    logger.warn('[developer] webhook dedupe unavailable, processing delivery', {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return false;
+  }
+}
+
+/**
  * Verify + dispatch. Never rejects on sync failure: the delivery is
  * acknowledged and per-repository chains are fire-and-forget, because GitHub
  * disables the webhook if we fail to answer 2xx.
@@ -106,6 +131,13 @@ export async function handleGitHubWebhook(
   const repos = await DeveloperRepositoryModel.find({ fullName: repositoryFullName }).exec();
   if (repos.length === 0) {
     return { accepted: true, message: 'Repository not connected', deliveryId, dispatched: 0 };
+  }
+
+  // GitHub retries any delivery it did not see succeed. Without this claim the
+  // retry re-runs the whole pipeline and re-bills AI. A delivery without an id
+  // cannot be deduplicated, so it is processed as before.
+  if (deliveryId && (await claimDelivery(deliveryId, event, repositoryFullName))) {
+    return { accepted: true, message: 'Duplicate delivery ignored', deliveryId, dispatched: 0 };
   }
 
   for (const repo of repos) {

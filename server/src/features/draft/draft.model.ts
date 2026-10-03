@@ -1,6 +1,6 @@
 import mongoose, { Schema, model, Document, Model } from 'mongoose';
 
-export type DraftPlatform = 'instagram' | 'facebook' | 'linkedin' | 'twitter' | 'youtube';
+export type DraftPlatform = 'instagram' | 'facebook' | 'linkedin' | 'twitter' | 'youtube' | 'threads';
 
 // Phase 2: Full lifecycle — draft → ready → publishing → published | failed
 export type DraftStatus = 'draft' | 'ready' | 'publishing' | 'archived' | 'published' | 'failed';

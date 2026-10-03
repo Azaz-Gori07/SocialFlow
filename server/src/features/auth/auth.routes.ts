@@ -46,6 +46,9 @@ router.post('/logout', authController.logout as any);
 
 router.get('/oauth/zenuxs/:provider', authController.oauthRedirect as any);
 router.get('/oauth/zenuxs/:provider/callback', authController.oauthCallback as any);
+// Landed here from the registered `callback.html` redirect, which forwards the
+// code. Same controller: the provider is passed as a query param.
+router.get('/oauth/zenuxs/browser/callback', authController.oauthCallback as any);
 
 router.get('/me', authenticate as any, authController.me as any);
 

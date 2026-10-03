@@ -1,6 +1,7 @@
 import { IPost, IDelivery } from '../../features/post/post.model';
 import { SocialRepository } from '../../features/social/social.repository';
 import { SocialService } from '../../features/social/social.service';
+import { ComplianceService } from '../../features/compliance/compliance.service';
 import { PostRepository } from '../../features/post/post.repository';
 import { OAuthConnectionRepository } from '../../features/social/oauthConnection.repository';
 import { OAuthTransactionRepository } from '../../features/social/oauthTransaction.repository';
@@ -30,6 +31,7 @@ export interface DeliveryOutcome {
 export class DeliveryEngine {
   private postRepository = new PostRepository();
   private socialService: SocialService;
+  private complianceService = new ComplianceService();
 
   constructor(private socialRepository: SocialRepository) {
     this.socialService = new SocialService(
@@ -51,6 +53,33 @@ export class DeliveryEngine {
     return Math.min(RETRY_BASE_BACKOFF_MS * 2 ** Math.max(0, attempts - 1), RETRY_MAX_BACKOFF_MS);
   }
 
+  /** True only for failures that a token refresh could plausibly fix. */
+  private isAuthFailure(error: unknown): boolean {
+    if (!(error instanceof ProviderError)) return false;
+    if (error.status === 401) return true;
+    // Provider-specific expired-token codes (Meta 190, X 89).
+    return error.providerCode === '190' || error.providerCode === '89';
+  }
+
+  /**
+   * Refreshes the account's provider token and returns the new access token.
+   * Returns null when refresh is impossible or fails, so the caller can surface
+   * the original auth error instead of retrying forever.
+   */
+  private async refreshAccountToken(delivery: IDelivery, post: IPost): Promise<string | null> {
+    try {
+      const refreshed = await this.socialService.refreshAccountTokenForDelivery(delivery.socialAccountId, post.userId);
+      return refreshed || null;
+    } catch (error) {
+      logger.error('[delivery] token refresh failed', {
+        socialAccountId: delivery.socialAccountId,
+        platform: delivery.platform,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return null;
+    }
+  }
+
   /**
    * Publishes a single delivery. Safe to call concurrently from multiple
    * scheduler instances — only the atomic claim owner proceeds.
@@ -66,6 +95,8 @@ export class DeliveryEngine {
       const recovered = await this.markPublished(post._id.toString(), delivery.socialAccountId, delivery.externalPostId, delivery.externalPostUrl);
       return { ok: true, delivery: recovered };
     }
+
+    let complianceRecordId: string | undefined;
 
     try {
       const bundle = await this.socialService.resolveAccountTokenBundle(delivery.socialAccountId);
@@ -104,21 +135,55 @@ export class DeliveryEngine {
         );
       }
 
-      const result = await provider.createPost(
+      const buildCtx = (accessToken: string) => ({
+        tokens: { accessToken, refreshToken: bundle.refreshToken },
+        account: {
+          providerAccountId: account.providerAccountId,
+          providerParentAccountId: account.providerParentAccountId,
+          accountType: account.accountType,
+          username: account.username,
+          displayName: account.displayName,
+          avatarUrl: account.avatarUrl,
+          accountToken: account.encryptedAccessToken ? accessToken : undefined
+        }
+      });
+
+      // ── Compliance gate (master plan §30/§33) ──────────────────────────────
+      // Every publish path passes here. A blocked item never reaches the
+      // provider; an uncertain one requires an explicit human approval rather
+      // than being silently published or silently destroyed.
+      const compliance = await this.complianceService.assertPublishable(
+        post.userId,
         {
-          tokens: { accessToken: bundle.accessToken, refreshToken: bundle.refreshToken },
-          account: {
-            providerAccountId: account.providerAccountId,
-            providerParentAccountId: account.providerParentAccountId,
-            accountType: account.accountType,
-            username: account.username,
-            displayName: account.displayName,
-            avatarUrl: account.avatarUrl,
-            accountToken: account.encryptedAccessToken ? bundle.accessToken : undefined
-          }
+          content: post.content,
+          platform: delivery.platform,
+          media: mediaItems
         },
-        { content: post.content, media: mediaItems }
+        { workspaceId: post.workspaceId, approved: (post as any).complianceApproved === true }
       );
+      complianceRecordId = compliance.recordId;
+
+      let result;
+      try {
+        result = await provider.createPost(buildCtx(bundle.accessToken), {
+          content: post.content,
+          media: mediaItems
+        });
+      } catch (firstError) {
+        // Token lifecycle: an expired/revoked access token must not kill the
+        // delivery. Refresh once and retry exactly once; a second failure is a
+        // genuine auth problem and is reported (never looped).
+        if (!this.isAuthFailure(firstError)) throw firstError;
+
+        logger.info(`[delivery] ${delivery.platform} rejected the token, refreshing once before retry`);
+        const refreshed = await this.refreshAccountToken(delivery, post);
+        if (!refreshed) throw firstError;
+
+        result = await provider.createPost(buildCtx(refreshed), {
+          content: post.content,
+          media: mediaItems
+        });
+      }
 
       const url =
         result.externalPostUrl ||
@@ -132,6 +197,11 @@ export class DeliveryEngine {
           : undefined);
 
       const updated = await this.markPublished(post._id.toString(), delivery.socialAccountId, result.externalPostId, url);
+      if (complianceRecordId) {
+        await this.complianceService
+          .markPublished(complianceRecordId, result.externalPostId)
+          .catch((err) => logger.warn('[compliance] could not record publication', { error: String(err) }));
+      }
       logger.info(`Published post ${post._id} -> ${delivery.platform} (${account.username})`);
       return { ok: true, delivery: updated };
     } catch (error: unknown) {
