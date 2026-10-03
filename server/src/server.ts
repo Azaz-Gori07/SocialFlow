@@ -7,6 +7,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import http from 'http';
+import https from 'https';
 import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './shared/config/env.config';
@@ -202,6 +203,35 @@ app.get('/health', (req, res) => {
 });
 
 // CORS debug diagnostics endpoint (no DB dependencies)
+// TEMPORARY: bridge connectivity probe (dns/tcp/tls timing from Vercel egress)
+app.get('/bridge-probe', (req, res) => {
+  const target = process.env.SOCKET_INTERNAL_URL;
+  if (!target) return res.json({ configured: false });
+  const url = new URL(target);
+  const dnsStart = Date.now();
+  require('dns').resolve4(url.hostname, (dnsErr: any, addrs: string[]) => {
+    const dnsMs = Date.now() - dnsStart;
+    const start = Date.now();
+    const r = https.request(
+      {
+        hostname: url.hostname,
+        path: '/health',
+        method: 'GET',
+        family: 4,
+        timeout: 10000,
+        headers: { Host: url.hostname }
+      },
+      (resp) => {
+        resp.resume();
+        res.json({ configured: true, dnsMs, addrs, connectMs: Date.now() - start, status: resp.statusCode, totalMs: Date.now() - start });
+      }
+    );
+    r.on('timeout', () => { r.destroy(); res.json({ configured: true, dnsMs, addrs, totalMs: Date.now() - start, error: 'timeout' }); });
+    r.on('error', (e) => res.json({ configured: true, dnsMs, addrs, totalMs: Date.now() - start, error: e.message, code: (e as any).code }));
+    r.end();
+  });
+});
+
 app.get('/cors-debug', (req, res) => {
   res.json({
     NODE_ENV: process.env.NODE_ENV,
