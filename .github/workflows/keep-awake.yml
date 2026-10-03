@@ -7,7 +7,7 @@
 #   2. This workflow — external hit every minute that wakes a sleeping
 #      instance (cold start ~30-60s) and doubles as uptime monitoring.
 #
-# Runs on a schedule from GitHub's infra; needs no server, no token beyond
+# Runs on a schedule from GitHub's own infra (re-registered); needs no server, no token beyond
 # the repo itself, and never expires. GitHub auto-disables scheduled
 # workflows after 60 days of zero repo activity — any push/reactivate
 # re-enables it (check the Actions tab if uptime looks off).
