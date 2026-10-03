@@ -1,0 +1,19 @@
+{
+  "name": "socialflow-socket-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Dedicated persistent Socket.IO relay for SocialFlow. The Vercel REST backend publishes events here over an authenticated internal HTTP API; browsers connect here for real-time notifications.",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "socket.io": "^4.8.3"
+  }
+}

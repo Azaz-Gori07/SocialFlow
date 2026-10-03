@@ -77,3 +77,6 @@ problem.md
 .zcode/
 .vercel
 .env*
+
+# Render socket service build artifacts
+socket-server/node_modules/

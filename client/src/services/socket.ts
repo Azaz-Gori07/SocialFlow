@@ -2,11 +2,11 @@ import { io, Socket } from 'socket.io-client';
 
 const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL as string | undefined;
 
-// VITE_BACKEND_API_URL is expected to end with `/api`.
-// Socket.IO should connect to the backend origin (no `/api` suffix).
-const SOCKET_URL = backendApiUrl
-  ? backendApiUrl.replace(/\/api\/?$/, '')
-  : 'http://localhost:5000';
+// SOCKET_URL points at the dedicated persistent Socket.IO service (Render).
+// Falls back to the REST API origin (local dev: same Express process serves
+// both). Never point this at a serverless host — see guard below.
+const SOCKET_URL = (import.meta.env.SOCKET_URL as string | undefined)
+  || (backendApiUrl ? backendApiUrl.replace(/\/api\/?$/, '') : 'http://localhost:5000');
 
 let socket: Socket | null = null;
 
@@ -19,11 +19,11 @@ export function connectSocket(token?: string): Socket | null {
   if (!currentToken) {
     return null;
   }
-  // Vercel serverless functions have no persistent HTTP server, so Socket.IO
-  // can never serve /socket.io/* there (404 + endless reconnect logs). Real-time
-  // notifications degrade to REST polling on that host.
-  // ponytail: swap for a dedicated WS host (Render/WS server) to re-enable.
+  // Safety net: if no SOCKET_URL was configured and the fallback resolved to
+  // a serverless host, connecting would only produce 404 + endless reconnect
+  // errors — degrade to REST polling instead.
   if (SOCKET_URL.includes('.vercel.app')) {
+    console.warn('⚠️ No SOCKET_URL configured; real-time disabled (REST fallback only).');
     return null;
   }
   if (socket) {

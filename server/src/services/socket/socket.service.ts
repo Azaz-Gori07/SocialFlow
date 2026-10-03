@@ -103,20 +103,54 @@ export function getIO(): Server {
   return io;
 }
 
+// ---------------------------------------------------------------------------
+// Event bridge: Vercel serverless backend -> dedicated Socket.IO service.
+//
+// When SOCKET_INTERNAL_URL is set (production on Vercel), events are POSTed
+// to the Render socket-server's authenticated /internal/emit endpoint instead
+// of a local `io` instance — serverless has no persistent connections to
+// forward to. Unset (local dev/tests), the original in-process emit is used.
+// ---------------------------------------------------------------------------
+const SOCKET_INTERNAL_URL = process.env.SOCKET_INTERNAL_URL;
+const SOCKET_INTERNAL_SECRET = process.env.SOCKET_INTERNAL_SECRET;
+
+async function emitToUser(userId: string, event: string, payload: unknown): Promise<void> {
+  if (SOCKET_INTERNAL_URL && SOCKET_INTERNAL_SECRET) {
+    try {
+      const res = await fetch(`${SOCKET_INTERNAL_URL.replace(/\/$/, '')}/internal/emit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-internal-secret': SOCKET_INTERNAL_SECRET,
+        },
+        body: JSON.stringify({ userId, event, payload }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!res.ok) {
+        console.warn(`⚠️ Socket bridge ${event} -> HTTP ${res.status}`);
+      }
+    } catch (err: any) {
+      // Real-time is best-effort: the notification row is already persisted
+      // and the client's REST refetch on reconnect covers the loss.
+      console.warn(`⚠️ Socket bridge ${event} failed: ${err.message}`);
+    }
+    return;
+  }
+  if (io) {
+    io.to(`user:${userId}`).emit(event, payload);
+  }
+}
+
 /**
  * Send a real-time notification to a specific user.
  * If the user is offline, the notification stays in the database and is
  * delivered when they reconnect (offline recovery).
  */
 export async function sendNotification(userId: string, notification: Notification): Promise<void> {
-  if (!io) {
-    console.warn('⚠️ Socket.IO not initialized. Cannot send notification.');
-    return;
-  }
-  io.to(`user:${userId}`).emit('notification', notification);
+  await emitToUser(userId, 'notification', notification);
   try {
     const count = await db.notifications.countDocuments({ userId, read: false }).exec();
-    io.to(`user:${userId}`).emit('notifications:unread_count', { count });
+    await emitToUser(userId, 'notifications:unread_count', { count });
   } catch (err) {
     console.warn('⚠️ Failed to compute unread count:', err);
   }
@@ -126,8 +160,5 @@ export async function sendNotification(userId: string, notification: Notificatio
  * Send updated unread count to a user.
  */
 export function sendUnreadCount(userId: string, count: number): void {
-  if (!io) {
-    return;
-  }
-  io.to(`user:${userId}`).emit('notifications:unread_count', { count });
+  void emitToUser(userId, 'notifications:unread_count', { count });
 }
