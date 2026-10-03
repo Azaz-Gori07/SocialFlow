@@ -136,6 +136,10 @@ async function emitToUser(userId: string, event: string, payload: unknown): Prom
  * because onrender.com publishes NAT64 AAAA records that are unreachable
  * from Vercel's egress — undici's happy-eyeballs then stalls until timeout.
  */
+export function postBridgeForProbe(body: unknown): Promise<void> {
+  return postBridge(body);
+}
+
 function postBridge(body: unknown): Promise<void> {
   const url = new URL(`${SOCKET_INTERNAL_URL!.replace(/\/$/, '')}/internal/emit`);
   const data = JSON.stringify(body);

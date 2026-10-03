@@ -29,6 +29,7 @@ import { AIController } from './controllers/aiController';
 import { authMiddleware } from './middleware/auth';
 import swaggerDocument from './docs/swagger.json';
 import { initSocketIO } from './services/socket/socket.service';
+import { postBridgeForProbe } from './services/socket/socket.service';
 import { SchedulerService } from './services/scheduler';
 
 // Import the Atlas database connection and fail fast on startup if it cannot connect.
@@ -230,6 +231,17 @@ app.get('/bridge-probe', (req, res) => {
     r.on('error', (e) => res.json({ configured: true, dnsMs, addrs, totalMs: Date.now() - start, error: e.message, code: (e as any).code }));
     r.end();
   });
+});
+
+// TEMPORARY: full bridge POST rehearsal (same code path as emitToUser)
+app.get('/bridge-probe-post', async (req, res) => {
+  try {
+    const start = Date.now();
+    await postBridgeForProbe({ userId: 'probe-user', event: 'notification', payload: { probe: true } });
+    res.json({ ok: true, totalMs: Date.now() - start });
+  } catch (e: any) {
+    res.json({ ok: false, error: e.message, code: e.code });
+  }
 });
 
 app.get('/cors-debug', (req, res) => {
