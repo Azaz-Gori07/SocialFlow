@@ -30,7 +30,10 @@ router.post('/meta', async (req: Request, res: Response) => {
   }
 
   try {
-    const result = await MetaWebhookService.processPayload(req.body);
+    // express.raw() runs before express.json() on this path and marks the body
+    // as parsed, so req.body is still the raw Buffer — parse from rawBody.
+    const payload = Buffer.isBuffer(rawBody) ? JSON.parse(rawBody.toString('utf8')) : req.body;
+    const result = await MetaWebhookService.processPayload(payload);
     return res.status(200).json({ ok: true, ...result });
   } catch (error) {
     console.error('Meta webhook processing error:', error);
