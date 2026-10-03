@@ -8,6 +8,10 @@ import { db } from '../../database/db';
 const JWT_SECRET = env.JWT_SECRET;
 
 const LOCAL_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5000',
   'http://localhost:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3000',
@@ -15,11 +19,16 @@ const LOCAL_ORIGINS = [
 ];
 const vercelOriginRegex = /^https:\/\/[a-zA-Z0-9_-]+\.vercel\.app$/;
 
-const isAllowedOrigin = (origin: string | undefined): boolean => {
-  if (!origin) return true;
-  if (LOCAL_ORIGINS.includes(origin)) return true;
-  if (env.corsOrigins.includes(origin)) return true;
-  return vercelOriginRegex.test(origin);
+const allowedOrigins = [...new Set([...LOCAL_ORIGINS, ...env.corsOrigins])];
+
+const isAllowedOrigin = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void
+): void => {
+  if (!origin || allowedOrigins.includes(origin) || vercelOriginRegex.test(origin)) {
+    return callback(null, true);
+  }
+  return callback(new Error(`CORS blocked origin: ${origin}`));
 };
 
 interface AuthenticatedSocket extends Socket {

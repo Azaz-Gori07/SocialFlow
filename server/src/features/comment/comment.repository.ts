@@ -10,7 +10,11 @@ export class CommentRepository {
   async findCommentsByWorkspaceId(workspaceId: string, filters: CommentFilters): Promise<IComment[]> {
     const query: Record<string, unknown> = { workspaceId };
     if (filters.platform) query.platform = filters.platform;
-    if (filters.status) query.status = filters.status;
+    if (filters.status === 'assigned') {
+      query.assignedTo = { $exists: true, $nin: [null, ''] };
+    } else if (filters.status) {
+      query.status = filters.status;
+    }
     if (filters.assignedTo) query.assignedTo = filters.assignedTo;
 
     return CommentModel.find(query as any).sort({ createdAt: -1 }).exec();
@@ -22,7 +26,11 @@ export class CommentRepository {
   ): Promise<IComment[]> {
     const query: Record<string, unknown> = { accountId: { $in: accountIds } };
     if (filters.platform) query.platform = filters.platform;
-    if (filters.status) query.status = filters.status;
+    if (filters.status === 'assigned') {
+      query.assignedTo = { $exists: true, $nin: [null, ''] };
+    } else if (filters.status) {
+      query.status = filters.status;
+    }
     if (filters.assignedTo) query.assignedTo = filters.assignedTo;
 
     return CommentModel.find(query as any).sort({ createdAt: -1 }).exec();

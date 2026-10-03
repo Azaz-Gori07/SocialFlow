@@ -1,12 +1,18 @@
+import dns from 'dns';
+if (typeof dns.setDefaultResultOrder === 'function') {
+  dns.setDefaultResultOrder('ipv4first');
+}
 import express, { RequestHandler } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import http from 'http';
+import path from 'path';
 import swaggerUi from 'swagger-ui-express';
 import { env } from './shared/config/env.config';
 import { errorMiddleware } from './shared/middleware/error.middleware';
 import authRouter from './features/auth/auth.routes';
+import zenuxsCallbackRouter from './features/auth/zenuxs.callback.routes';
 import workspaceRouter from './features/workspace/workspace.routes';
 import socialRouter from './features/social/social.routes';
 import postRouter from './features/post/post.routes';
@@ -31,7 +37,12 @@ import { connectDb, isConnected } from './database/db';
 
 const app = express();
 
-const LOCAL_ORIGINS = ['http://localhost:5173', 'http://localhost:5000'];
+const LOCAL_ORIGINS = [
+  'http://localhost:5173',
+  'http://localhost:5000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5000'
+];
 const EXPLICIT_ORIGINS = [
   'https://viraldrift.vercel.app',
   'https://viraldrift-server.vercel.app',
@@ -72,8 +83,11 @@ const apiLimiter = rateLimit({
 });
 app.use('/api/', apiLimiter as unknown as RequestHandler);
 
-// Helmet for setting secure HTTP headers
-app.use(helmet());
+// Helmet for setting secure HTTP headers with cross-origin support for dev API clients
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false
+}));
 
 // Raw body capture for GitHub webhook signature verification (feature-flagged:
 // with the flag off the route is not mounted at all). Registered BEFORE
@@ -85,13 +99,16 @@ if (env.developerFlowEnabled) {
   });
 }
 
-app.use(express.json());
-
-// Raw body capture for webhook signature verification (before json parsing consumes it)
+// Raw body capture for webhook signature verification. This MUST be registered
+// BEFORE express.json(): once the JSON parser consumes the body, `req.body` is a
+// parsed object, HMAC verification against the original bytes becomes impossible
+// and `Buffer.from(object)` throws — crashing the process on every real webhook.
 app.use('/api/webhooks/meta', express.raw({ type: '*/*' }), (req: any, _res: any, next: any) => {
-  req.rawBody = req.body;
+  req.rawBody = Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body ?? {}), 'utf8');
   next();
 });
+
+app.use(express.json());
 app.use('/api/webhooks/meta', express.json({ type: '*/*' }));
 
 // Database connection check middleware for serverless/production requests
@@ -122,6 +139,10 @@ app.use(async (req, res, next) => {
   next();
 });
 
+// Zenuxs OAuth callback (registered redirect URI) — see the router for why the
+// code is forwarded to the backend rather than exchanged in the browser.
+app.use(zenuxsCallbackRouter);
+
 // API Swagger Documentation Interface
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
@@ -133,6 +154,7 @@ app.get('/api/test/limit', (req, res) => {
 // Route Mounts
 app.use('/api/auth', authRouter);
 app.use('/api/workspace', workspaceRouter);
+app.use('/api/workspaces', workspaceRouter);
 app.use('/api/social', socialRouter);
 app.use('/api/posts', postRouter);
 app.use('/api/comments', commentRouter);

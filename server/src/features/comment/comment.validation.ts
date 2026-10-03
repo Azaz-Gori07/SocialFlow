@@ -2,8 +2,8 @@ import { z } from 'zod';
 
 export const listCommentsQuerySchema = z.object({
   workspaceId: z.string().min(1, 'Workspace ID is required'),
-  platform: z.enum(['twitter', 'instagram', 'facebook', 'linkedin', 'youtube', 'tiktok']).optional(),
-  status: z.enum(['unresolved', 'resolved']).optional(),
+  platform: z.enum(['twitter', 'instagram', 'facebook', 'linkedin', 'youtube', 'threads']).optional(),
+  status: z.enum(['unresolved', 'resolved', 'assigned']).optional(),
   assignedTo: z.string().optional()
 });
 

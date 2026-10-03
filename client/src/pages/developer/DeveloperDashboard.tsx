@@ -1,5 +1,16 @@
 import React, { useEffect, useState } from 'react';
-import { GitBranch, RefreshCw, Unlink, History } from 'lucide-react';
+import { 
+  GitBranch, 
+  RefreshCw, 
+  Unlink, 
+  History, 
+  CheckCircle2, 
+  Clock, 
+  FolderGit2, 
+  FileCode, 
+  Sparkles, 
+  BrainCircuit
+} from 'lucide-react';
 import { api } from '../../services/api';
 
 interface Overview {
@@ -36,18 +47,10 @@ interface DeveloperDashboardProps {
   refreshKey: number;
 }
 
-const STAT_LABELS: Array<{ key: keyof Overview; label: string }> = [
-  { key: 'repositories', label: 'Repositories' },
-  { key: 'commits', label: 'Commits' },
-  { key: 'activities', label: 'Activities' },
-  { key: 'opportunities', label: 'Opportunities' },
-  { key: 'memory', label: 'Memory entries' }
-];
-
 function formatDate(value?: string): string {
   if (!value) return 'Never';
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ refreshKey }) => {
@@ -61,9 +64,6 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ refreshK
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // No setState before the first await: this is called from an effect, and
-  // react-hooks/set-state-in-effect rejects synchronous state updates there.
-  // Callers that want a visible loading state set it themselves.
   const load = async () => {
     try {
       const [ov, conn, repoRes] = await Promise.all([
@@ -92,7 +92,6 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ refreshK
     run();
   }, [refreshKey]);
 
-  // Sync logs are per-repository: the server rejects a request without one.
   useEffect(() => {
     if (!logsRepo) return;
     let cancelled = false;
@@ -154,131 +153,331 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ refreshK
   };
 
   if (loading) {
-    return <div style={{ padding: '60px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Loading developer overview...</div>;
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '320px', color: '#9ca3af', fontSize: '0.875rem' }}>
+        Loading developer intelligence...
+      </div>
+    );
   }
 
+  const statItems = [
+    { label: 'Mirrored Repos', value: overview?.repositories ?? 0, icon: FolderGit2, bg: '#f4f4f5', color: '#3f3f46' },
+    { label: 'Synced Commits', value: overview?.commits ?? 0, icon: FileCode, bg: '#eff6ff', color: '#2563eb' },
+    { label: 'Activities', value: overview?.activities ?? 0, icon: GitBranch, bg: '#ecfdf5', color: '#059669' },
+    { label: 'Opportunities', value: overview?.opportunities ?? 0, icon: Sparkles, bg: '#fef3c7', color: '#b45309' },
+    { label: 'Memory Facts', value: overview?.memory ?? 0, icon: BrainCircuit, bg: '#ffedd5', color: '#c2410c' }
+  ];
+
   return (
-    <div>
-      <div className="header-bar">
-        <div>
-          <h1 className="page-title">Developer Intelligence</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', marginTop: '4px', fontSize: '0.95rem' }}>
-            What your repositories shipped, and what is ready to publish.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* Action / Refresh Bar */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ fontSize: '0.9rem', color: '#6b7280' }}>
+          Real-time mirror statistics and automated pipeline telemetry.
         </div>
-        <button onClick={handleRefresh} className="btn btn-secondary" style={{ gap: '8px', fontSize: '0.85rem' }}>
-          <RefreshCw size={16} />
-          <span>Refresh</span>
+        <button
+          type="button"
+          onClick={handleRefresh}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '7px 14px',
+            background: '#ffffff',
+            border: '1px solid #e5e7eb',
+            borderRadius: '8px',
+            fontSize: '0.825rem',
+            fontWeight: 500,
+            color: '#374151',
+            cursor: 'pointer',
+            boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
+          }}
+        >
+          <RefreshCw size={14} style={{ color: '#6b7280' }} />
+          <span>Refresh Telemetry</span>
         </button>
       </div>
 
       {error && (
-        <div role="alert" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', marginBottom: '16px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.85rem' }}>
           {error}
         </div>
       )}
       {notice && (
-        <div role="status" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', marginBottom: '16px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #d1fae5', color: '#059669', fontSize: '0.85rem' }}>
           {notice}
         </div>
       )}
 
-      <div className="responsive-stat-grid">
-        {STAT_LABELS.map(stat => (
-          <div key={stat.key} className="glass-card" style={{ padding: '20px' }}>
-            <div style={{ fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.05em', color: 'hsl(var(--text-muted))' }}>{stat.label}</div>
-            <div style={{ fontSize: '2rem', fontWeight: 700, marginTop: '8px' }}>{overview?.[stat.key] ?? 0}</div>
-          </div>
-        ))}
-      </div>
-
-      <div className="responsive-grid-1-1" style={{ marginBottom: '24px' }}>
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <GitBranch size={16} style={{ color: 'hsl(var(--primary))' }} />
-            <span>GitHub connection</span>
-          </h2>
-          {connection?.connected ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
-              {connection.avatarUrl && (
-                <img src={connection.avatarUrl} alt="" style={{ width: '36px', height: '36px', borderRadius: '50%', border: '1px solid var(--border-glass)' }} />
-              )}
-              <div style={{ flexGrow: 1 }}>
-                <div style={{ fontWeight: 600 }}>{connection.login || 'GitHub account'}</div>
-                <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>
-                  Connected {formatDate(connection.connectedAt)}
+      {/* 5 Stats Cards Row */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, 1fr)',
+        gap: '14px'
+      }}>
+        {statItems.map(stat => {
+          const Icon = stat.icon;
+          return (
+            <div
+              key={stat.label}
+              className="card"
+              style={{
+                padding: '18px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '14px'
+              }}
+            >
+              <div style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '10px',
+                background: stat.bg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0
+              }}>
+                <Icon size={18} style={{ color: stat.color }} />
+              </div>
+              <div>
+                <div style={{ fontSize: '0.72rem', textTransform: 'uppercase', letterSpacing: '0.06em', color: '#9ca3af', fontWeight: 600 }}>
+                  {stat.label}
+                </div>
+                <div style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', lineHeight: 1.1, marginTop: '2px', fontVariantNumeric: 'tabular-nums' }}>
+                  {stat.value}
                 </div>
               </div>
-              <button onClick={handleDisconnect} disabled={busy} className="btn btn-secondary" style={{ fontSize: '0.8rem', gap: '6px' }}>
-                <Unlink size={14} />
-                <span>Disconnect</span>
-              </button>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Two Column Layout: GitHub Connection + Recent Sync Activity */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1.2fr 1.8fr',
+        gap: '20px',
+        alignItems: 'start'
+      }} className="responsive-grid-1-1">
+        
+        {/* Left: GitHub Connection Card */}
+        <div className="card" style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div style={{
+              width: '40px',
+              height: '40px',
+              borderRadius: '10px',
+              background: '#f4f4f5',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0
+            }}>
+              <GitBranch size={20} style={{ color: '#111827' }} />
+            </div>
+            <div>
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+                GitHub Connection
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: 0 }}>
+                OAuth link for repository webhooks and sync.
+              </p>
+            </div>
+          </div>
+
+          {connection?.connected ? (
+            <div style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '14px',
+              padding: '16px',
+              background: '#f9fafb',
+              borderRadius: '10px',
+              border: '1px solid #f3f4f6'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                {connection.avatarUrl ? (
+                  <img src={connection.avatarUrl} alt="" style={{ width: '40px', height: '40px', borderRadius: '50%', border: '1px solid #e5e7eb' }} />
+                ) : (
+                  <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: '#111827', color: '#ffffff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
+                    GH
+                  </div>
+                )}
+                <div style={{ flexGrow: 1 }}>
+                  <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>
+                    {connection.login || 'GitHub Account'}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#6b7280', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <CheckCircle2 size={12} style={{ color: '#10b981' }} />
+                    <span>Connected {formatDate(connection.connectedAt)}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <button
+                  type="button"
+                  onClick={handleDisconnect}
+                  disabled={busy}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '7px 14px',
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    fontSize: '0.8rem',
+                    fontWeight: 500,
+                    color: '#ef4444',
+                    cursor: busy ? 'not-allowed' : 'pointer'
+                  }}
+                >
+                  <Unlink size={13} />
+                  <span>Disconnect Account</span>
+                </button>
+              </div>
             </div>
           ) : (
-            <div>
-              <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-secondary))', marginBottom: '16px' }}>
-                No GitHub account is connected. Syncing repositories and the intelligence pipeline stay off until you connect one.
+            <div style={{
+              padding: '24px 20px',
+              textAlign: 'center',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: '12px',
+              background: '#f9fafb',
+              borderRadius: '10px',
+              border: '1px dashed #e5e7eb'
+            }}>
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', margin: 0, lineHeight: 1.5, maxWidth: '280px' }}>
+                No GitHub account connected. Repository webhooks and automated drafting stay inactive until connected.
               </p>
-              <button onClick={handleConnect} disabled={busy} className="btn btn-primary" style={{ fontSize: '0.85rem', gap: '6px' }}>
-                <GitBranch size={16} />
+              <button
+                type="button"
+                onClick={handleConnect}
+                disabled={busy}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '9px 18px',
+                  background: '#18181b',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '0.85rem',
+                  fontWeight: 600,
+                  cursor: busy ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                }}
+              >
+                <GitBranch size={15} />
                 <span>{busy ? 'Opening GitHub...' : 'Connect GitHub'}</span>
               </button>
             </div>
           )}
         </div>
 
-        <div className="glass-card" style={{ padding: '24px' }}>
-          <h2 style={{ fontSize: '1.05rem', fontWeight: 600, marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <History size={16} style={{ color: 'hsl(var(--secondary))' }} />
-            <span>Recent sync activity</span>
-          </h2>
+        {/* Right: Recent Sync Activity Card */}
+        <div className="card" style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <History size={18} style={{ color: '#111827' }} />
+              <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+                Recent Sync Activity
+              </h3>
+            </div>
+
+            {repos.length > 0 && (
+              <select
+                value={logsRepo}
+                onChange={e => setLogsRepo(e.target.value)}
+                style={{
+                  height: '34px',
+                  padding: '0 12px',
+                  background: '#ffffff',
+                  border: '1px solid #e5e7eb',
+                  borderRadius: '6px',
+                  fontSize: '0.8rem',
+                  color: '#374151',
+                  outline: 'none',
+                  cursor: 'pointer'
+                }}
+              >
+                {repos.map(r => (
+                  <option key={r._id} value={r._id}>{r.fullName}</option>
+                ))}
+              </select>
+            )}
+          </div>
+
           {repos.length === 0 ? (
-            <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-muted))' }}>
-              No repositories are mirrored yet.
-            </p>
+            <div style={{ padding: '30px', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>
+              No repositories mirrored yet. Use the Repositories tab to connect your repos.
+            </div>
+          ) : logs.length === 0 ? (
+            <div style={{ padding: '30px', textAlign: 'center', color: '#9ca3af', fontSize: '0.85rem' }}>
+              No sync events recorded for this repository yet.
+            </div>
           ) : (
-            <>
-              <div style={{ marginBottom: '14px' }}>
-                <label htmlFor="dev-sync-log-repo" className="form-label" style={{ fontSize: '0.8rem' }}>Repository</label>
-                <select
-                  id="dev-sync-log-repo"
-                  className="form-input"
-                  style={{ padding: '8px 12px', fontSize: '0.85rem' }}
-                  value={logsRepo}
-                  onChange={e => setLogsRepo(e.target.value)}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {logs.map(log => (
+                <div
+                  key={log._id}
+                  style={{
+                    padding: '10px 14px',
+                    background: '#fafaf9',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '12px'
+                  }}
                 >
-                  {repos.map(r => (
-                    <option key={r._id} value={r._id}>{r.fullName}</option>
-                  ))}
-                </select>
-              </div>
-              {logs.length === 0 ? (
-                <p style={{ fontSize: '0.9rem', color: 'hsl(var(--text-muted))' }}>No sync runs recorded for this repository yet.</p>
-              ) : (
-                <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {logs.map(log => (
-                    <li key={log._id} style={{ borderBottom: '1px solid var(--border-glass)', paddingBottom: '10px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
-                        <span style={{ fontSize: '0.85rem', fontWeight: 600 }}>{log.eventType}</span>
-                        <span className="badge badge-info" style={{ fontSize: '0.65rem' }}>{log.source}</span>
-                        <span className={`badge ${log.status === 'completed' ? 'badge-success' : log.status === 'failed' ? 'badge-failed' : 'badge-pending'}`} style={{ fontSize: '0.65rem' }}>
-                          {log.status}
-                        </span>
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))', marginTop: '4px' }}>{formatDate(log.startedAt)}</div>
-                      {log.errorMessage && (
-                        <div style={{ fontSize: '0.75rem', color: '#ef4444', marginTop: '4px' }}>{log.errorMessage}</div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>
+                      {log.eventType}
+                    </span>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      padding: '2px 7px',
+                      borderRadius: '4px',
+                      background: '#f3f4f6',
+                      color: '#4b5563',
+                      textTransform: 'uppercase'
+                    }}>
+                      {log.source}
+                    </span>
+                    <span style={{
+                      fontSize: '0.68rem',
+                      fontWeight: 600,
+                      padding: '2px 7px',
+                      borderRadius: '9999px',
+                      background: log.status === 'completed' ? '#ecfdf5' : log.status === 'failed' ? '#fef2f2' : '#fef3c7',
+                      color: log.status === 'completed' ? '#059669' : log.status === 'failed' ? '#b91c1c' : '#b45309',
+                      textTransform: 'capitalize'
+                    }}>
+                      {log.status}
+                    </span>
+                  </div>
+
+                  <span style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={12} />
+                    <span>{formatDate(log.startedAt)}</span>
+                  </span>
+                </div>
+              ))}
+            </div>
           )}
         </div>
+
       </div>
+
     </div>
   );
 };
-
-export default DeveloperDashboard;

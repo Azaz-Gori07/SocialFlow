@@ -14,9 +14,13 @@ let socket: Socket | null = null;
  * Initialize socket connection with auth token.
  * Should be called after user logs in.
  */
-export function connectSocket(token: string): Socket {
+export function connectSocket(token?: string): Socket | null {
+  const currentToken = token || localStorage.getItem('access_token');
+  if (!currentToken) {
+    return null;
+  }
   if (socket) {
-    socket.auth = { token };
+    socket.auth = { token: currentToken };
     if (!socket.connected) {
       socket.connect();
     }
@@ -24,15 +28,13 @@ export function connectSocket(token: string): Socket {
   }
 
   socket = io(SOCKET_URL, {
-    auth: (cb) => {
-      cb({ token: localStorage.getItem('access_token') || token });
-    },
+    auth: { token: currentToken },
     transports: ['websocket', 'polling'],
     reconnection: true,
-    reconnectionAttempts: Infinity,
+    reconnectionAttempts: 5,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 5000,
-    timeout: 20000,
+    timeout: 10000,
   });
 
   socket.on('connect', () => {

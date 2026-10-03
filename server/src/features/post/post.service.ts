@@ -1,7 +1,9 @@
 import { PostRepository } from './post.repository';
+import { SocialRepository } from '../social/social.repository';
 import { AppError } from '../../shared/errors/appError';
-import { IPost, IPostMediaRef } from './post.model';
+import { IDelivery, IPost, IPostMediaRef } from './post.model';
 import { CreatePostInput, UpdatePostInput } from './post.validation';
+import mongoose from 'mongoose';
 
 /** Maps client-provided media URLs to post media refs (kind inferred from URL). */
 function toMediaRefs(media: string[]): IPostMediaRef[] {
@@ -26,13 +28,22 @@ export interface PaginatedPosts {
 }
 
 export class PostService {
-  constructor(private postRepository: PostRepository) {}
+  constructor(
+    private postRepository: PostRepository,
+    private socialRepository: SocialRepository = new SocialRepository()
+  ) {}
 
   /**
    * Creates and registers a new post (draft or scheduled)
    */
   async createPost(input: CreatePostInput, userId: string): Promise<IPost> {
     const effectiveStatus = input.scheduledAt ? 'scheduled' : (input.status || 'draft');
+
+    // A scheduled post needs one delivery per connected account: the scheduler
+    // claims a post, iterates its deliveries, and deriveStatus([]) settles the
+    // post as `failed`. Unscheduled posts stay inert until scheduled later.
+    const deliveries = effectiveStatus === 'scheduled' ? await this.buildDeliveries(input, userId) : [];
+
     const post = await this.postRepository.createPost({
       userId,
       platforms: input.platforms,
@@ -40,10 +51,41 @@ export class PostService {
       media: toMediaRefs(input.media || []),
       platformContent: input.platformContent,
       status: effectiveStatus,
-      scheduledAt: input.scheduledAt
+      scheduledAt: input.scheduledAt,
+      deliveries
     });
 
     return post;
+  }
+
+  /**
+   * Fans a scheduled post out into one pending delivery per connected account of
+   * every requested platform. Mirrors DraftPublisher's construction so both
+   * publishing paths produce identical delivery semantics.
+   */
+  private async buildDeliveries(input: CreatePostInput, userId: string): Promise<IDelivery[]> {
+    const accounts = (await this.socialRepository.findAccountsByUserId(userId)) as any[];
+    const wanted = new Set(input.platforms);
+    const targets = accounts.filter((a) => a.platform && wanted.has(a.platform));
+
+    if (targets.length === 0) {
+      throw AppError.badRequest(
+        `No connected account found for: ${input.platforms.join(', ')}. Connect an account before scheduling.`
+      );
+    }
+
+    const postId = new mongoose.Types.ObjectId().toString();
+    const scheduledAttempt = 1;
+
+    return targets.map((acc) => ({
+      socialAccountId: acc._id.toString(),
+      platform: acc.platform,
+      status: 'pending',
+      idempotencyKey: `post:${postId}:${acc._id.toString()}:${scheduledAttempt}`,
+      attempts: 0,
+      maxAttempts: 5,
+      deadLettered: false
+    })) as unknown as IDelivery[];
   }
 
   /**
@@ -75,6 +117,14 @@ export class PostService {
     if (input.platformContent !== undefined) updateData.platformContent = input.platformContent;
     if (input.status !== undefined) updateData.status = input.status;
     if (input.scheduledAt !== undefined) updateData.scheduledAt = input.scheduledAt;
+
+    // Setting or moving the schedule time re-arms the post for the scheduler.
+    // Without this the post keeps `draft` and the scheduler never picks it up.
+    // A publish in flight is never dragged back into the queue.
+    if (input.scheduledAt !== undefined && input.status === undefined) {
+      const stillPending = post.status === 'draft' || post.status === 'failed' || wasScheduled;
+      if (stillPending) updateData.status = 'scheduled';
+    }
 
     // Apply updates to DB
     const updatedPost = await this.postRepository.updatePost(id, updateData);

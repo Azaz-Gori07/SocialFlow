@@ -1,5 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Lightbulb, Play, Sparkles } from 'lucide-react';
+import { 
+  Lightbulb, 
+  Play, 
+  Sparkles, 
+  FolderGit2, 
+  Clock 
+} from 'lucide-react';
 import { api } from '../../services/api';
 
 interface Opportunity {
@@ -16,14 +22,6 @@ interface Opportunity {
 const STATUS_TABS = ['all', 'pending', 'generated', 'skipped', 'rejected', 'baseline'] as const;
 const SETTABLE_STATUSES = ['pending', 'skipped', 'rejected'] as const;
 
-const STATUS_BADGE: Record<Opportunity['status'], string> = {
-  baseline: 'badge-info',
-  pending: 'badge-pending',
-  generated: 'badge-success',
-  skipped: 'badge-info',
-  rejected: 'badge-failed'
-};
-
 const SETTABLE_LABELS: Record<(typeof SETTABLE_STATUSES)[number], string> = {
   pending: 'Move to pending',
   skipped: 'Skip',
@@ -33,7 +31,7 @@ const SETTABLE_LABELS: Record<(typeof SETTABLE_STATUSES)[number], string> = {
 function formatDate(value?: string): string {
   if (!value) return 'Unknown';
   const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString();
+  return Number.isNaN(d.getTime()) ? 'Unknown' : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 export const Opportunities: React.FC = () => {
@@ -54,9 +52,6 @@ export const Opportunities: React.FC = () => {
       .catch(err => console.error('Failed to load repositories for names', err));
   }, []);
 
-  // No setState before the first await: called from an effect, where
-  // react-hooks/set-state-in-effect rejects synchronous state updates.
-  // The status tabs and row actions set the loading flag themselves.
   const load = useCallback(async () => {
     try {
       const res = await api.developer.listOpportunities({
@@ -85,7 +80,7 @@ export const Opportunities: React.FC = () => {
     setLoading(true);
   };
 
-  const repoName = (id: string) => repos.find(r => r._id === id)?.fullName ?? 'Unknown repository';
+  const repoName = (id: string) => repos.find(r => r._id === id)?.fullName ?? 'Repository';
 
   const handleGenerate = async (opportunity: Opportunity) => {
     setBusyId(opportunity._id);
@@ -147,98 +142,206 @@ export const Opportunities: React.FC = () => {
   };
 
   return (
-    <div>
-      <div className="header-bar">
-        <div>
-          <h1 className="page-title">Opportunities</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', marginTop: '4px', fontSize: '0.95rem' }}>
-            Development work worth posting about. Generating drafts never publishes anything.
-          </p>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+      
+      {/* Action Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
+        <div style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+          Development work detected by AI and queued for social draft generation.
         </div>
-        <button onClick={handleAutoRun} disabled={autoRunning} className="btn btn-primary" style={{ gap: '8px', fontSize: '0.85rem' }}>
-          <Play size={16} />
-          <span>{autoRunning ? 'Running...' : 'Run auto-generation'}</span>
+
+        <button
+          type="button"
+          onClick={handleAutoRun}
+          disabled={autoRunning}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '8px 18px',
+            background: '#18181b',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '0.825rem',
+            fontWeight: 600,
+            cursor: autoRunning ? 'not-allowed' : 'pointer',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          <Play size={14} />
+          <span>{autoRunning ? 'Running Generator...' : 'Run Auto-Generation'}</span>
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
-        {STATUS_TABS.map(tab => (
-          <button
-            key={tab}
-            onClick={() => handleStatusTabChange(tab)}
-            className={status === tab ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ fontSize: '0.8rem' }}
-            aria-current={status === tab ? 'true' : undefined}
-          >
-            {tab === 'all' ? 'All' : tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
+      {/* Status Filter Tabs */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {STATUS_TABS.map(tab => {
+          const isActive = status === tab;
+          return (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => handleStatusTabChange(tab)}
+              style={{
+                padding: '6px 14px',
+                fontSize: '0.825rem',
+                fontWeight: isActive ? 600 : 500,
+                background: isActive ? '#18181b' : '#ffffff',
+                color: isActive ? '#ffffff' : '#374151',
+                border: isActive ? 'none' : '1px solid #e5e7eb',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+                transition: 'all 0.15s ease'
+              }}
+            >
+              {tab === 'all' ? 'All Opportunities' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+            </button>
+          );
+        })}
       </div>
 
       {error && (
-        <div role="alert" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#ef4444', marginBottom: '16px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: '0.85rem' }}>
           {error}
         </div>
       )}
       {notice && (
-        <div role="status" style={{ padding: '12px 16px', borderRadius: 'var(--radius-md)', background: 'rgba(16, 185, 129, 0.1)', border: '1px solid rgba(16, 185, 129, 0.3)', color: '#10b981', marginBottom: '16px', fontSize: '0.9rem' }}>
+        <div style={{ padding: '12px 16px', borderRadius: '10px', background: '#ecfdf5', border: '1px solid #d1fae5', color: '#059669', fontSize: '0.85rem' }}>
           {notice}
         </div>
       )}
 
       {loading ? (
-        <div style={{ padding: '60px', textAlign: 'center', color: 'hsl(var(--text-muted))' }}>Loading opportunities...</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', color: '#9ca3af', fontSize: '0.875rem' }}>
+          Loading opportunities...
+        </div>
       ) : items.length === 0 ? (
-        <div className="glass-card" style={{ padding: '60px', textAlign: 'center' }}>
-          <Lightbulb size={40} style={{ color: 'hsl(var(--text-muted) / 0.4)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '1.1rem', color: 'hsl(var(--text-secondary))', marginBottom: '8px' }}>No opportunities queued</h3>
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))' }}>
-            Sync a repository to detect post-worthy work, then come back here.
+        <div className="card" style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+          <div style={{ width: '60px', height: '60px', borderRadius: '50%', background: '#fef3c7', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '4px' }}>
+            <Lightbulb size={28} style={{ color: '#b45309' }} />
+          </div>
+          <h3 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+            No opportunities queued
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '380px', lineHeight: 1.5, margin: 0 }}>
+            Sync a repository from the Repositories tab to detect post-worthy achievements and milestones.
           </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
           {items.map(opportunity => (
-            <div key={opportunity._id} className="glass-card" style={{ padding: '18px 20px' }}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', flexWrap: 'wrap' }}>
-                <div style={{ flexGrow: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 600, color: 'white' }}>{opportunity.title}</span>
-                    <span className={`badge ${STATUS_BADGE[opportunity.status]}`} style={{ fontSize: '0.65rem' }}>{opportunity.status}</span>
-                    {opportunity.metadata?.importance && (
-                      <span className="badge badge-info" style={{ fontSize: '0.65rem' }}>{opportunity.metadata.importance}</span>
-                    )}
-                  </div>
-                  {opportunity.summary && (
-                    <div style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '4px' }}>{opportunity.summary}</div>
+            <div
+              key={opportunity._id}
+              className="card"
+              style={{
+                padding: '20px 24px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'space-between',
+                gap: '16px',
+                flexWrap: 'wrap'
+              }}
+            >
+              <div style={{ flexGrow: 1, minWidth: '240px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827' }}>
+                    {opportunity.title}
+                  </span>
+
+                  <span style={{
+                    fontSize: '0.7rem',
+                    fontWeight: 600,
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    background: opportunity.status === 'generated' ? '#ecfdf5' : opportunity.status === 'pending' ? '#fef3c7' : '#f3f4f6',
+                    color: opportunity.status === 'generated' ? '#059669' : opportunity.status === 'pending' ? '#b45309' : '#6b7280',
+                    textTransform: 'capitalize'
+                  }}>
+                    {opportunity.status}
+                  </span>
+
+                  {opportunity.metadata?.importance && (
+                    <span style={{
+                      fontSize: '0.7rem',
+                      fontWeight: 600,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      background: '#eff6ff',
+                      color: '#2563eb'
+                    }}>
+                      {opportunity.metadata.importance}
+                    </span>
                   )}
-                  <div style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
-                    {repoName(opportunity.repositoryId)} | {opportunity.sourceType} | {formatDate(opportunity.createdAt)}
-                  </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <button
-                    onClick={() => handleGenerate(opportunity)}
-                    disabled={busyId === opportunity._id}
-                    className="btn btn-primary"
-                    style={{ fontSize: '0.8rem', gap: '6px' }}
-                  >
-                    <Sparkles size={14} />
-                    <span>{busyId === opportunity._id ? 'Generating...' : 'Generate drafts'}</span>
-                  </button>
-                  {SETTABLE_STATUSES.map(next => (
-                    <button
-                      key={next}
-                      onClick={() => handleStatusChange(opportunity, next)}
-                      disabled={busyId === opportunity._id || opportunity.status === next}
-                      className="btn btn-secondary"
-                      style={{ fontSize: '0.8rem' }}
-                    >
-                      {SETTABLE_LABELS[next]}
-                    </button>
-                  ))}
+                {opportunity.summary && (
+                  <p style={{ fontSize: '0.85rem', color: '#4b5563', margin: '2px 0 8px 0', lineHeight: 1.5 }}>
+                    {opportunity.summary}
+                  </p>
+                )}
+
+                <div style={{ fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <FolderGit2 size={12} />
+                    <span>{repoName(opportunity.repositoryId)}</span>
+                  </span>
+                  <span>•</span>
+                  <span>Source: {opportunity.sourceType}</span>
+                  <span>•</span>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                    <Clock size={12} />
+                    <span>{formatDate(opportunity.createdAt)}</span>
+                  </span>
                 </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => handleGenerate(opportunity)}
+                  disabled={busyId === opportunity._id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '8px 16px',
+                    background: '#18181b',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '0.825rem',
+                    fontWeight: 600,
+                    cursor: busyId === opportunity._id ? 'not-allowed' : 'pointer',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                  }}
+                >
+                  <Sparkles size={14} />
+                  <span>{busyId === opportunity._id ? 'Generating...' : 'Generate Drafts'}</span>
+                </button>
+
+                {SETTABLE_STATUSES.map(next => (
+                  <button
+                    key={next}
+                    type="button"
+                    onClick={() => handleStatusChange(opportunity, next)}
+                    disabled={busyId === opportunity._id || opportunity.status === next}
+                    style={{
+                      padding: '7px 12px',
+                      background: '#ffffff',
+                      border: '1px solid #e5e7eb',
+                      borderRadius: '8px',
+                      fontSize: '0.8rem',
+                      fontWeight: 500,
+                      color: opportunity.status === next ? '#9ca3af' : '#374151',
+                      cursor: busyId === opportunity._id || opportunity.status === next ? 'not-allowed' : 'pointer'
+                    }}
+                  >
+                    {SETTABLE_LABELS[next]}
+                  </button>
+                ))}
               </div>
             </div>
           ))}
@@ -246,10 +349,11 @@ export const Opportunities: React.FC = () => {
       )}
 
       {!loading && total > items.length && (
-        <p style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', marginTop: '16px' }}>
+        <p style={{ fontSize: '0.8rem', color: '#6b7280', marginTop: '8px', textAlign: 'center' }}>
           Showing the first {items.length} of {total} opportunities.
         </p>
       )}
+
     </div>
   );
 };

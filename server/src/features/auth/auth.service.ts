@@ -37,7 +37,7 @@ export class AuthService {
 
     const existing = await this.userRepository.findByEmail(input.email);
     if (existing) {
-      throw AppError.conflict('User with this email already exists');
+      throw AppError.conflict('This email is already registered. Please sign in instead.');
     }
 
     const salt = await bcrypt.genSalt(10);
@@ -113,7 +113,7 @@ export class AuthService {
 
     const user = await this.userRepository.findByEmail(input.email);
     if (!user) {
-      throw AppError.unauthorized('Invalid email or password');
+      throw AppError.notFound('No account found with this email. Please sign up first.');
     }
     if (!user.passwordHash) {
       throw AppError.unauthorized('This account uses OAuth — sign in with Google or GitHub');
@@ -121,7 +121,7 @@ export class AuthService {
 
     const isMatch = await bcrypt.compare(input.password, user.passwordHash);
     if (!isMatch) {
-      throw AppError.unauthorized('Invalid email or password');
+      throw AppError.unauthorized('Incorrect password. Please try again or reset it.');
     }
 
     if (!user.emailVerified) {
@@ -319,7 +319,13 @@ export class AuthService {
 
   private async generateTokens(payload: TokenPayload, rotatedFrom?: string) {
     const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: '30d' });
+    // jti: JWT iat has 1s granularity, so same-payload tokens minted in the
+    // same second are byte-identical → duplicate tokenHash → E11000 on the
+    // unique refreshtokens index.
+    const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, {
+      expiresIn: '30d',
+      jwtid: randomBytes(16).toString('hex'),
+    });
 
     await db.refreshTokens.create({
       userId: payload.id,

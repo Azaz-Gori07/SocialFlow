@@ -1,9 +1,9 @@
 import { z } from 'zod';
 
 export const platformEnum = z.enum(
-  ['twitter', 'x', 'instagram', 'facebook', 'linkedin', 'youtube', 'google'],
+  ['twitter', 'x', 'instagram', 'facebook', 'linkedin', 'youtube', 'google', 'threads'],
   {
-    message: "Platform must be one of: 'twitter', 'x', 'instagram', 'facebook', 'linkedin', 'youtube', 'google'",
+    message: "Platform must be one of: 'twitter', 'x', 'instagram', 'facebook', 'linkedin', 'youtube', 'google', 'threads'",
   }
 );
 

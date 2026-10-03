@@ -329,7 +329,65 @@ export class SocialService {
     return { account, accessToken, refreshToken, expiresAt };
   }
 
-  // ── Helpers ─────────────────────────────────────────────────────────────────
+  /**
+   * Refreshes an account's provider token after the provider rejected the current
+   * one, and stores the new encrypted token. Used by the delivery engine so an
+   * expired access token costs one extra provider call instead of killing the
+   * delivery and forcing a manual reconnect.
+   *
+   * Returns the new access token, or null when the account has no refresh
+   * capability — in which case it genuinely requires reconnecting.
+   */
+  async refreshAccountTokenForDelivery(accountId: string, userId: string): Promise<string | null> {
+    const account = await this.socialRepository.findAccountById(accountId);
+    if (!account) throw AppError.notFound('Social account not found');
+    if (account.userId !== userId) {
+      throw AppError.forbidden('Social account does not belong to this user');
+    }
+
+    const provider = ProviderFactory.getConfiguredProvider(account.platform);
+
+    // The OAuth connection owns the refresh token; accounts inherit from it.
+    let refreshToken: string | undefined;
+    if (account.encryptedRefreshToken) {
+      refreshToken = EncryptionAdapter.decrypt(account.encryptedRefreshToken);
+    } else if (account.connectionId) {
+      const connection = await this.connectionRepository.findById(account.connectionId);
+      if (connection?.encryptedRefreshToken) {
+        refreshToken = EncryptionAdapter.decrypt(connection.encryptedRefreshToken);
+      }
+    }
+
+    if (!refreshToken) return null;
+
+    const tokens = await provider.refreshAccessToken(refreshToken);
+    if (!tokens.accessToken) return null;
+
+    const encryptedAccessToken = EncryptionAdapter.encrypt(tokens.accessToken);
+    const encryptedRefreshToken = tokens.refreshToken
+      ? EncryptionAdapter.encrypt(tokens.refreshToken)
+      : undefined;
+    const expiresAt = tokens.expiresAt;
+
+    const accountUpdate: Record<string, unknown> = {
+      encryptedAccessToken,
+      status: 'active'
+    };
+    if (encryptedRefreshToken) accountUpdate.encryptedRefreshToken = encryptedRefreshToken;
+    if (expiresAt) accountUpdate.accessTokenExpiresAt = expiresAt;
+    await this.socialRepository.updateAccount(accountId, accountUpdate as any);
+
+    if (account.connectionId) {
+      const connectionUpdate: Record<string, unknown> = { encryptedAccessToken };
+      if (encryptedRefreshToken) connectionUpdate.encryptedRefreshToken = encryptedRefreshToken;
+      if (expiresAt) connectionUpdate.accessTokenExpiresAt = expiresAt;
+      await this.connectionRepository.setTokens(account.connectionId, connectionUpdate as any);
+    }
+
+    return tokens.accessToken;
+  }
+
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   private async requireConnection(userId: string, platform: string): Promise<IOAuthConnection> {
     const connections = await this.connectionRepository.findByUserIdPlatform(userId, platform);

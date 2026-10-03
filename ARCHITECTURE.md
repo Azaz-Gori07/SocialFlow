@@ -69,7 +69,7 @@ All three real triggers funnel through the single function `syncAndProcess` in `
 | Responsibility | Owning system |
 |---|---|
 | Workspaces, users, auth, RBAC | SocialFlow |
-| Social account connections (X, LinkedIn, Meta, YouTube, TikTok) | SocialFlow |
+| Social account connections (X, LinkedIn, Meta, YouTube, Threads) | SocialFlow |
 | Normal (non-developer) content creation | SocialFlow |
 | Draft persistence, draft library, draft editing | SocialFlow (fed by the developer feature via `sourceType: 'developer_activity'`) |
 | Review and approval | SocialFlow |

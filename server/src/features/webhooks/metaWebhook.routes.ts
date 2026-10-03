@@ -16,7 +16,13 @@ router.get('/meta', async (req: Request, res: Response) => {
 
 // POST /api/webhooks/meta - signed event delivery (raw body required for HMAC)
 router.post('/meta', async (req: Request, res: Response) => {
-  const rawBody = Buffer.from((req as any).rawBody ?? '', 'utf8');
+  // `rawBody` is captured before the JSON parser runs. If the parser got there
+  // first it is an object, which cannot be verified — coerce rather than throw,
+  // so a malformed delivery can never take the process down.
+  const captured = (req as any).rawBody;
+  const rawBody = Buffer.isBuffer(captured)
+    ? captured
+    : Buffer.from(typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {}), 'utf8');
   const signature = req.headers['x-hub-signature-256'] as string | undefined;
 
   if (!MetaWebhookService.verifySignature(rawBody, signature)) {

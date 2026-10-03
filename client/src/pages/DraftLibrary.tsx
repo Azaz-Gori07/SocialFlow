@@ -17,10 +17,13 @@ import {
   RotateCcw,
   RefreshCw,
   ExternalLink,
-  History
+  History,
+  ChevronDown,
+  ShieldCheck
 } from 'lucide-react';
+import { PlatformBadge } from '../components/SocialIcons';
 
-type DraftPlatform = 'instagram' | 'facebook' | 'linkedin' | 'twitter' | 'youtube';
+type DraftPlatform = 'instagram' | 'facebook' | 'linkedin' | 'twitter' | 'youtube' | 'threads';
 type DraftStatus = 'draft' | 'ready' | 'publishing' | 'archived' | 'published' | 'failed';
 
 interface MediaRef {
@@ -61,15 +64,21 @@ const PLATFORMS: { key: DraftPlatform; label: string; color: string }[] = [
   { key: 'facebook', label: 'Facebook', color: '#1877F2' },
   { key: 'linkedin', label: 'LinkedIn', color: '#0077B5' },
   { key: 'twitter', label: 'X (Twitter)', color: '#1DA1F2' },
-  { key: 'youtube', label: 'YouTube', color: '#FF0000' }
+  { key: 'youtube', label: 'YouTube', color: '#FF0000' },
+  { key: 'threads', label: 'Threads', color: '#000000' }
+];
+
+const STATUS_OPTIONS: { id: DraftStatus | ''; label: string; color?: string }[] = [
+  { id: '', label: 'All Statuses' },
+  { id: 'draft', label: 'Draft', color: '#3b82f6' },
+  { id: 'ready', label: 'Ready', color: '#8b5cf6' },
+  { id: 'publishing', label: 'Publishing', color: '#f59e0b' },
+  { id: 'published', label: 'Published', color: '#10b981' },
+  { id: 'archived', label: 'Archived', color: '#6b7280' },
+  { id: 'failed', label: 'Failed', color: '#ef4444' }
 ];
 
 const CONTENT_TYPES = ['post', 'story', 'reel', 'video', 'carousel', 'thread'] as const;
-
-const getPlatformColor = (platform: DraftPlatform): string => {
-  const p = PLATFORMS.find(p => p.key === platform);
-  return p?.color || 'hsl(var(--text-secondary))';
-};
 
 const getMediaIcon = (type: string) => {
   switch (type) {
@@ -96,6 +105,7 @@ export const DraftLibrary: React.FC = () => {
   const [publishingIds, setPublishingIds] = useState<Set<string>>(new Set());
   const [selectedPlatform, setSelectedPlatform] = useState<DraftPlatform | ''>('');
   const [selectedStatus, setSelectedStatus] = useState<DraftStatus | ''>('');
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingDraft, setEditingDraft] = useState<Draft | null>(null);
@@ -316,18 +326,55 @@ export const DraftLibrary: React.FC = () => {
   };
 
   return (
-    <div className="animate-fade-in" style={{ position: 'relative' }}>
-      <div className="glow-blur" />
-
-      <div className="header-bar">
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      
+      {/* 1. Header Banner */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
         <div>
-          <h1 className="page-title">Draft Library</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', marginTop: '4px', fontSize: '0.95rem' }}>
+          <div style={{
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            color: '#6b7280',
+            textTransform: 'uppercase',
+            marginBottom: '3px'
+          }}>
+            DRAFTS
+          </div>
+          <h1 style={{
+            fontFamily: "Georgia, 'Times New Roman', serif",
+            fontSize: '2.35rem',
+            fontWeight: 700,
+            color: '#111827',
+            letterSpacing: '-0.02em',
+            marginBottom: '4px',
+            lineHeight: 1.15
+          }}>
+            Draft Library
+          </h1>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
             Platform-isolated draft queues. Publish directly or queue for background processing.
           </p>
         </div>
-        <button onClick={() => setShowCreateModal(true)} className="btn btn-primary" style={{ gap: '6px', whiteSpace: 'nowrap' }}>
-          <Plus size={16} />
+
+        <button 
+          onClick={() => setShowCreateModal(true)} 
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '7px',
+            padding: '9px 18px',
+            background: '#18181b',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+          }}
+        >
+          <Plus size={15} />
           <span>New Draft</span>
         </button>
       </div>
@@ -335,10 +382,10 @@ export const DraftLibrary: React.FC = () => {
       {message && (
         <div style={{
           padding: '12px 16px', borderRadius: 'var(--radius-md)',
-          background: message.type === 'success' ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
-          border: `1px solid ${message.type === 'success' ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)'}`,
-          color: message.type === 'success' ? '#10b981' : '#ef4444',
-          marginBottom: '16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.9rem'
+          background: message.type === 'success' ? '#ecfdf5' : '#fef2f2',
+          border: `1px solid ${message.type === 'success' ? '#a7f3d0' : '#fecaca'}`,
+          color: message.type === 'success' ? '#10b981' : '#b91c1c',
+          display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.875rem'
         }}>
           <span>{message.text}</span>
           <button onClick={() => setMessage(null)} style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: '2px' }}>
@@ -347,160 +394,352 @@ export const DraftLibrary: React.FC = () => {
         </div>
       )}
 
-      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', flexWrap: 'wrap', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))', fontWeight: 600 }}>Filter:</span>
-        <button onClick={() => { setSelectedPlatform(''); setSelectedStatus(''); }}
-          className="btn btn-secondary"
-          style={{ padding: '6px 12px', fontSize: '0.8rem', background: !selectedPlatform && !selectedStatus ? 'hsl(var(--primary) / 0.15)' : undefined, color: !selectedPlatform && !selectedStatus ? 'white' : undefined }}>
+      {/* 2. Filter Bar */}
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: '0.85rem', color: '#374151', fontWeight: 500, marginRight: '4px' }}>Filter:</span>
+        
+        <button 
+          onClick={() => { setSelectedPlatform(''); setSelectedStatus(''); }}
+          style={{
+            padding: '7px 16px',
+            fontSize: '0.825rem',
+            fontWeight: !selectedPlatform && !selectedStatus ? 600 : 500,
+            background: !selectedPlatform && !selectedStatus ? '#e5e1dc' : '#ffffff',
+            color: '#111827',
+            border: !selectedPlatform && !selectedStatus ? 'none' : '1px solid #e5e7eb',
+            borderRadius: '8px',
+            cursor: 'pointer',
+            transition: 'all 0.15s ease'
+          }}
+        >
           All Drafts
         </button>
-        {PLATFORMS.map(p => (
-          <button key={p.key} onClick={() => setSelectedPlatform(selectedPlatform === p.key ? '' : p.key)}
-            className="btn btn-secondary" style={{ padding: '6px 12px', fontSize: '0.8rem', background: selectedPlatform === p.key ? `${p.color}20` : undefined, color: selectedPlatform === p.key ? p.color : undefined, borderColor: selectedPlatform === p.key ? p.color : undefined }}>
-            {p.label}
-          </button>
-        ))}
-        <div style={{ flexGrow: 1 }} />
-        <select value={selectedStatus} onChange={e => setSelectedStatus(e.target.value as DraftStatus | '')}
-          className="form-input" style={{ width: 'auto', padding: '6px 12px', fontSize: '0.8rem' }}>
-          <option value="">All Statuses</option>
-          <option value="draft">Draft</option>
-          <option value="ready">Ready</option>
-          <option value="publishing">Publishing</option>
-          <option value="archived">Archived</option>
-          <option value="published">Published</option>
-          <option value="failed">Failed</option>
-        </select>
-      </div>
 
-      {loading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px' }}>
-          <div style={{ width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.05)', borderTopColor: 'hsl(var(--primary))', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-        </div>
-      ) : drafts.length === 0 ? (
-        <div className="glass-card" style={{ padding: '60px', textAlign: 'center' }}>
-          <FileText size={40} style={{ color: 'hsl(var(--text-muted) / 0.4)', marginBottom: '12px' }} />
-          <h3 style={{ fontSize: '1.1rem', color: 'hsl(var(--text-secondary))', marginBottom: '8px' }}>No Drafts Found</h3>
-          <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))' }}>
-            {selectedPlatform
-              ? `No ${PLATFORMS.find(p => p.key === selectedPlatform)?.label} drafts ${selectedStatus ? `with status "${selectedStatus}"` : ''}.`
-              : 'Create your first draft to get started.'}
-          </p>
-          {!selectedPlatform && (
-            <button onClick={() => setShowCreateModal(true)} className="btn btn-primary" style={{ marginTop: '16px', gap: '6px' }}>
-              <Plus size={16} />
-              <span>Create Draft</span>
+        {PLATFORMS.map(p => {
+          const isSelected = selectedPlatform === p.key;
+          return (
+            <button 
+              key={p.key} 
+              onClick={() => setSelectedPlatform(isSelected ? '' : p.key)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '6px 14px',
+                fontSize: '0.825rem',
+                fontWeight: isSelected ? 600 : 500,
+                background: isSelected ? '#e5e1dc' : '#ffffff',
+                color: '#374151',
+                border: isSelected ? 'none' : '1px solid #e5e7eb',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
+              }}
+            >
+              <PlatformBadge platform={p.key} size={16} iconSize={11} />
+              <span>{p.label}</span>
             </button>
+          );
+        })}
+
+        <div style={{ flexGrow: 1 }} />
+
+        {/* Status Dropdown on the right */}
+        <div style={{ position: 'relative' }}>
+          <button
+            type="button"
+            onClick={() => setShowStatusDropdown(!showStatusDropdown)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              height: '38px',
+              padding: '0 14px',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: '9px',
+              color: '#374151',
+              fontSize: '0.825rem',
+              fontWeight: 500,
+              cursor: 'pointer',
+              boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseEnter={e => (e.currentTarget.style.borderColor = '#d1d5db')}
+            onMouseLeave={e => (e.currentTarget.style.borderColor = '#e5e7eb')}
+          >
+            {selectedStatus ? (
+              <span style={{
+                width: '7px',
+                height: '7px',
+                borderRadius: '50%',
+                background: STATUS_OPTIONS.find(s => s.id === selectedStatus)?.color || '#10b981'
+              }} />
+            ) : (
+              <ShieldCheck size={15} style={{ color: '#6b7280' }} />
+            )}
+            <span>{STATUS_OPTIONS.find(s => s.id === selectedStatus)?.label || 'All Statuses'}</span>
+            <ChevronDown size={14} style={{ color: '#9ca3af', transform: showStatusDropdown ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s ease' }} />
+          </button>
+
+          {showStatusDropdown && (
+            <div style={{
+              position: 'absolute',
+              top: 'calc(100% + 6px)',
+              right: 0,
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: '10px',
+              boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.08), 0 8px 10px -6px rgba(0, 0, 0, 0.04)',
+              zIndex: 40,
+              minWidth: '170px',
+              padding: '5px'
+            }}>
+              {STATUS_OPTIONS.map(opt => {
+                const isSelected = selectedStatus === opt.id;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setSelectedStatus(opt.id);
+                      setShowStatusDropdown(false);
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 12px',
+                      background: isSelected ? '#f3f4f6' : 'transparent',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: isSelected ? '#111827' : '#4b5563',
+                      fontSize: '0.825rem',
+                      fontWeight: isSelected ? 600 : 500,
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'background 0.15s ease'
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) e.currentTarget.style.background = '#f9fafb';
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    {opt.color ? (
+                      <span style={{
+                        width: '7px',
+                        height: '7px',
+                        borderRadius: '50%',
+                        background: opt.color,
+                        flexShrink: 0
+                      }} />
+                    ) : (
+                      <span style={{ width: '7px', height: '7px' }} />
+                    )}
+                    <span style={{ flexGrow: 1 }}>{opt.label}</span>
+                    {isSelected && <Check size={14} style={{ color: '#111827' }} />}
+                  </button>
+                );
+              })}
+            </div>
           )}
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {drafts.map(draft => (
-            <div key={draft._id} className="glass-card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'flex-start', gap: '16px' }}>
-              <div style={{ width: '40px', height: '40px', borderRadius: 'var(--radius-md)', background: `${getPlatformColor(draft.platform)}15`, border: `1px solid ${getPlatformColor(draft.platform)}30`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: '0.7rem', color: getPlatformColor(draft.platform), flexShrink: 0 }}>
-                {draft.platform === 'twitter' ? 'X' : draft.platform.charAt(0).toUpperCase() + draft.platform.slice(1, 2)}
-              </div>
+      </div>
 
-              <div style={{ flexGrow: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: '0.8rem', fontWeight: 600, textTransform: 'capitalize', color: 'white' }}>{draft.contentType}</span>
-                  {getStatusBadge(draft.status)}
-                  {draft.retryCount > 0 && (
-                    <span style={{ fontSize: '0.7rem', color: 'hsl(var(--text-muted))', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <AlertCircle size={11} /> Retry #{draft.retryCount}
-                    </span>
-                  )}
-                </div>
-
-                {draft.caption && (
-                  <p style={{ fontSize: '0.85rem', color: 'hsl(var(--text-secondary))', marginBottom: '6px', lineHeight: '1.4', maxHeight: '2.8em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    {draft.caption}
-                  </p>
-                )}
-
-                {draft.media.length > 0 && (
-                  <div style={{ display: 'flex', gap: '6px', marginBottom: '6px', flexWrap: 'wrap' }}>
-                    {draft.media.map((m, i) => (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px', fontSize: '0.7rem', color: 'hsl(var(--text-muted))' }}>
-                        {getMediaIcon(m.type)}
-                        <span style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ display: 'flex', gap: '16px', fontSize: '0.7rem', color: 'hsl(var(--text-muted))', flexWrap: 'wrap' }}>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                    <Clock size={11} /> Created {formatDate(draft.createdAt)}
-                  </span>
-                  {draft.publishedAt && <span>Published {formatDate(draft.publishedAt)}</span>}
-                  {draft.lastAttemptAt && <span>Last attempt {formatDate(draft.lastAttemptAt)}</span>}
-                  {draft.platformResponse?.postId && (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
-                      <ExternalLink size={11} /> Post: {draft.platformResponse.postId.substring(0, 12)}...
-                    </span>
-                  )}
-                  {draft.errorMessage && <span style={{ color: '#ef4444' }}>Error: {draft.errorMessage}</span>}
-                  {draft.failedReason && !draft.errorMessage && <span style={{ color: '#ef4444' }}>Reason: {draft.failedReason}</span>}
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
-                {/* Phase 2: Publish actions */}
-                {(draft.status === 'draft' || draft.status === 'failed') && (
-                  <>
-                    <button onClick={() => handleQueue(draft)} className="btn btn-secondary" style={{ padding: '6px', fontSize: '0.75rem' }} title="Queue for Publishing">
-                      <RefreshCw size={14} />
-                    </button>
-                    <button onClick={() => handlePublish(draft)} className="btn btn-primary" style={{ padding: '6px', fontSize: '0.75rem', background: draft.status === 'failed' ? '#ef444420' : undefined, borderColor: draft.status === 'failed' ? '#ef4444' : undefined, color: draft.status === 'failed' ? '#ef4444' : undefined }}
-                      disabled={publishingIds.has(draft._id)} title={draft.status === 'failed' ? 'Retry Publish' : 'Publish Now'}>
-                      {publishingIds.has(draft._id) ? <RotateCcw size={14} className="animate-spin" /> : <Send size={14} />}
-                    </button>
-                  </>
-                )}
-                {draft.status === 'ready' && (
-                  <button onClick={() => handlePublish(draft)} className="btn btn-primary" style={{ padding: '6px', fontSize: '0.75rem' }}
-                    disabled={publishingIds.has(draft._id)} title="Publish Now">
-                    {publishingIds.has(draft._id) ? <RotateCcw size={14} className="animate-spin" /> : <Send size={14} />}
-                  </button>
-                )}
-                {draft.status === 'failed' && draft.retryCount < 3 && (
-                  <button onClick={() => handleRetry(draft)} className="btn btn-secondary" style={{ padding: '6px', fontSize: '0.75rem', color: '#f59e0b' }}
-                    disabled={publishingIds.has(draft._id)} title="Retry">
-                    <RefreshCw size={14} />
-                  </button>
-                )}
-                {draft.status !== 'published' && draft.status !== 'publishing' && (
-                  <button onClick={() => openEditModal(draft)} className="btn btn-secondary" style={{ padding: '6px', fontSize: '0.75rem' }} title="Edit Draft">
-                    <Edit3 size={14} />
-                  </button>
-                )}
-                {draft.status !== 'archived' && draft.status !== 'published' && (
-                  <button onClick={() => handleArchive(draft)} className="btn btn-secondary" style={{ padding: '6px', fontSize: '0.75rem' }} title="Archive Draft">
-                    <Archive size={14} />
-                  </button>
-                )}
-                <button onClick={() => openHistoryModal(draft)} className="btn btn-secondary" style={{ padding: '6px', fontSize: '0.75rem' }} title="Publish History">
-                  <History size={14} />
-                </button>
-                <button onClick={() => handleDelete(draft)} className="btn btn-secondary" style={{ padding: '6px', fontSize: '0.75rem', color: '#ef4444' }} title="Delete Draft">
-                  <Trash2 size={14} />
-                </button>
-              </div>
+      {/* 3. Main Card with Empty State or Populated List */}
+      <div className="card" style={{ padding: '28px', minHeight: '520px', display: 'flex', flexDirection: 'column' }}>
+        {loading ? (
+          <div style={{ display: 'flex', flexGrow: 1, alignItems: 'center', justifyContent: 'center', padding: '60px', color: '#9ca3af', fontSize: '0.875rem' }}>
+            Loading draft library...
+          </div>
+        ) : drafts.length === 0 ? (
+          /* Exact 100% Empty State matching the screenshot */
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexGrow: 1,
+            padding: '60px 20px 80px'
+          }}>
+            {/* Centered Soft Circle with FileText icon */}
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              background: '#f5efe6',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: '16px'
+            }}>
+              <FileText size={34} style={{ color: '#8c7355', strokeWidth: 1.8 }} />
             </div>
-          ))}
 
-          <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '16px' }}>
-            <button onClick={() => { setPage(p => Math.max(0, p - 1)); fetchDrafts(); }} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} disabled={page === 0}>
-              Previous
-            </button>
-            <span style={{ fontSize: '0.8rem', color: 'hsl(var(--text-muted))' }}>Page {page + 1} · {total} total</span>
-            <button onClick={() => { setPage(p => p + 1); fetchDrafts(); }} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} disabled={!hasMore}>
-              Next
+            <h3 style={{
+              fontFamily: "Georgia, 'Times New Roman', serif",
+              fontSize: '1.65rem',
+              fontWeight: 600,
+              color: '#111827',
+              marginBottom: '6px'
+            }}>
+              No drafts yet
+            </h3>
+
+            <p style={{
+              fontSize: '0.875rem',
+              color: '#6b7280',
+              textAlign: 'center',
+              maxWidth: '440px',
+              lineHeight: 1.6,
+              marginBottom: '22px'
+            }}>
+              Create your first draft to start planning, refining and publishing content across your connected channels.
+            </p>
+
+            <button
+              type="button"
+              onClick={() => setShowCreateModal(true)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '7px',
+                padding: '10px 22px',
+                background: '#18181b',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.85rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+              }}
+            >
+              <Plus size={15} />
+              <span>Create Draft</span>
             </button>
           </div>
-        </div>
-      )}
+        ) : (
+          /* Populated Drafts Listing */
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+            {drafts.map(draft => (
+              <div key={draft._id} style={{
+                padding: '18px 22px',
+                background: '#fafaf9',
+                border: '1px solid #e5e7eb',
+                borderRadius: '12px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '16px'
+              }}>
+                <PlatformBadge platform={draft.platform} size={36} iconSize={18} />
+
+                <div style={{ flexGrow: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '6px', flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, textTransform: 'capitalize', color: '#111827' }}>
+                      {draft.contentType}
+                    </span>
+                    {getStatusBadge(draft.status)}
+                    {draft.retryCount > 0 && (
+                      <span style={{ fontSize: '0.72rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <AlertCircle size={11} /> Retry #{draft.retryCount}
+                      </span>
+                    )}
+                  </div>
+
+                  {draft.caption && (
+                    <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '8px', lineHeight: 1.5, maxHeight: '2.8em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {draft.caption}
+                    </p>
+                  )}
+
+                  {draft.media.length > 0 && (
+                    <div style={{ display: 'flex', gap: '6px', marginBottom: '8px', flexWrap: 'wrap' }}>
+                      {draft.media.map((m, i) => (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '4px', padding: '3px 8px', background: '#f3f4f6', borderRadius: '4px', fontSize: '0.7rem', color: '#4b5563' }}>
+                          {getMediaIcon(m.type)}
+                          <span style={{ maxWidth: '100px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div style={{ display: 'flex', gap: '16px', fontSize: '0.72rem', color: '#9ca3af', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Clock size={12} /> Created {formatDate(draft.createdAt)}
+                    </span>
+                    {draft.publishedAt && <span>Published {formatDate(draft.publishedAt)}</span>}
+                    {draft.lastAttemptAt && <span>Last attempt {formatDate(draft.lastAttemptAt)}</span>}
+                    {draft.platformResponse?.postId && (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <ExternalLink size={12} /> Post ID: {draft.platformResponse.postId.substring(0, 12)}...
+                      </span>
+                    )}
+                    {draft.errorMessage && <span style={{ color: '#ef4444' }}>Error: {draft.errorMessage}</span>}
+                    {draft.failedReason && !draft.errorMessage && <span style={{ color: '#ef4444' }}>Reason: {draft.failedReason}</span>}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '6px', flexShrink: 0, flexWrap: 'wrap' }}>
+                  {(draft.status === 'draft' || draft.status === 'failed') && (
+                    <>
+                      <button onClick={() => handleQueue(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }} title="Queue for Publishing">
+                        <RefreshCw size={14} />
+                      </button>
+                      <button onClick={() => handlePublish(draft)} className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                        disabled={publishingIds.has(draft._id)} title="Publish Now">
+                        {publishingIds.has(draft._id) ? <RotateCcw size={14} className="animate-spin" /> : <Send size={14} />}
+                      </button>
+                    </>
+                  )}
+                  {draft.status === 'failed' && (
+                    <button onClick={() => handleRetry(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#f59e0b' }}
+                      disabled={publishingIds.has(draft._id)} title="Retry Draft">
+                      <RefreshCw size={14} />
+                    </button>
+                  )}
+                  {draft.status === 'ready' && (
+                    <button onClick={() => handlePublish(draft)} className="btn btn-primary" style={{ padding: '6px 10px', fontSize: '0.75rem' }}
+                      disabled={publishingIds.has(draft._id)} title="Publish Now">
+                      {publishingIds.has(draft._id) ? <RotateCcw size={14} className="animate-spin" /> : <Send size={14} />}
+                    </button>
+                  )}
+                  {draft.status !== 'published' && draft.status !== 'publishing' && (
+                    <button onClick={() => openEditModal(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }} title="Edit Draft">
+                      <Edit3 size={14} />
+                    </button>
+                  )}
+                  {draft.status !== 'archived' && draft.status !== 'published' && (
+                    <button onClick={() => handleArchive(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }} title="Archive Draft">
+                      <Archive size={14} />
+                    </button>
+                  )}
+                  <button onClick={() => openHistoryModal(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }} title="Publish History">
+                    <History size={14} />
+                  </button>
+                  <button onClick={() => handleDelete(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#ef4444' }} title="Delete Draft">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '12px', padding: '16px' }}>
+              <button onClick={() => { setPage(p => Math.max(0, p - 1)); fetchDrafts(); }} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} disabled={page === 0}>
+                Previous
+              </button>
+              <span style={{ fontSize: '0.8rem', color: '#6b7280' }}>Page {page + 1} · {total} total</span>
+              <button onClick={() => { setPage(p => p + 1); fetchDrafts(); }} className="btn btn-secondary" style={{ padding: '6px 14px', fontSize: '0.8rem' }} disabled={!hasMore}>
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {showCreateModal && (
         <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>

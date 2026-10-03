@@ -21,7 +21,7 @@ export interface IDeveloperMemoryHistory extends Document {
 const DeveloperMemoryHistorySchema = new Schema<IDeveloperMemoryHistory>(
   {
     userId: { type: String, required: true, index: true },
-    memoryId: { type: String, required: true, index: true },
+    memoryId: { type: String, required: true },
     action: {
       type: String,
       required: true,

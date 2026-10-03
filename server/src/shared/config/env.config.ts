@@ -58,6 +58,10 @@ const envSchema = z.object({
   LINKEDIN_CLIENT_SECRET: z.string().optional(),
   FACEBOOK_CLIENT_ID: z.string().optional(),
   FACEBOOK_CLIENT_SECRET: z.string().optional(),
+  // Facebook Login for Business configuration ID. Sent as `config_id` on the
+  // Meta authorization URL only. When absent the provider omits it and the
+  // standard Facebook Login flow proceeds unchanged.
+  FACEBOOK_LOGIN_CONFIG_ID: z.string().optional(),
   INSTAGRAM_CLIENT_ID: z.string().optional(),
   INSTAGRAM_CLIENT_SECRET: z.string().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
@@ -66,8 +70,11 @@ const envSchema = z.object({
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   YOUTUBE_CLIENT_ID: z.string().optional(),
   YOUTUBE_CLIENT_SECRET: z.string().optional(),
-  TIKTOK_CLIENT_ID: z.string().optional(),
-  TIKTOK_CLIENT_SECRET: z.string().optional(),
+  // Threads API credentials. Threads is a SEPARATE Meta app with its own ID and
+  // secret (developers.facebook.com/docs/threads — get-started/create-an-app), so
+  // it does not share FACEBOOK_CLIENT_ID / FACEBOOK_CLIENT_SECRET.
+  Threads_CLIENT_ID: z.string().optional(),
+  Threads_CLIENT_SECRET: z.string().optional(),
 
   // Developer Intelligence (feature-gated). All optional: when the feature is
   // off — the default — the routes 404 and no GitHub credentials are needed.
@@ -128,6 +135,9 @@ export const env = {
   meta: {
     clientId: facebookClientId,
     clientSecret: facebookClientSecret,
+    // Facebook Login for Business. Empty string means "not configured" — the
+    // provider then builds the authorization URL without `config_id`.
+    loginConfigId: raw.FACEBOOK_LOGIN_CONFIG_ID || '',
     webhookVerifyToken: raw.META_WEBHOOK_VERIFY_TOKEN || '',
     webhookSecret: raw.META_WEBHOOK_SECRET || '',
   },

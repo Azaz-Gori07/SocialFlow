@@ -328,7 +328,7 @@
                   "content": { "type": "string" },
                   "platforms": {
                     "type": "array",
-                    "items": { "type": "string", "enum": ["twitter", "instagram", "facebook", "linkedin", "youtube", "tiktok"] }
+                    "items": { "type": "string", "enum": ["twitter", "instagram", "facebook", "linkedin", "youtube", "threads"] }
                   },
                   "status": { "type": "string", "enum": ["draft", "scheduled"], "default": "draft" },
                   "scheduledAt": { "type": "string", "format": "date-time" },
@@ -395,7 +395,7 @@
                   "content": { "type": "string" },
                   "platforms": {
                     "type": "array",
-                    "items": { "type": "string", "enum": ["twitter", "instagram", "facebook", "linkedin", "youtube", "tiktok"] }
+                    "items": { "type": "string", "enum": ["twitter", "instagram", "facebook", "linkedin", "youtube", "threads"] }
                   },
                   "status": { "type": "string", "enum": ["draft", "scheduled"] },
                   "scheduledAt": { "type": "string", "format": "date-time" },
@@ -440,7 +440,7 @@
           {
             "name": "platform",
             "in": "query",
-            "schema": { "type": "string", "enum": ["twitter", "instagram", "facebook", "linkedin", "youtube", "tiktok"] }
+            "schema": { "type": "string", "enum": ["twitter", "instagram", "facebook", "linkedin", "youtube", "threads"] }
           },
           {
             "name": "status",

@@ -4,7 +4,7 @@
 
 // ── Social ────────────────────────────────────────────────────────────────────
 
-export type SocialPlatform = 'twitter' | 'instagram' | 'facebook' | 'linkedin' | 'youtube' | 'tiktok';
+export type SocialPlatform = 'twitter' | 'instagram' | 'facebook' | 'linkedin' | 'youtube' | 'threads';
 
 export type AccountType = 'profile' | 'page' | 'business' | 'group' | 'organization';
 

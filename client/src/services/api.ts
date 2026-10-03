@@ -4,6 +4,22 @@ interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
+// Human-readable fallbacks when the server sends no message.
+const STATUS_MESSAGES: Record<number, string> = {
+  400: 'Invalid request. Please check the fields and try again.',
+  401: 'Your session has expired or credentials are invalid. Please log in again.',
+  403: 'You do not have permission to perform this action.',
+  404: 'We could not find what you were looking for.',
+  409: 'This conflicts with existing data. It may already exist.',
+  413: 'The input is too large.',
+  422: 'Some of the provided data is invalid.',
+  429: 'Too many requests. Please wait a moment and try again.',
+  500: 'Server error. Please try again later.',
+  502: 'Server error. Please try again later.',
+  503: 'Service temporarily unavailable. Please try again later.',
+  504: 'Request timed out. Please try again later.'
+};
+
 // Global API helper
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
@@ -62,7 +78,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   if (!response.ok) {
     const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `API request failed with status ${response.status}`);
+    throw new Error(errorData.message || STATUS_MESSAGES[response.status] || `Request failed (${response.status}). Please try again.`);
   }
 
   const json = await response.json() as any;
@@ -89,7 +105,7 @@ export const api = {
   social: {
     getAccounts: () => request<any[]>('/social/accounts'),
     disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' }),
-    connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`)
+    connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`, { method: 'POST' })
   },
   
   dashboard: {
@@ -111,16 +127,20 @@ export const api = {
   },
   
   comments: {
-    list: (platform?: string, status?: string) => {
+    // The comments API is workspace-scoped: every endpoint requires workspaceId.
+    list: (workspaceId: string, platform?: string, status?: string) => {
       const params = new URLSearchParams();
+      params.append('workspaceId', workspaceId);
       if (platform) params.append('platform', platform);
       if (status) params.append('status', status);
-      const query = params.toString();
-      return request<any[]>(`/comments${query ? `?${query}` : ''}`);
+      return request<any[]>(`/comments?${params.toString()}`);
     },
-    reply: (commentId: string, message: string) => request<any>('/comments/reply', { method: 'POST', body: JSON.stringify({ commentId, message }) }),
-    resolve: (id: string, status: 'resolved' | 'unresolved') => request<any>(`/comments/resolve/${id}`, { method: 'PUT', body: JSON.stringify({ status }) }),
-    assign: (id: string, assignedTo: string) => request<any>(`/comments/assign/${id}`, { method: 'PUT', body: JSON.stringify({ assignedTo }) })
+    reply: (workspaceId: string, commentId: string, message: string) =>
+      request<any>('/comments/reply', { method: 'POST', body: JSON.stringify({ workspaceId, commentId, message }) }),
+    resolve: (workspaceId: string, id: string, status: 'resolved' | 'unresolved') =>
+      request<any>(`/comments/resolve/${id}`, { method: 'PUT', body: JSON.stringify({ workspaceId, status }) }),
+    assign: (workspaceId: string, id: string, assignedTo: string) =>
+      request<any>(`/comments/assign/${id}`, { method: 'PUT', body: JSON.stringify({ workspaceId, assignedTo }) })
   },
   
   workspaces: {

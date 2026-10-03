@@ -4,6 +4,9 @@ import { env } from '../../shared/config/env.config';
 import { AppError } from '../../shared/errors/appError';
 import ZenuxOAuth, { TokenResponse, UserInfo, ZenuxOAuthAuthorizationRequest } from 'zenuxs-oauth';
 
+/** Probe budget: short enough to keep the redirect feeling instant. */
+const PROBE_TIMEOUT_MS = 4000;
+
 interface OAuthProfile {
   providerId: string;
   email: string;
@@ -17,17 +20,34 @@ export class ZenuxsOAuthService {
   constructor(private userRepository: UserRepository) {}
 
   private getBackendUrl(): string {
-    return process.env.BACKEND_URL || 
+    return process.env.BACKEND_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : `http://localhost:${env.PORT}`);
+  }
+
+  /**
+   * The redirect URI registered with the Zenuxs OAuth client.
+   *
+   * These are the SDK's own callback endpoints (`callback.html`) — one per origin,
+   * as registered on the Zenuxs dashboard. The auth server validates this string
+   * exactly, so it must match the registered value byte-for-byte. It is derived
+   * from BACKEND_URL / FRONTEND_URL rather than hardcoded so deployment only ever
+   * changes configuration, never code.
+   *
+   * The backend callback route (`/api/auth/oauth/zenuxs/:provider/callback`) stays
+   * available for a non-browser flow, but the browser flow lands on callback.html,
+   * which hands the authorization code back to the app.
+   */
+  private getCallbackUrl(provider?: string): string {
+    if (provider === 'google') {
+      return `${this.getBackendUrl()}/callback.html`;
+    }
+    return `${this.getBackendUrl()}/callback.html`;
   }
 
   private createOAuthInstance(provider?: string): ZenuxOAuth {
     const clientId = env.ZENUXS_CLIENT_ID || env.ZENUXS_GOOGLE_CLIENT_ID || env.ZENUXS_GITHUB_CLIENT_ID;
     const authServer = (env.ZENUXS_AUTH_SERVER || 'https://api.auth.zenuxs.in').replace(/\/$/, '');
-    const backendUrl = this.getBackendUrl();
-    const redirectUri = provider 
-      ? `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`
-      : `${backendUrl}/api/auth/oauth/zenuxs/{provider}/callback`;
+    const redirectUri = this.getCallbackUrl(provider);
 
     const clientSecret = env.ZENUXS_CLIENT_SECRET || env.ZENUXS_GOOGLE_CLIENT_SECRET || env.ZENUXS_GITHUB_CLIENT_SECRET;
 
@@ -49,10 +69,58 @@ export class ZenuxsOAuthService {
     });
   }
 
+/**
+   * Probes the Zenuxs authorization endpoint to catch configuration rejections
+   * before the user is sent there.
+   *
+   * The auth server answers an unregistered `redirect_uri` with HTTP 400 and a
+   * JSON error. Without this check the user lands on an unstyled JSON page and
+   * has no idea what went wrong. Anything other than a 4xx configuration error is
+   * reported as ok so a healthy flow is never blocked or slowed by a real error.
+   *
+   * Short timeout: this sits in front of the redirect the user is waiting on.
+   */
+  async checkAuthorizationEndpoint(authorizationUrl: string): Promise<{ ok: boolean; reason: string }> {
+    try {
+      const response = await fetch(authorizationUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        headers: { Accept: 'application/json, text/html' }
+      });
+
+      if (response.status < 400) return { ok: true, reason: '' };
+
+      const raw = await response.text().catch(() => '');
+      let description = '';
+      try {
+        const parsed = JSON.parse(raw);
+        description = parsed.error_description || parsed.error || '';
+      } catch {
+        description = '';
+      }
+
+      // Only the client-configuration failures are intercepted; anything else
+      // (rate limiting, transient upstream trouble) is allowed through.
+      const configurationFailure =
+        description.toLowerCase().includes('redirect_uri') ||
+        description.toLowerCase().includes('invalid client') ||
+        description.toLowerCase().includes('unauthorized_client');
+      if (!configurationFailure) return { ok: true, reason: '' };
+
+      return {
+        ok: false,
+        reason: description || 'The Zenuxs auth server rejected this client configuration.'
+      };
+    } catch {
+      // A probe failure must never block sign-in.
+      return { ok: true, reason: '' };
+    }
+  }
+
   async getAuthorizationUrl(provider: string): Promise<string> {
     const oauth = this.createOAuthInstance(provider);
-    const backendUrl = this.getBackendUrl();
-    const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`;
+    const redirectUri = this.getCallbackUrl(provider);
 
     const authData: ZenuxOAuthAuthorizationRequest = await oauth.getAuthorizationUrl({
       redirectUri,
@@ -67,8 +135,9 @@ export class ZenuxsOAuthService {
 
   async handleCallback(provider: string, code: string, state?: string): Promise<{ user: any; isNew: boolean }> {
     const oauth = this.createOAuthInstance(provider);
-    const backendUrl = this.getBackendUrl();
-    const redirectUri = `${backendUrl}/api/auth/oauth/zenuxs/${provider}/callback`;
+    // Must be byte-identical to the URI sent on the authorize request, otherwise
+    // the token exchange is rejected.
+    const redirectUri = this.getCallbackUrl(provider);
 
     // Build the full callback URL from the redirect URI and the code/state params
     const callbackUrl = new URL(redirectUri);

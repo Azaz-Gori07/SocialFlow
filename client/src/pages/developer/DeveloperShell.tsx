@@ -6,6 +6,7 @@ import { Activities } from './Activities';
 import { Opportunities } from './Opportunities';
 import { Memory } from './Memory';
 import { DeveloperSettings } from './Settings';
+import { GitBranch } from 'lucide-react';
 
 type TabId = 'dashboard' | 'repositories' | 'activities' | 'opportunities' | 'memory' | 'settings';
 
@@ -18,18 +19,9 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'settings', label: 'Settings' }
 ];
 
-/**
- * Feature gate + sub-navigation for the Developer Intelligence flow.
- *
- * /developer/status is the only ungated route, so it is the only honest source
- * for "should this UI exist". Anything other than `enabled === true` renders
- * the disabled card: a request failure is treated as disabled, never as
- * enabled-with-errors.
- */
 export const DeveloperShell: React.FC = () => {
   const [enabled, setEnabled] = useState<boolean | null>(null);
   const [activeTab, setActiveTab] = useState<TabId>('dashboard');
-  // Bumped by the OAuth popup so GitHub-bound pages can refetch once connected.
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
@@ -61,23 +53,60 @@ export const DeveloperShell: React.FC = () => {
 
   if (enabled === null) {
     return (
-      <div className="animate-fade-in" style={{ position: 'relative' }}>
-        <div className="glow-blur" />
-        <div style={{ padding: '60px', textAlign: 'center', color: 'hsl(var(--text-muted))', fontSize: '0.9rem' }}>
-          Checking Developer flow availability...
-        </div>
+      <div className="animate-fade-in" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px', color: '#9ca3af', fontSize: '0.875rem' }}>
+        Checking Developer Intelligence availability...
       </div>
     );
   }
 
   if (!enabled) {
     return (
-      <div className="animate-fade-in" style={{ position: 'relative' }}>
-        <div className="glow-blur" />
-        <div className="glass-card" style={{ padding: '40px', textAlign: 'center' }}>
-          <h1 className="page-title" style={{ fontSize: '1.4rem', marginBottom: '10px' }}>Developer</h1>
-          <p style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>
-            Developer flow is disabled.
+      <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+        <div>
+          <div style={{
+            fontSize: '0.6875rem',
+            fontWeight: 700,
+            letterSpacing: '0.08em',
+            color: '#6b7280',
+            textTransform: 'uppercase',
+            marginBottom: '3px'
+          }}>
+            INTELLIGENCE
+          </div>
+          <h1 style={{
+            fontFamily: "Georgia, 'Times New Roman', serif",
+            fontSize: '2.4rem',
+            fontWeight: 700,
+            color: '#111827',
+            letterSpacing: '-0.02em',
+            marginBottom: '4px',
+            lineHeight: 1.15
+          }}>
+            Developer Intelligence
+          </h1>
+          <p style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
+            Turn repository commits, PRs, and releases into evidence-backed audience growth.
+          </p>
+        </div>
+
+        <div className="card" style={{ padding: '60px 24px', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
+          <div style={{
+            width: '64px',
+            height: '64px',
+            borderRadius: '50%',
+            background: '#f4f4f5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: '4px'
+          }}>
+            <GitBranch size={28} style={{ color: '#71717a' }} />
+          </div>
+          <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+            Developer Intelligence Disabled
+          </h3>
+          <p style={{ fontSize: '0.85rem', color: '#6b7280', maxWidth: '420px', lineHeight: 1.5, margin: 0 }}>
+            The developer intelligence domain is currently turned off on this instance. Set <code>DEVELOPER_FLOW_ENABLED=true</code> on the server to enable repository mirroring and automatic drafting.
           </p>
         </div>
       </div>
@@ -85,23 +114,76 @@ export const DeveloperShell: React.FC = () => {
   }
 
   return (
-    <div className="animate-fade-in" style={{ position: 'relative' }}>
-      <div className="glow-blur" />
+    <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
+      
+      {/* 1. Header Banner */}
+      <div>
+        <div style={{
+          fontSize: '0.6875rem',
+          fontWeight: 700,
+          letterSpacing: '0.08em',
+          color: '#6b7280',
+          textTransform: 'uppercase',
+          marginBottom: '3px'
+        }}>
+          INTELLIGENCE
+        </div>
+        <h1 style={{
+          fontFamily: "Georgia, 'Times New Roman', serif",
+          fontSize: '2.4rem',
+          fontWeight: 700,
+          color: '#111827',
+          letterSpacing: '-0.02em',
+          marginBottom: '4px',
+          lineHeight: 1.15
+        }}>
+          Developer Intelligence
+        </h1>
+        <p style={{ fontSize: '0.875rem', color: '#6b7280', lineHeight: 1.4 }}>
+          Turn repository commits, PRs, and releases into evidence-backed audience growth.
+        </p>
+      </div>
 
-      <nav aria-label="Developer sections" style={{ display: 'flex', gap: '8px', marginBottom: '24px', flexWrap: 'wrap' }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={activeTab === tab.id ? 'btn btn-primary' : 'btn btn-secondary'}
-            style={{ fontSize: '0.8rem' }}
-            aria-current={activeTab === tab.id ? 'page' : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* 2. Sub-Navigation Tabs */}
+      <nav aria-label="Developer sections" style={{
+        display: 'flex',
+        gap: '8px',
+        alignItems: 'center',
+        flexWrap: 'wrap'
+      }}>
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                padding: '7px 16px',
+                fontSize: '0.825rem',
+                fontWeight: isActive ? 600 : 500,
+                background: isActive ? '#18181b' : '#ffffff',
+                color: isActive ? '#ffffff' : '#374151',
+                border: isActive ? 'none' : '1px solid #e5e7eb',
+                borderRadius: '8px',
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)',
+                transition: 'all 0.15s ease'
+              }}
+              onMouseEnter={e => {
+                if (!isActive) e.currentTarget.style.borderColor = '#d1d5db';
+              }}
+              onMouseLeave={e => {
+                if (!isActive) e.currentTarget.style.borderColor = '#e5e7eb';
+              }}
+              aria-current={isActive ? 'page' : undefined}
+            >
+              {tab.label}
+            </button>
+          );
+        })}
       </nav>
 
+      {/* 3. Active Sub-View */}
       {activeTab === 'dashboard' && <DeveloperDashboard refreshKey={refreshKey} />}
       {activeTab === 'repositories' && <Repositories refreshKey={refreshKey} />}
       {activeTab === 'activities' && <Activities />}

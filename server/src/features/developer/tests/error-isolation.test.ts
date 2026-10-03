@@ -163,6 +163,61 @@ describe('Developer error isolation', () => {
       ).rejects.toThrow('Invalid webhook signature');
     });
 
+    // GitHub retries any delivery it did not see succeed; without a dedupe
+    // claim each retry re-runs the whole pipeline and re-bills AI.
+    it('drops a replayed delivery id instead of re-running the pipeline', async () => {
+      stubFailingGitHub();
+      env.GITHUB_WEBHOOK_SECRET = 'whsec-test';
+      await seedRepo(null);
+
+      const rawBody = Buffer.from(
+        JSON.stringify({ repository: { full_name: 'o/r' }, action: 'opened' }),
+        'utf8'
+      );
+      const signature =
+        'sha256=' + crypto.createHmac('sha256', 'whsec-test').update(rawBody).digest('hex');
+      const headers = {
+        'x-github-event': 'push',
+        'x-github-delivery': 'delivery-replay-1',
+        'x-hub-signature-256': signature
+      };
+
+      const first = await handleGitHubWebhook(rawBody, headers);
+      expect(first.dispatched).toBe(1);
+
+      const replay = await handleGitHubWebhook(rawBody, headers);
+      expect(replay.accepted).toBe(true);
+      expect(replay.dispatched).toBe(0);
+      expect(replay.message).toBe('Duplicate delivery ignored');
+    });
+
+    it('processes distinct delivery ids independently', async () => {
+      stubFailingGitHub();
+      env.GITHUB_WEBHOOK_SECRET = 'whsec-test';
+      await seedRepo(null);
+
+      const rawBody = Buffer.from(
+        JSON.stringify({ repository: { full_name: 'o/r' }, action: 'opened' }),
+        'utf8'
+      );
+      const signature =
+        'sha256=' + crypto.createHmac('sha256', 'whsec-test').update(rawBody).digest('hex');
+
+      const a = await handleGitHubWebhook(rawBody, {
+        'x-github-event': 'push',
+        'x-github-delivery': 'delivery-a',
+        'x-hub-signature-256': signature
+      });
+      const b = await handleGitHubWebhook(rawBody, {
+        'x-github-event': 'push',
+        'x-github-delivery': 'delivery-b',
+        'x-hub-signature-256': signature
+      });
+
+      expect(a.dispatched).toBe(1);
+      expect(b.dispatched).toBe(1);
+    });
+
     it('acknowledges an event that is not a sync trigger', async () => {
       env.GITHUB_WEBHOOK_SECRET = 'whsec-test';
       await seedRepo(null);

@@ -23,7 +23,10 @@ export class ProviderError extends Error {
   }
 
   static fromResponse(platform: string, message: string, status: number, providerCode?: string): ProviderError {
-    return new ProviderError(message, platform, status, providerCode, isRetryableStatus(status));
+    const retryable = providerCode !== undefined
+      ? isRetryableStatus(status) && status !== 400 && status !== 401 && status !== 403 && status !== 404
+      : isRetryableStatus(status) && !isPermanentStatus(status);
+    return new ProviderError(message, platform, status, providerCode, retryable);
   }
 }
 
@@ -53,7 +56,6 @@ export function classifyProviderError(
     '10', // permission denied
     // X API
     '87', // client not permitted
-    '88', // rate limit (429 though)
     '89', // invalid or revoked token
     '131', // internal
     // LinkedIn
@@ -61,7 +63,22 @@ export function classifyProviderError(
     '403', // forbidden
   ]);
 
-  const retryable = isRetryableStatus(status) || (providerCode !== undefined && !permanentCodes.has(providerCode));
+  // Explicit provider codes win over the status: Meta returns 400 with a
+  // retryable code in some cases, and 429 can carry a non-retryable code.
+  if (providerCode !== undefined) {
+    if (permanentCodes.has(providerCode)) {
+      return new ProviderError(message, platform, status, providerCode, false);
+    }
+    // 88 is X's own rate-limit code; honour it even though HTTP said 429.
+    if (providerCode === '88' || isRetryableStatus(status)) {
+      return new ProviderError(message, platform, status, providerCode, true);
+    }
+    return new ProviderError(message, platform, status, providerCode, false);
+  }
+
+  // No provider code: trust the status. A permanent status must never be retried,
+  // otherwise an invalid request is replayed until it dead-letters.
+  const retryable = isRetryableStatus(status) && !isPermanentStatus(status);
 
   logger.debug(`[provider] ${platform} error classified`, {
     status,
