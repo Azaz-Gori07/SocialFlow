@@ -1,4 +1,5 @@
 import { Server as HttpServer } from 'http';
+import https from 'https';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import { Notification } from '../../features/notification/notification.types';
@@ -117,18 +118,7 @@ const SOCKET_INTERNAL_SECRET = process.env.SOCKET_INTERNAL_SECRET;
 async function emitToUser(userId: string, event: string, payload: unknown): Promise<void> {
   if (SOCKET_INTERNAL_URL && SOCKET_INTERNAL_SECRET) {
     try {
-      const res = await fetch(`${SOCKET_INTERNAL_URL.replace(/\/$/, '')}/internal/emit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-internal-secret': SOCKET_INTERNAL_SECRET,
-        },
-        body: JSON.stringify({ userId, event, payload }),
-        signal: AbortSignal.timeout(5000),
-      });
-      if (!res.ok) {
-        console.warn(`⚠️ Socket bridge ${event} -> HTTP ${res.status}`);
-      }
+      await postBridge({ userId, event, payload });
     } catch (err: any) {
       // Real-time is best-effort: the notification row is already persisted
       // and the client's REST refetch on reconnect covers the loss.
@@ -139,6 +129,44 @@ async function emitToUser(userId: string, event: string, payload: unknown): Prom
   if (io) {
     io.to(`user:${userId}`).emit(event, payload);
   }
+}
+
+/**
+ * POST to the Render socket-server. Uses https.request with `family: 4`
+ * because onrender.com publishes NAT64 AAAA records that are unreachable
+ * from Vercel's egress — undici's happy-eyeballs then stalls until timeout.
+ */
+function postBridge(body: unknown): Promise<void> {
+  const url = new URL(`${SOCKET_INTERNAL_URL!.replace(/\/$/, '')}/internal/emit`);
+  const data = JSON.stringify(body);
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      {
+        hostname: url.hostname,
+        path: url.pathname,
+        method: 'POST',
+        family: 4,
+        timeout: 8000,
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(data),
+          'x-internal-secret': SOCKET_INTERNAL_SECRET!,
+        },
+      },
+      (res) => {
+        res.resume();
+        if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
+          resolve();
+        } else {
+          reject(new Error(`HTTP ${res.statusCode}`));
+        }
+      }
+    );
+    req.on('timeout', () => req.destroy(new Error('bridge timeout')));
+    req.on('error', reject);
+    req.write(data);
+    req.end();
+  });
 }
 
 /**
