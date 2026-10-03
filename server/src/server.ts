@@ -37,6 +37,12 @@ import { connectDb, isConnected } from './database/db';
 
 const app = express();
 
+// Vercel/Render sit behind a proxy that sets X-Forwarded-For. express-rate-limit
+// refuses to key on it (and logs a validation error) unless trust proxy is on.
+if (process.env.VERCEL || process.env.RENDER) {
+  app.set('trust proxy', 1);
+}
+
 const LOCAL_ORIGINS = [
   'http://localhost:5173',
   'http://localhost:5000',
@@ -49,8 +55,9 @@ const EXPLICIT_ORIGINS = [
   'https://socialflow-src9.onrender.com'
 ];
 
-const envOrigins = (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)
-  ? (process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS)!.split(',').map(s => s.trim()).filter(Boolean)
+const rawEnvOrigins = process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || process.env.ALLOWED_ORIGINS;
+const envOrigins = rawEnvOrigins
+  ? rawEnvOrigins.split(',').map(s => s.trim()).filter(Boolean)
   : [];
 
 const staticOrigins = [...new Set([...LOCAL_ORIGINS, ...EXPLICIT_ORIGINS, ...envOrigins])];

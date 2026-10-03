@@ -9,3 +9,5 @@ node_modules/
 dist/
 
 # Do NOT add .md here — it would block important docs like README.md
+.vercel
+.env*
