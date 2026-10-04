@@ -1,4 +1,5 @@
 import { io, Socket } from 'socket.io-client';
+import { isTokenExpiring, refreshAccessToken, hardLogout } from './token';
 
 const backendApiUrl = import.meta.env.VITE_BACKEND_API_URL as string | undefined;
 
@@ -9,14 +10,50 @@ const SOCKET_URL = (import.meta.env.SOCKET_URL as string | undefined)
   || (backendApiUrl ? backendApiUrl.replace(/\/api\/?$/, '') : 'http://localhost:5000');
 
 let socket: Socket | null = null;
+// Middleware rejections are not auto-retried by socket.io — cap our own
+// refresh-and-retry loop so a misbehaving server can't spin.
+let authRecoveryTries = 0;
+// Single handshake scheduler: a second connectSocket() call (React StrictMode
+// double-invokes the auth effect) must not fire the handshake while a
+// token refresh for the first call is still in flight — that race sent the
+// stale token once and produced `Invalid or expired token`.
+let pendingHandshake: Promise<void> | null = null;
+
+function startHandshake(): void {
+  if (!socket || pendingHandshake) return;
+
+  const token = localStorage.getItem('access_token');
+  if (isTokenExpiring(token)) {
+    pendingHandshake = refreshAccessToken()
+      .then((r) => {
+        if (r.status === 'unauthorized') {
+          hardLogout();
+          return;
+        }
+        // 'ok' | 'network' | 'none': attempt anyway — transport errors are
+        // covered by the reconnect policy, auth failures by connect_error.
+        socket?.connect();
+      })
+      .finally(() => {
+        pendingHandshake = null;
+      });
+  } else {
+    socket.connect();
+  }
+}
 
 /**
  * Initialize socket connection with auth token.
  * Should be called after user logs in.
+ *
+ * The handshake reads the token from localStorage at attempt time (auth
+ * callback), so tokens rotated by api.ts refreshes are picked up on any
+ * reconnect. An expired stored token is rotated BEFORE the first handshake,
+ * which is what used to produce `Invalid or expired token` console errors.
  */
 export function connectSocket(token?: string): Socket | null {
-  const currentToken = token || localStorage.getItem('access_token');
-  if (!currentToken) {
+  const initial = token || localStorage.getItem('access_token');
+  if (!initial) {
     return null;
   }
   // Safety net: if no SOCKET_URL was configured and the fallback resolved to
@@ -26,16 +63,19 @@ export function connectSocket(token?: string): Socket | null {
     console.warn('⚠️ No SOCKET_URL configured; real-time disabled (REST fallback only).');
     return null;
   }
+
   if (socket) {
-    socket.auth = { token: currentToken };
     if (!socket.connected) {
-      socket.connect();
+      startHandshake();
     }
     return socket;
   }
 
+  authRecoveryTries = 0;
   socket = io(SOCKET_URL, {
-    auth: { token: currentToken },
+    autoConnect: false,
+    // Fresh credential on EVERY connection attempt — no stale socket.auth.
+    auth: (cb) => cb({ token: localStorage.getItem('access_token') || '' }),
     transports: ['websocket', 'polling'],
     reconnection: true,
     reconnectionAttempts: 5,
@@ -45,6 +85,7 @@ export function connectSocket(token?: string): Socket | null {
   });
 
   socket.on('connect', () => {
+    authRecoveryTries = 0;
     console.log('🔌 Socket.IO connected:', socket?.id);
   });
 
@@ -54,7 +95,26 @@ export function connectSocket(token?: string): Socket | null {
 
   socket.on('connect_error', (error) => {
     console.error('🔌 Socket.IO connection error:', error.message);
+
+    // The server rejected our credential (expired/revoked). Rotate the token
+    // once via the shared single-flight refresh and re-handshake; if the
+    // refresh token itself is dead, drop to login instead of retrying.
+    if (/token/i.test(error.message) && authRecoveryTries < 2) {
+      authRecoveryTries += 1;
+      void refreshAccessToken().then((r) => {
+        if (r.status === 'ok') {
+          socket?.connect();
+        } else if (r.status === 'unauthorized') {
+          disconnectSocket();
+          hardLogout();
+        }
+        // 'network' / 'none': stop — REST fallback covers the app.
+      });
+    }
   });
+
+  // Rotate-before-handshake if the stored token is expired (see startHandshake).
+  startHandshake();
 
   return socket;
 }

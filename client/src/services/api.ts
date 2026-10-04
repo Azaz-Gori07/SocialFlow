@@ -1,5 +1,7 @@
 const API_BASE = import.meta.env.VITE_BACKEND_API_URL?.replace(/\/$/, '');
 
+import { isTokenExpiring, refreshAccessToken, hardLogout } from './token';
+
 interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
@@ -23,8 +25,25 @@ const STATUS_MESSAGES: Record<number, string> = {
 // Global API helper
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers || {});
-  
+
   if (!options.skipAuth) {
+    // Proactive: access tokens live 15 minutes. If the stored one is expired
+    // (or about to be), rotate it BEFORE the first byte goes out — this is
+    // what keeps /auth/me and friends from ever logging a 401 on page load.
+    // Single-flight: concurrent first-paint requests share one refresh call.
+    if (isTokenExpiring(localStorage.getItem('access_token'))) {
+      const refreshed = await refreshAccessToken();
+      if (refreshed.status === 'unauthorized' || refreshed.status === 'none') {
+        // Rejected, or nothing left to renew with (e.g. logout already
+        // cleared storage mid-stampede) — end the session instead of firing
+        // headerless requests that each 401.
+        hardLogout();
+        throw new Error('Your session has expired. Please sign in again.');
+      }
+      // 'ok' → proceed with the rotated token; 'network' → the request below
+      // will surface its own (network) failure without burning the session.
+    }
+
     const token = localStorage.getItem('access_token');
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
@@ -42,38 +61,19 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   let response = await fetch(`${API_BASE}${endpoint}`, config);
 
-  // Auto token refresh on 401 Unauthorized
+  // Reactive retry: server rejected the token we sent (revoked, or expired
+  // mid-flight). Rotate once via the shared single-flight refresh, retry.
   if (response.status === 401 && !options.skipAuth) {
-    const storedRefreshToken = localStorage.getItem('refresh_token');
-    if (storedRefreshToken) {
-      try {
-        const refreshResp = await fetch(`${API_BASE}/auth/refresh`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ refreshToken: storedRefreshToken })
-        });
-        
-        if (refreshResp.ok) {
-          const refreshJson = await refreshResp.json();
-          // The refresh endpoint returns { data: { accessToken, refreshToken, expiresIn } }
-          const tokenData = refreshJson.data || refreshJson;
-          localStorage.setItem('access_token', tokenData.accessToken);
-          localStorage.setItem('refresh_token', tokenData.refreshToken);
-          
-          // Retry the original request
-          headers.set('Authorization', `Bearer ${tokenData.accessToken}`);
-          response = await fetch(`${API_BASE}${endpoint}`, { ...config, headers });
-        } else {
-          // Refresh token is expired too, redirect to login
-          localStorage.removeItem('access_token');
-          localStorage.removeItem('refresh_token');
-          localStorage.removeItem('user');
-          window.dispatchEvent(new Event('auth-logout'));
-        }
-      } catch (err) {
-        console.error('Auto refresh token failed', err);
-      }
+    const refreshed = await refreshAccessToken();
+    if (refreshed.status === 'ok') {
+      headers.set('Authorization', `Bearer ${refreshed.token}`);
+      response = await fetch(`${API_BASE}${endpoint}`, { ...config, headers });
+    } else if (refreshed.status === 'unauthorized') {
+      hardLogout();
+    } else if (refreshed.status === 'none') {
+      // No refresh token at all — leave the 401 for the caller to handle.
     }
+    // 'network': leave the original response; caller sees the real failure.
   }
 
   if (!response.ok) {
