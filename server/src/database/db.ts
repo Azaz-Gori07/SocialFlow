@@ -154,11 +154,23 @@ if (process.env.DNS_SERVERS) {
 
 // Cache the connection promise at module level for serverless reuse
 let cachedConnection: Promise<typeof mongoose> | null = null;
+let cachedSettled = false;
 
 async function connectDb(): Promise<typeof mongoose> {
-  // Return cached connection if already connected or connecting
+  // Return the cached connection only while it is still trustworthy:
+  // - pending (in-flight connect — coalesce concurrent requests)
+  // - settled AND the socket is actually alive
+  // A settled cache entry whose connection later dropped (Atlas failover,
+  // network blip) must NOT be reused — that poisoned serverless instances
+  // with permanent "Database unavailable" until they were recycled.
   if (cachedConnection) {
-    return cachedConnection;
+    if (!cachedSettled) {
+      return cachedConnection;
+    }
+    if (mongoose.connection.readyState === 1) {
+      return cachedConnection;
+    }
+    cachedConnection = null;
   }
 
   // Create connection promise and cache it immediately to prevent multiple concurrent connects
@@ -205,7 +217,19 @@ async function connectDb(): Promise<typeof mongoose> {
   })();
 
   cachedConnection = connectionPromise;
-  return connectionPromise;
+  cachedSettled = false;
+  connectionPromise.then(
+    () => { cachedSettled = true; },
+    () => {
+      // Failed connect: drop the cache so the NEXT request retries instead
+      // of inheriting this rejection forever.
+      cachedSettled = true;
+      if (cachedConnection === connectionPromise) {
+        cachedConnection = null;
+      }
+    }
+  );
+  return cachedConnection;
 }
 
 export function isConnected(): boolean {
