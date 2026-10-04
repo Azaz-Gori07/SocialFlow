@@ -71,7 +71,11 @@ export class SocialService {
   ): Promise<{ connection: ReturnType<typeof toSafeConnection>; accounts: ReturnType<typeof toSafeAccountList> }> {
     const clean = normalizePlatform(platform);
     const provider = ProviderFactory.getConfiguredProvider(clean);
-    const redirectUri = this.getRedirectUri(provider.platform, redirectHost);
+    // Must match getConnectUrl, which builds tx.redirectUri from `clean`.
+    // MetaProvider serves BOTH facebook and instagram with provider.platform
+    // hardcoded to 'facebook' — using it here made every Instagram callback
+    // fail its own redirectUri guard with 'OAuth redirect URI mismatch'.
+    const redirectUri = this.getRedirectUri(clean, redirectHost);
 
     await this.transactionRepository.expireOld();
 
