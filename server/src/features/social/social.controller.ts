@@ -40,10 +40,10 @@ export class SocialController {
       const redirectHost = `${req.protocol}://${req.get('host')}`;
       await this.socialService.handleCallback(platform, code, state, redirectHost);
 
-      return res.redirect(`${env.FRONTEND_URL}/settings?connection=success&platform=${platform}`);
+      return res.redirect(`${env.FRONTEND_URL}/connected-accounts?connection=success&platform=${platform}`);
     } catch (error: any) {
       const message = encodeURIComponent(error?.message || 'OAuth Connection Failed');
-      return res.redirect(`${env.FRONTEND_URL}/settings?connection=error&message=${message}`);
+      return res.redirect(`${env.FRONTEND_URL}/connected-accounts?connection=error&message=${message}`);
     }
   };
 
