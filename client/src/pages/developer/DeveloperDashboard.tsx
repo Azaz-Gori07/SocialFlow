@@ -12,6 +12,7 @@ import {
   BrainCircuit
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { GenericSkeleton } from '../../components/Skeleton';
 
 interface Overview {
   enabled?: boolean;
@@ -153,11 +154,7 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ refreshK
   };
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '320px', color: '#9ca3af', fontSize: '0.875rem' }}>
-        Loading developer intelligence...
-      </div>
-    );
+    return <GenericSkeleton minHeight={320} />;
   }
 
   const statItems = [

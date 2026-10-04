@@ -28,6 +28,7 @@ import {
   Bar
 } from 'recharts';
 import { PlatformBadge } from '../components/SocialIcons';
+import { GenericSkeleton } from '../components/Skeleton';
 
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
@@ -68,11 +69,7 @@ export const Analytics: React.FC = () => {
   }, []);
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px', color: '#9ca3af', fontSize: '0.875rem' }}>
-        Loading analytics hub...
-      </div>
-    );
+    return <GenericSkeleton minHeight={360} />;
   }
 
   const handleExport = (type: 'csv' | 'pdf') => {

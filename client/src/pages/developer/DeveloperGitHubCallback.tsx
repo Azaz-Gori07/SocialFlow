@@ -60,10 +60,10 @@ export const DeveloperGitHubCallback: React.FC = () => {
   }, []);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-primary))', padding: '20px', textAlign: 'center' }}>
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg-base)', color: 'var(--text-primary)', padding: '20px', textAlign: 'center' }}>
       <div>
         <h1 className="page-title" style={{ fontSize: '1.4rem', marginBottom: '12px' }}>Developer</h1>
-        <div style={{ color: 'hsl(var(--text-secondary))', fontSize: '0.9rem' }}>{message}</div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>{message}</div>
       </div>
     </div>
   );

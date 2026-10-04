@@ -47,7 +47,7 @@
   --shadow-card: 0 1px 3px 0 rgba(0, 0, 0, 0.03), 0 0 0 1px #ebe8e2;
 
   /* Transitions */
-  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --duration-fast: 140ms;
   --duration-normal: 220ms;
   color-scheme: light;
@@ -114,9 +114,9 @@ h1, h2, h3, h4, h5, h6 {
   border: 1px solid #ebe8e2;
   border-radius: var(--radius-lg);
   box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.03);
-  transition: transform var(--duration-normal) var(--ease-spring),
-              box-shadow var(--duration-normal) var(--ease-spring),
-              border-color var(--duration-normal) var(--ease-spring);
+  transition: transform var(--duration-normal) var(--ease-out-expo),
+              box-shadow var(--duration-normal) var(--ease-out-expo),
+              border-color var(--duration-normal) var(--ease-out-expo);
   position: relative;
 }
 
@@ -215,7 +215,7 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all var(--duration-fast) var(--ease-spring);
+  transition: all var(--duration-fast) var(--ease-out-expo);
   font-family: var(--font-sans);
   line-height: 1.25;
 }
@@ -306,7 +306,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .animate-fade-in {
-  animation: smoothFadeIn 0.25s var(--ease-spring) forwards;
+  animation: smoothFadeIn 0.25s var(--ease-out-expo) forwards;
 }
 
 /* Responsive Rules */
@@ -402,5 +402,148 @@ h1, h2, h3, h4, h5, h6 {
   }
   .content-wrapper {
     padding: 14px !important;
+  }
+}
+
+/* ============================================================
+   Boot curtain — one authored entrance per page load.
+   Mark arrives blur->sharp, wordmark staggers per letter, an
+   indigo hairline sweeps, then the curtain wipes upward to
+   reveal the already-rendered app underneath.
+   ============================================================ */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: grid;
+  place-items: center;
+  background: var(--bg-base);
+  clip-path: inset(0 0 0 0);
+  transition: clip-path 640ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.boot-screen.is-out {
+  clip-path: inset(0 0 100% 0);
+}
+
+.boot-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  transition: transform 640ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.boot-screen.is-out .boot-inner {
+  transform: translateY(-22px);
+}
+
+.boot-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: bootMark 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes bootMark {
+  from { opacity: 0; transform: scale(0.84); filter: blur(8px); }
+  to   { opacity: 1; transform: scale(1); filter: blur(0); }
+}
+
+.boot-word {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.9rem;
+  letter-spacing: -0.03em;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.boot-word span {
+  display: inline-block;
+  animation: bootLetter 420ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes bootLetter {
+  from { opacity: 0; transform: translateY(12px); filter: blur(4px); }
+  to   { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+.boot-track {
+  position: relative;
+  width: 168px;
+  height: 2px;
+  background: var(--border);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.boot-fill {
+  position: absolute;
+  inset: 0;
+  background: var(--accent-blue);
+  transform-origin: left center;
+  animation: bootFill 560ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
+}
+
+@keyframes bootFill {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* ============================================================
+   Skeleton loading — layout-true placeholders with a single
+   left-to-right light sweep. Static under reduced motion.
+   ============================================================ */
+.sk {
+  position: relative;
+  overflow: hidden;
+  flex-shrink: 0;
+  background: #eceae5;
+  border-radius: 8px;
+}
+
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: skShimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes skShimmer {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-mark,
+  .boot-word span,
+  .boot-fill {
+    animation-duration: 200ms !important;
+    animation-delay: 0ms !important;
+    animation-name: bootFade !important;
+  }
+  @keyframes bootFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+  }
+  .boot-screen {
+    transition: opacity 200ms linear;
+  }
+  .boot-screen.is-out {
+    clip-path: none;
+    opacity: 0;
+  }
+  .boot-screen.is-out .boot-inner {
+    transform: none;
+  }
+  .sk::after {
+    animation: none;
   }
 }

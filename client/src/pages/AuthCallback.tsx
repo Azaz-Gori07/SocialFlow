@@ -41,7 +41,7 @@ export const AuthCallback: React.FC = () => {
   }, [exchangeCode, navigate]);
 
   return (
-    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'hsl(var(--bg-base))', color: 'hsl(var(--text-primary))' }}>
+    <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', background: 'var(--bg-base)', color: 'var(--text-primary)' }}>
       <div style={{ textAlign: 'center' }}>{message}</div>
     </div>
   );

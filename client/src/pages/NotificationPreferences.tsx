@@ -15,6 +15,7 @@ import {
   TrendingUp,
   Info
 } from 'lucide-react';
+import { GenericSkeleton } from '../components/Skeleton';
 
 const NOTIFICATION_TYPES = [
   { value: 'post_published', label: 'Post Published', desc: 'Alert when a scheduled draft goes live successfully on channels', icon: Send },
@@ -105,11 +106,7 @@ export const NotificationPreferences: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px', color: '#9ca3af', fontSize: '0.875rem' }}>
-        Loading alert rules...
-      </div>
-    );
+    return <GenericSkeleton minHeight={360} />;
   }
 
   const channels = [

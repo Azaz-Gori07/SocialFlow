@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Save, Check, CheckCircle2, Sliders, Sparkles, Clock, Globe } from 'lucide-react';
 import { api } from '../../services/api';
+import { GenericSkeleton } from '../../components/Skeleton';
 
 interface AutomationSettings {
   detectOpportunities: boolean;
@@ -114,11 +115,7 @@ export const DeveloperSettings: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '300px', color: '#9ca3af', fontSize: '0.875rem' }}>
-        Loading settings...
-      </div>
-    );
+    return <GenericSkeleton minHeight={300} />;
   }
 
   if (!form) {

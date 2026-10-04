@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar } from './components/Sidebar';
+import { BootScreen } from './components/BootScreen';
 import { Auth } from './pages/Auth';
 import { Dashboard } from './pages/Dashboard';
 import { ContentStudio } from './pages/ContentStudio';
@@ -82,6 +83,7 @@ const AppContent: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isCommandOpen, setIsCommandOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [bootDone, setBootDone] = useState(false);
 
   useEffect(() => {
     document.documentElement.removeAttribute('data-theme');
@@ -103,29 +105,20 @@ const AppContent: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', minHeight: '100vh', width: '100vw', alignItems: 'center', justifyContent: 'center', backgroundColor: 'hsl(var(--bg-base))' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px' }}>
-          <div style={{
-            width: '32px',
-            height: '32px',
-            border: '2px solid rgba(255,255,255,0.08)',
-            borderTopColor: 'hsl(var(--primary))',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite'
-          }} />
-          <span style={{ fontSize: '0.85rem', color: 'hsl(var(--text-muted))', fontFamily: 'var(--font-sans)', letterSpacing: '0.02em' }}>
-            Loading SocialFlow...
-          </span>
-        </div>
-      </div>
-    );
-  }
+  // Boot curtain overlays the real view (already rendered underneath) and
+  // wipes up once auth hydrates — it never gates rendering on the network.
+  const boot = !bootDone ? (
+    <BootScreen ready={!loading} onDone={() => setBootDone(true)} />
+  ) : null;
 
   // If user is not authenticated, render Auth login/register view
   if (!user) {
-    return <Auth />;
+    return (
+      <>
+        {boot}
+        <Auth />
+      </>
+    );
   }
 
   const filteredCommands = COMMAND_ITEMS.filter(item =>
@@ -168,7 +161,9 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="app-container">
+    <>
+      {boot}
+      <div className="app-container">
       {/* Mobile Top Bar */}
       <header className="mobile-header-bar">
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -362,7 +357,7 @@ const AppContent: React.FC = () => {
               borderRadius: '12px',
               boxShadow: '0 24px 48px -12px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(99, 102, 241, 0.25)',
               overflow: 'hidden',
-              animation: 'modalPop 0.2s var(--ease-spring)'
+              animation: 'modalPop 0.2s var(--ease-out-expo)'
             }}
             onClick={e => e.stopPropagation()}
           >
@@ -374,7 +369,7 @@ const AppContent: React.FC = () => {
               borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
               gap: '10px'
             }}>
-              <Search size={18} style={{ color: 'hsl(var(--primary))' }} />
+              <Search size={18} style={{ color: 'var(--primary)' }} />
               <input
                 type="text"
                 placeholder="Type a command or jump to page..."
@@ -441,7 +436,7 @@ const AppContent: React.FC = () => {
                       onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Icon size={16} style={{ color: 'hsl(var(--primary))' }} />
+                        <Icon size={16} style={{ color: 'var(--primary)' }} />
                         <span>{item.label}</span>
                       </div>
                       <span style={{ fontSize: '0.68rem', padding: '2px 6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', color: '#94a3b8' }}>
@@ -471,6 +466,7 @@ const AppContent: React.FC = () => {
         </div>
       )}
     </div>
+    </>
   );
 };
 

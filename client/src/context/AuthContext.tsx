@@ -33,7 +33,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
   const [pendingOtp, setPendingOtp] = useState<{ userId: string; purpose: 'account_activation' } | null>(null);
 
-  // Load user from localStorage on mount
+  // Load user from localStorage on mount.
+  // Hydration (and therefore the boot curtain lift) never waits on the
+  // network: cached session renders immediately, the fresh profile fetch
+  // runs in the background. A slow or cold server can no longer hold the
+  // loading screen hostage.
   useEffect(() => {
     const initializeAuth = async () => {
       const token = localStorage.getItem('access_token');
@@ -54,34 +58,41 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             localStorage.removeItem('workspace');
           }
         }
-        
-        try {
-          // Fetch fresh user profile
-          const freshUser = await api.auth.me();
-          setUser(freshUser);
-          localStorage.setItem('user', JSON.stringify(freshUser));
-          
-          // Load workspaces
-          const wsList = await api.workspaces.list();
-          setWorkspaces(wsList);
-          
-          // If no active workspace or active is not in list, pick the first
-          const currentWS = cachedWorkspace ? JSON.parse(cachedWorkspace) : null;
-          if (wsList.length > 0) {
-            const matchesCurrent = currentWS ? wsList.find(w => w.id === currentWS.id) : null;
-            if (matchesCurrent) {
-              setWorkspace(matchesCurrent);
-              localStorage.setItem('workspace', JSON.stringify(matchesCurrent));
-            } else {
-              setWorkspace(wsList[0]);
-              localStorage.setItem('workspace', JSON.stringify(wsList[0]));
+
+        setLoading(false);
+
+        // Background refresh — never gates first paint.
+        (async () => {
+          try {
+            const freshUser = await api.auth.me();
+            setUser(freshUser);
+            localStorage.setItem('user', JSON.stringify(freshUser));
+
+            const wsList = await api.workspaces.list();
+            setWorkspaces(wsList);
+
+            const currentWS = cachedWorkspace ? JSON.parse(cachedWorkspace) : null;
+            if (wsList.length > 0) {
+              const matchesCurrent = currentWS ? wsList.find(w => w.id === currentWS.id) : null;
+              if (matchesCurrent) {
+                setWorkspace(matchesCurrent);
+                localStorage.setItem('workspace', JSON.stringify(matchesCurrent));
+              } else {
+                setWorkspace(wsList[0]);
+                localStorage.setItem('workspace', JSON.stringify(wsList[0]));
+              }
+            }
+          } catch (error: any) {
+            console.error('Initialize auth error', error);
+            // Network failures keep the cached session; only a rejected
+            // session (server said no) ends it.
+            const isNetworkFailure = error instanceof TypeError || /fetch|network/i.test(error?.message || '');
+            if (!isNetworkFailure) {
+              handleLogoutCleanup();
             }
           }
-        } catch (error) {
-          console.error('Initialize auth error', error);
-          // Token expired or invalid
-          handleLogoutCleanup();
-        }
+        })();
+        return;
       }
       setLoading(false);
     };

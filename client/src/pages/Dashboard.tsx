@@ -25,6 +25,7 @@ import {
   CartesianGrid
 } from 'recharts';
 import { PlatformBadge } from '../components/SocialIcons';
+import { DashboardSkeleton } from '../components/Skeleton';
 
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -67,11 +68,7 @@ export const Dashboard: React.FC = () => {
   }, []);
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '360px', color: '#9ca3af', fontSize: '0.9rem' }}>
-        Loading dashboard...
-      </div>
-    );
+    return <DashboardSkeleton />;
   }
 
   const formatNumber = (num: number) => {

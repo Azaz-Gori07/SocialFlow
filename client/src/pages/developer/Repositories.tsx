@@ -13,6 +13,7 @@ import {
   X
 } from 'lucide-react';
 import { api } from '../../services/api';
+import { GenericSkeleton } from '../../components/Skeleton';
 
 interface Repository {
   _id: string;
@@ -171,11 +172,7 @@ export const Repositories: React.FC<RepositoriesProps> = ({ refreshKey }) => {
   };
 
   if (loading) {
-    return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '320px', color: '#9ca3af', fontSize: '0.875rem' }}>
-        Loading repositories...
-      </div>
-    );
+    return <GenericSkeleton minHeight={320} />;
   }
 
   return (

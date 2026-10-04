@@ -755,7 +755,7 @@ export const DraftLibrary: React.FC = () => {
                 <label className="form-label">Platform *</label>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(90px, 1fr))', gap: '8px', marginTop: '6px' }}>
                   {PLATFORMS.map(p => (
-                    <button key={p.key} onClick={() => setCreateForm(f => ({ ...f, platform: p.key }))} style={{ padding: '10px 8px', background: createForm.platform === p.key ? `${p.color}20` : 'rgba(255,255,255,0.02)', border: `1px solid ${createForm.platform === p.key ? p.color : 'var(--border-glass)'}`, borderRadius: 'var(--radius-md)', color: createForm.platform === p.key ? p.color : 'hsl(var(--text-secondary))', cursor: 'pointer', fontSize: '0.8rem', fontWeight: createForm.platform === p.key ? 600 : 400, textAlign: 'center' }}>
+                    <button key={p.key} onClick={() => setCreateForm(f => ({ ...f, platform: p.key }))} style={{ padding: '10px 8px', background: createForm.platform === p.key ? `${p.color}20` : 'rgba(255,255,255,0.02)', border: `1px solid ${createForm.platform === p.key ? p.color : 'var(--border-glass)'}`, borderRadius: 'var(--radius-md)', color: createForm.platform === p.key ? p.color : 'var(--text-secondary)', cursor: 'pointer', fontSize: '0.8rem', fontWeight: createForm.platform === p.key ? 600 : 400, textAlign: 'center' }}>
                       {p.label}
                     </button>
                   ))}
@@ -846,9 +846,9 @@ export const DraftLibrary: React.FC = () => {
               </button>
             </div>
             {loadingHistory ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>Loading history...</div>
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>Loading history...</div>
             ) : publishHistory.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px', color: 'hsl(var(--text-muted))' }}>No publish attempts recorded for this draft.</div>
+              <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>No publish attempts recorded for this draft.</div>
             ) : (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
                 {publishHistory.map((entry: any, idx: number) => (
@@ -857,11 +857,11 @@ export const DraftLibrary: React.FC = () => {
                       <span style={{ fontWeight: 600, fontSize: '0.85rem', color: entry.outcome === 'success' ? '#10b981' : '#ef4444' }}>
                         Attempt #{entry.attemptNumber} — {entry.outcome === 'success' ? 'SUCCESS' : 'FAILED'}
                       </span>
-                      <span style={{ fontSize: '0.75rem', color: 'hsl(var(--text-muted))' }}>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                         {formatDate(entry.createdAt)}
                       </span>
                     </div>
-                    <div style={{ fontSize: '0.8rem', color: 'hsl(var(--text-secondary))', display: 'flex', flexDirection: 'column', gap: '3px' }}>
+                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '3px' }}>
                       <span>{entry.statusBefore} → {entry.statusAfter}</span>
                       {entry.platformResponse?.postId && <span>Post ID: {entry.platformResponse.postId}</span>}
                       {entry.errorMessage && <span style={{ color: '#ef4444' }}>Error: {entry.errorMessage}</span>}

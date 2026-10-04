@@ -377,7 +377,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
             boxShadow: '0 12px 30px -4px rgba(0, 0, 0, 0.12), 0 4px 10px -2px rgba(0, 0, 0, 0.05)',
             zIndex: 60,
             padding: '6px',
-            animation: 'modalPop 0.18s var(--ease-spring)'
+            animation: 'modalPop 0.18s var(--ease-out-expo)'
           }}>
             {/* User Header Summary in Popover */}
             <div style={{
