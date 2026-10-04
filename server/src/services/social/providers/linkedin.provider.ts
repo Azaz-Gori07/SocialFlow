@@ -18,7 +18,12 @@ import { ProviderError } from '../errors/providerError';
 import { logger } from '../../../shared/utils/logger';
 
 const LINKEDIN_SCOPES = ['openid', 'profile', 'email', 'w_member_social'];
-const ORG_SCOPE = 'w_organization_social';
+// w_organization_social is deliberately NOT requested: it requires LinkedIn's
+// "Community Management API" product approval, and an unapproved scope makes
+// the authorize endpoint hard-fail with LinkedIn's generic "Bummer" error
+// before the user even reaches consent. discoverAccounts() below already
+// degrades to member-only when org permission is absent — re-add the scope
+// (here and in the token exchange echo) once that product is approved.
 const RESTLI = { 'X-Restli-Protocol-Version': '2.0.0' };
 
 export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
@@ -44,7 +49,7 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
     return this.buildAuthorizationUrl(
       params.state,
       params.redirectUri,
-      params.scopes ?? [...LINKEDIN_SCOPES, ORG_SCOPE],
+      params.scopes ?? LINKEDIN_SCOPES,
       {
         ...(params.codeChallenge
           ? { code_challenge: params.codeChallenge, code_challenge_method: 'S256' }
@@ -59,7 +64,7 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
       redirectUri: params.redirectUri,
       codeVerifier: params.codeVerifier,
       // LinkedIn requires the same scope to be echoed during token exchange.
-      extraParams: { scope: [...LINKEDIN_SCOPES, ORG_SCOPE].join(' ') },
+      extraParams: { scope: LINKEDIN_SCOPES.join(' ') },
     });
   }
 
@@ -78,7 +83,7 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
       displayName: data.name,
       email: data.email,
       avatarUrl: data.picture,
-      scopes: [...LINKEDIN_SCOPES, ORG_SCOPE],
+      scopes: LINKEDIN_SCOPES,
     };
   }
 
