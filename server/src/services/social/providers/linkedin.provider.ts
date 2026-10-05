@@ -63,9 +63,7 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
     return this.doCodeExchange({
       code: params.code,
       redirectUri: params.redirectUri,
-      codeVerifier: params.codeVerifier,
-      // LinkedIn requires the same scope to be echoed during token exchange.
-      extraParams: { scope: LINKEDIN_SCOPES.join(' ') },
+      // deliberately no codeVerifier / no scope extraParams — mirror DevFlow
     });
   }
 
