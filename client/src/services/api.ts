@@ -108,6 +108,8 @@ export const api = {
   social: {
     getAccounts: () => request<any[]>('/social/accounts'),
     disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' }),
+    updateAccount: (id: string, body: { publishDefault: boolean }) =>
+      request<any>(`/social/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
     connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`, { method: 'POST' })
   },
   
@@ -126,7 +128,7 @@ export const api = {
     create: (body: any) => request<any>('/posts', { method: 'POST', body: JSON.stringify(body) }),
     update: (id: string, body: any) => request<any>(`/posts/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
     delete: (id: string) => request<any>(`/posts/${id}`, { method: 'DELETE' }),
-    bulkSchedule: (posts: any[]) => request<any>('/posts/schedule', { method: 'POST', body: JSON.stringify({ posts }) })
+    bulkSchedule: (posts: any[], workspaceId?: string) => request<any>('/posts/schedule', { method: 'POST', body: JSON.stringify({ posts, workspaceId }) })
   },
   
   comments: {
@@ -252,7 +254,7 @@ export const api = {
     archive: (id: string) => request<any>(`/drafts/${id}/archive`, { method: 'PUT' }),
     uploadMedia: (id: string, body: any) => request<any>(`/drafts/${id}/media`, { method: 'POST', body: JSON.stringify(body) }),
     queue: (id: string, body?: any) => request<any>(`/drafts/${id}/queue`, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
-    publish: (id: string) => request<any>(`/drafts/${id}/publish`, { method: 'POST' }),
+    publish: (id: string, body?: any) => request<any>(`/drafts/${id}/publish`, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
     retry: (id: string) => request<any>(`/drafts/${id}/retry`, { method: 'POST' }),
     history: (id: string) => request<any>(`/drafts/${id}/history`)
   }

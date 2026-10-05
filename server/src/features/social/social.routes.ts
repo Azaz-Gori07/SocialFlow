@@ -12,6 +12,7 @@ import {
   accountIdSchema,
   connectionIdSchema,
   selectAccountSchema,
+  updateAccountSchema,
 } from './social.validation';
 
 const router = Router();
@@ -62,6 +63,14 @@ router.post(
   authenticate as any,
   validate({ params: connectionIdSchema }),
   socialController.refresh as any
+);
+
+// PATCH /api/social/accounts/:id — account preferences (publishDefault)
+router.patch(
+  '/accounts/:id',
+  authenticate as any,
+  validate({ params: accountIdSchema, body: updateAccountSchema }),
+  socialController.updateAccount as any
 );
 
 // DELETE /api/social/accounts/:id — disconnect

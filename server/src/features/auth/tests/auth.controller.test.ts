@@ -77,7 +77,7 @@ describe('AuthController Integration Tests', () => {
 
       expect(response.status).toBe(409);
       expect(response.body.success).toBe(false);
-      expect(response.body.message).toContain('User with this email already exists');
+      expect(response.body.message).toContain('This email is already registered');
     });
   });
 
@@ -142,7 +142,7 @@ describe('AuthController Integration Tests', () => {
 
       expect(response.status).toBe(401);
       expect(response.body.success).toBe(false);
-      expect(response.body.message).toContain('Invalid email or password');
+      expect(response.body.message).toContain('Incorrect password');
     });
   });
 

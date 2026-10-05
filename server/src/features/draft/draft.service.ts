@@ -3,6 +3,8 @@ import { DraftPublisher } from './draft.publisher';
 import { AppError } from '../../shared/errors/appError';
 import { IDraft } from './draft.model';
 import { CreateDraftInput, UpdateDraftInput, PublishDraftInput } from './draft.validation';
+import { resolveTargetAccounts } from '../social/targeting';
+import { logActivity } from '../../shared/utils/activityLog';
 
 export interface PaginatedDrafts {
   items: IDraft[];
@@ -20,6 +22,14 @@ export class DraftService {
   }
 
   async createDraft(input: CreateDraftInput, userId: string): Promise<IDraft> {
+    // Validate explicit targets at write time (ownership, workspace, platform,
+    // connection). `[]` is allowed here as "not yet targeted" — it is rejected
+    // at queue/publish time and never means "publish everywhere". Absent
+    // targets keep the legacy fan-out for old clients.
+    if (input.targetAccountIds !== undefined && input.targetAccountIds.length > 0) {
+      await this.validateTargets(userId, input.workspaceId, [input.platform], input.targetAccountIds);
+    }
+
     const draft = await this.draftRepository.create({
       userId,
       platform: input.platform,
@@ -34,9 +44,46 @@ export class DraftService {
       ...(input.developerRepositoryId !== undefined ? { developerRepositoryId: input.developerRepositoryId } : {}),
       ...(input.developerOpportunityId !== undefined ? { developerOpportunityId: input.developerOpportunityId } : {}),
       ...(input.evidence !== undefined ? { evidence: input.evidence } : {}),
-      ...(input.aiMetadata !== undefined ? { aiMetadata: input.aiMetadata } : {})
+      ...(input.aiMetadata !== undefined ? { aiMetadata: input.aiMetadata } : {}),
+      ...(input.targetAccountIds !== undefined ? { targetAccountIds: input.targetAccountIds } : {})
     });
+
+    if (Array.isArray(input.targetAccountIds) && input.targetAccountIds.length > 0) {
+      await logActivity({
+        userId,
+        workspaceId: input.workspaceId,
+        action: 'TARGET_ASSIGNED',
+        details: `Assigned ${input.targetAccountIds.length} account(s) for ${input.platform}`,
+        meta: {
+          draftId: draft._id.toString(),
+          platforms: [input.platform],
+          targetAccountIds: input.targetAccountIds,
+          // Draft creation has no AI provenance — never label it 'ai'.
+          source: 'manual',
+          actor: userId,
+          workspaceId: input.workspaceId
+        }
+      });
+    }
     return draft;
+  }
+
+  /** Server-side target validation at write time. Never trusts client ids. */
+  private validateTargets(
+    userId: string,
+    workspaceId: string | undefined,
+    platforms: string[],
+    targetAccountIds: string[]
+  ): Promise<void> {
+    return resolveTargetAccounts({
+      userId,
+      platforms,
+      targetAccountIds,
+      workspaceId,
+      requireWorkspace: true,
+      // The fan-out gate fires at queue/publish time (user-action points).
+      fanoutConfirmed: true
+    }).then(() => undefined);
   }
 
   async uploadMedia(
@@ -77,8 +124,35 @@ export class DraftService {
     if (input.caption !== undefined) updateData.caption = input.caption;
     if (input.media !== undefined) updateData.media = input.media;
     if (input.status !== undefined) updateData.status = input.status;
+    if (input.targetAccountIds !== undefined) {
+      if (input.targetAccountIds.length > 0) {
+        await this.validateTargets(userId, input.workspaceId, [draft.platform], input.targetAccountIds);
+      }
+      updateData.targetAccountIds = input.targetAccountIds;
+    }
     const updatedDraft = await this.draftRepository.update(id, updateData as any);
     if (!updatedDraft) throw AppError.internal('Failed to update draft');
+
+    if (Array.isArray(updateData.targetAccountIds) && updateData.targetAccountIds.length > 0) {
+      const before = [...((draft.targetAccountIds as string[]) || [])].sort().join(',');
+      const after = [...(updateData.targetAccountIds as string[])].sort().join(',');
+      if (before !== after) {
+        await logActivity({
+          userId,
+          workspaceId: input.workspaceId,
+          action: 'TARGET_ASSIGNED',
+          details: `Re-targeted draft to ${(updateData.targetAccountIds as string[]).length} account(s)`,
+          meta: {
+            draftId: draft._id.toString(),
+            platforms: [draft.platform],
+            targetAccountIds: updateData.targetAccountIds,
+            source: 'manual',
+            actor: userId,
+            workspaceId: input.workspaceId
+          }
+        });
+      }
+    }
     return updatedDraft;
   }
 
@@ -99,16 +173,16 @@ export class DraftService {
   }
 
   async queueForPublishing(id: string, input: PublishDraftInput, userId: string): Promise<IDraft> {
-    return this.draftPublisher.queueForPublishing(id, userId, input.scheduledAt);
+    return this.draftPublisher.queueForPublishing(id, userId, input.scheduledAt, input.confirmFanout === true);
   }
 
-  async publishNow(id: string, userId: string): Promise<IDraft> {
+  async publishNow(id: string, userId: string, input: PublishDraftInput = {}): Promise<IDraft> {
     const draft = await this.draftRepository.findById(id);
     if (!draft) throw AppError.notFound('Draft not found');
     if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
     let targetDraft = draft;
     if (targetDraft.status === 'draft' || targetDraft.status === 'failed') {
-      targetDraft = await this.draftPublisher.queueForPublishing(id, userId);
+      targetDraft = await this.draftPublisher.queueForPublishing(id, userId, undefined, input.confirmFanout === true);
     }
     return this.draftPublisher.publishDraft(targetDraft);
   }

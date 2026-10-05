@@ -85,7 +85,7 @@ export class DraftController {
     try {
       if (!req.user) return next(AppError.unauthorized());
       const { id } = req.params;
-      const draft = await this.draftService.publishNow(id, req.user.id);
+      const draft = await this.draftService.publishNow(id, req.user.id, req.body);
       return ApiResponse.success(res, draft, 'Draft published');
     } catch (error) { next(error); }
   };

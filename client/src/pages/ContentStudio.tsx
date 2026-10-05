@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { 
@@ -22,6 +22,8 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
+import { AccountTargetPicker } from '../components/AccountTargetPicker';
+import { useAuth } from '../context/AuthContext';
 
 export const ContentStudio: React.FC = () => {
   const navigate = useNavigate();
@@ -42,6 +44,14 @@ export const ContentStudio: React.FC = () => {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('12:00');
   const [schedulerMessage, setSchedulerMessage] = useState('');
+  const [scheduling, setScheduling] = useState(false);
+  // Synchronous guard: React state alone is stale for a second click in the
+  // same tick (both handlers would pass the check before the re-render).
+  const schedulingRef = useRef(false);
+  // Account-level targeting for the schedule flow
+  const [scheduleTargets, setScheduleTargets] = useState<string[]>([]);
+  const [scheduleFanoutOk, setScheduleFanoutOk] = useState(true);
+  const { workspace } = useAuth();
 
   const handleGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,7 +126,11 @@ export const ContentStudio: React.FC = () => {
 
   const handleSchedulePost = async () => {
     if (!generatedContent) return;
-    
+
+    // Double-click guard: one in-flight create per modal session.
+    if (schedulingRef.current) return;
+    schedulingRef.current = true;
+    setScheduling(true);
     setSchedulerMessage('');
     try {
       const targetDate = new Date(`${scheduleDate}T${scheduleTime}:00`);
@@ -125,7 +139,12 @@ export const ContentStudio: React.FC = () => {
         platforms: platformsToSchedule,
         content: generatedContent.outputs[activeTab] || generatedContent.prompt,
         platformContent: generatedContent.outputs,
-        scheduledAt: scheduleDate ? targetDate.toISOString() : undefined
+        scheduledAt: scheduleDate ? targetDate.toISOString() : undefined,
+        targetAccountIds: scheduleTargets,
+        workspaceId: workspace?.id,
+        confirmFanout: scheduleFanoutOk,
+        // Provenance: this flow only exists when generatedContent came from AI.
+        source: 'ai'
       });
 
       setSchedulerMessage(scheduleDate ? 'Post scheduled successfully!' : 'Post published immediately!');
@@ -136,6 +155,9 @@ export const ContentStudio: React.FC = () => {
     } catch (err: any) {
       console.error(err);
       setSchedulerMessage(err.message || 'Scheduling failed.');
+    } finally {
+      schedulingRef.current = false;
+      setScheduling(false);
     }
   };
 
@@ -854,7 +876,7 @@ export const ContentStudio: React.FC = () => {
           {/* Primary Action Button */}
           <button
             type="button"
-            onClick={() => setShowScheduleModal(true)}
+            onClick={() => { setScheduleTargets([]); setScheduleFanoutOk(true); setShowScheduleModal(true); }}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -924,6 +946,12 @@ export const ContentStudio: React.FC = () => {
               </div>
             </div>
 
+            <AccountTargetPicker
+              platforms={platformsToSchedule}
+              selected={scheduleTargets}
+              onChange={(ids, fanoutOk) => { setScheduleTargets(ids); setScheduleFanoutOk(fanoutOk); }}
+            />
+
             <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '12px' }}>
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>Date</label>
@@ -969,9 +997,9 @@ export const ContentStudio: React.FC = () => {
                 type="button"
                 className="btn btn-primary"
                 onClick={handleSchedulePost}
-                disabled={platformsToSchedule.length === 0}
+                disabled={scheduling || platformsToSchedule.length === 0 || scheduleTargets.length === 0 || !scheduleFanoutOk}
               >
-                Confirm & Schedule
+                {scheduling ? 'Scheduling…' : 'Confirm & Schedule'}
               </button>
             </div>
           </div>

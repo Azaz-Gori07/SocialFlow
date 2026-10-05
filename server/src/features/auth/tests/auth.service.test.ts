@@ -90,7 +90,7 @@ describe('AuthService Unit Tests', () => {
           password: 'password123',
           fullName: 'Test User'
         })
-      ).rejects.toThrow(new AppError('User with this email already exists', 409));
+      ).rejects.toThrow(new AppError('This email is already registered. Please sign in instead.', 409));
     });
   });
 
@@ -113,7 +113,7 @@ describe('AuthService Unit Tests', () => {
       expect(mockOtpService.generateAndSendOtp).not.toHaveBeenCalled();
     });
 
-    it('should throw AppError unauthorized if user not found', async () => {
+    it('should throw AppError not found if user not found', async () => {
       mockUserRepository.findByEmail.mockResolvedValue(null);
 
       await expect(
@@ -121,7 +121,7 @@ describe('AuthService Unit Tests', () => {
           email: 'nonexistent@socialflow.ai',
           password: 'password123'
         })
-      ).rejects.toThrow(new AppError('Invalid email or password', 401));
+      ).rejects.toThrow(new AppError('No account found with this email. Please sign up first.', 404));
     });
 
     it('should throw AppError unauthorized if password does not match', async () => {
@@ -133,7 +133,7 @@ describe('AuthService Unit Tests', () => {
           email: 'test@socialflow.ai',
           password: 'wrongpassword'
         })
-      ).rejects.toThrow(new AppError('Invalid email or password', 401));
+      ).rejects.toThrow(new AppError('Incorrect password. Please try again or reset it.', 401));
     });
 
     it('should throw AppError unauthorized if email not verified', async () => {

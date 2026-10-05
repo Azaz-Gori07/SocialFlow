@@ -26,6 +26,11 @@ export interface ISocialAccount extends Document {
   providerCapabilities: ProviderCapabilities;
   status: AccountStatus;
   connectionStatus: ConnectionStatus;
+  /**
+   * Convenience preselection for NEW content only. Changing it never affects
+   * already scheduled posts (their target snapshot is immutable).
+   */
+  publishDefault?: boolean;
   /** OAuthConnection._id when the token is user-level. */
   connectionId?: string;
   /** Account-scoped token (e.g. Meta page token). Encrypted at rest, never serialized. */
@@ -71,6 +76,7 @@ const SocialAccountSchema = new Schema<ISocialAccount>(
       default: 'connected',
     },
     connectionId: { type: String },
+    publishDefault: { type: Boolean, default: false },
     encryptedAccessToken: { type: String },
     encryptedRefreshToken: { type: String },
     accessTokenExpiresAt: { type: String },

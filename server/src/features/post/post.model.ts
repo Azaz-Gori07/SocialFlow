@@ -39,7 +39,19 @@ export interface IPost extends Document {
   scheduledAttempt: number;
   /** Set when the post was created from a draft (publishing via drafts). */
   draftId?: string;
+  /**
+   * Immutable resolved target snapshot (SocialAccount _ids) captured when the
+   * content was targeted/scheduled; the scheduler never re-resolves from the
+   * current account list. Absent on legacy posts → historical fan-out.
+   */
+  targetAccountIds?: string[];
   scheduledAt?: string;
+  /**
+   * Where the targeting came from: manual | ai | csv | ai_autoschedule.
+   * Only ever set from real provenance ('ai' only when the content was
+   * actually AI-generated); absent on legacy posts.
+   */
+  source?: 'manual' | 'ai' | 'csv' | 'ai_autoschedule';
   publishedAt?: string;
   failedReason?: string;
   lastAttemptAt?: string;
@@ -97,6 +109,10 @@ const PostSchema = new Schema<IPost>(
     deliveries: { type: [DeliverySchema], default: [] },
     scheduledAttempt: { type: Number, default: 1 },
     draftId: { type: String },
+    // default: undefined disables Mongoose's implicit [] default so legacy
+    // posts stay absent rather than looking explicitly untargeted.
+    targetAccountIds: { type: [String], default: undefined },
+    source: { type: String, enum: ['manual', 'ai', 'csv', 'ai_autoschedule'] },
     scheduledAt: { type: String },
     publishedAt: { type: String },
     failedReason: { type: String },

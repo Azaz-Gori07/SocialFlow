@@ -70,7 +70,10 @@ const ActivityLogSchema = new Schema({
   userId: { type: String, required: true },
   workspaceId: { type: String },
   action: { type: String, required: true },
-  details: { type: String, required: true }
+  details: { type: String, required: true },
+  // Structured payload for machine-readable events (TARGET_ASSIGNED,
+  // CONTENT_SCHEDULED): ids, source, actor — `details` stays human-readable.
+  meta: { type: Schema.Types.Mixed }
 }, schemaOptions);
 ActivityLogSchema.index({ userId: 1, createdAt: -1 });
 ActivityLogSchema.index({ workspaceId: 1, createdAt: -1 });

@@ -84,7 +84,7 @@ describe('SocialController Integration Tests', () => {
       // The one-time transaction store has no entry for this state, so the
       // callback fails and the browser is redirected with an error flag.
       expect(response.status).toBe(302);
-      expect(response.header.location).toContain('/settings?connection=error');
+      expect(response.header.location).toContain('/connected-accounts?connection=error');
     });
 
     it('should redirect with an error when code or state parameters are missing', async () => {
@@ -93,7 +93,7 @@ describe('SocialController Integration Tests', () => {
         .query({ code: 'mock_code' });
 
       expect(response.status).toBe(302);
-      expect(response.header.location).toContain('/settings?connection=error');
+      expect(response.header.location).toContain('/connected-accounts?connection=error');
     });
   });
 

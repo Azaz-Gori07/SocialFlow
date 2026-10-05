@@ -19,6 +19,7 @@ export function toSafeAccount(doc: ISocialAccount | null | undefined) {
     providerCapabilities: doc.providerCapabilities,
     status: doc.status,
     connectionStatus: doc.connectionStatus,
+    publishDefault: doc.publishDefault ?? false,
     lastValidatedAt: doc.lastValidatedAt ?? null,
     lastSyncedAt: doc.lastSyncedAt ?? null,
     lastError: doc.lastError ?? null,

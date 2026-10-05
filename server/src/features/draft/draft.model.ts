@@ -36,6 +36,12 @@ export interface IDraft extends Document {
   lastAttemptAt?: string;
   errorMessage?: string;
   scheduledAt?: string;
+  /**
+   * Explicit publishing targets (SocialAccount _ids). Absent on legacy drafts
+   * → historical fan-out at publish time. `[]` means "not yet targeted" and is
+   * rejected at queue/publish time — it never means "publish everywhere".
+   */
+  targetAccountIds?: string[];
   // Developer Intelligence provenance (Phase 4). All optional and unset for
   // drafts created through the plain draft API, so existing documents and
   // their shape are unaffected.
@@ -94,6 +100,9 @@ const DraftSchema = new Schema<IDraft>({
   lastAttemptAt: { type: String },
   errorMessage: { type: String },
   scheduledAt: { type: String },
+  // default: undefined disables Mongoose's implicit [] default so legacy
+  // drafts stay absent rather than looking explicitly untargeted.
+  targetAccountIds: { type: [String], default: undefined },
   // Developer Intelligence provenance — optional, never defaulted so that
   // drafts created via POST /api/drafts are byte-identical to before.
   sourceType: { type: String, enum: ['manual', 'developer_activity'] },

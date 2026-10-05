@@ -26,7 +26,11 @@ export class PostRepository {
   ): Promise<PaginatedPostsResult> {
     const query: any = { userId };
     if (options.status) {
-      query.status = options.status;
+      // Partial successes belong to the published history: the UI shows them
+      // with an explicit `partial_failure` badge instead of hiding them from
+      // every filter tab.
+      query.status =
+        options.status === 'published' ? { $in: ['published', 'partial_failure'] } : options.status;
     }
 
     const [items, total] = await Promise.all([
@@ -65,7 +69,8 @@ export class PostRepository {
       'status',
       'scheduledAt',
       'failedReason',
-      'deliveries'
+      'deliveries',
+      'targetAccountIds'
     ];
     const $set: Record<string, unknown> = {};
     for (const field of allowed) {

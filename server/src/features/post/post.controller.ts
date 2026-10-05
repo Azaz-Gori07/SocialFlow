@@ -3,6 +3,7 @@ import { PostService } from './post.service';
 import { ApiResponse } from '../../shared/utils/response.util';
 import { AuthenticatedRequest as AuthenticatedUserRequest } from '../../shared/middleware/rbac.middleware';
 import { AppError } from '../../shared/errors/appError';
+import { bulkPostItemSchema } from './post.validation';
 
 export class PostController {
   constructor(private postService: PostService) {}
@@ -69,11 +70,29 @@ export class PostController {
   bulkSchedule = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) return next(AppError.unauthorized());
-      const { posts } = req.body;
+      const { posts, workspaceId } = req.body;
       if (!Array.isArray(posts) || posts.length === 0) {
         return next(AppError.badRequest('Request body must contain a non-empty "posts" array'));
       }
-      const results = await this.postService.bulkCreatePosts(posts, req.user.id);
+
+      // Row-level validation: every row must parse before anything is created.
+      const parsed: any[] = [];
+      const rowErrors: string[] = [];
+      posts.forEach((raw: any, idx: number) => {
+        const result = bulkPostItemSchema.safeParse(raw);
+        if (!result.success) {
+          rowErrors.push(`Row ${idx + 1}: ${result.error.issues.map((i) => i.message).join('; ')}`);
+          return;
+        }
+        parsed.push({ ...result.data, ...(workspaceId ? { workspaceId } : {}) });
+      });
+      if (rowErrors.length > 0) {
+        return next(
+          AppError.badRequest(`Bulk scheduling rejected — fix these rows:\n${rowErrors.join('\n')}`, rowErrors)
+        );
+      }
+
+      const results = await this.postService.bulkCreatePosts(parsed, req.user.id);
       return ApiResponse.success(res, results, 'Posts scheduled successfully', 201);
     } catch (error) { next(error); }
   };

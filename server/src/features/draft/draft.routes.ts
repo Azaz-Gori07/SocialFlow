@@ -95,7 +95,7 @@ router.post(
 router.post(
   '/:id/publish',
   authenticate as any,
-  validate({ params: draftIdSchema }),
+  validate({ params: draftIdSchema, body: publishDraftSchema }),
   draftController.publish as any
 );
 

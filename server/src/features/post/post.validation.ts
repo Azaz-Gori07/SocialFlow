@@ -14,7 +14,24 @@ export const createPostBaseSchema = z.object({
     message: 'Scheduled publishing date must be in the future'
   }),
   media: z.array(z.string()).optional().default([]),
-  platformContent: z.record(z.string(), z.string()).optional().default({})
+  platformContent: z.record(z.string(), z.string()).optional().default({}),
+  // Account-level targeting — validated server-side (ownership, workspace,
+  // platform, connection). Absent on legacy clients → historical fan-out.
+  targetAccountIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional(),
+  // Required by the server when targets >= FANOUT_CONFIRM_THRESHOLD accounts.
+  confirmFanout: z.boolean().optional(),
+  // Provenance — 'ai' only from the AI generation flow (never fabricated).
+  source: z.enum(['manual', 'ai', 'csv', 'ai_autoschedule']).optional()
+});
+
+/**
+ * One row of a CSV bulk schedule. `accountHandles` lets a row name target
+ * accounts by handle (e.g. `twitter|hello|2026-10-08T10:00:00Z|some_handle`);
+ * the server resolves handles to SocialAccounts — never the client.
+ */
+export const bulkPostItemSchema = createPostBaseSchema.extend({
+  accountHandles: z.array(z.string()).optional()
 });
 
 export const createPostSchema = createPostBaseSchema.refine((data) => {
@@ -48,7 +65,10 @@ export const updatePostSchema = z
         return new Date(val).getTime() > Date.now();
       }, { message: 'Scheduled publishing date must be in the future' }),
     media: z.array(z.string()).optional(),
-    platformContent: z.record(z.string(), z.string()).optional()
+    platformContent: z.record(z.string(), z.string()).optional(),
+    targetAccountIds: z.array(z.string()).optional(),
+    workspaceId: z.string().optional(),
+    confirmFanout: z.boolean().optional()
   })
   .refine((data) => {
     if (data.status === 'scheduled' && !data.scheduledAt) return false;

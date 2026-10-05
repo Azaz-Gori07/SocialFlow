@@ -29,7 +29,12 @@ export const selectAccountSchema = z.object({
   providerAccountId: z.string().min(1, 'providerAccountId is required'),
 });
 
+export const updateAccountSchema = z.object({
+  publishDefault: z.boolean(),
+});
+
 export type ConnectPlatformInput = z.infer<typeof connectPlatformSchema>;
 export type CallbackInput = z.infer<typeof callbackSchema>;
 export type AccountIdInput = z.infer<typeof accountIdSchema>;
 export type SelectAccountInput = z.infer<typeof selectAccountSchema>;
+export type UpdateAccountInput = z.infer<typeof updateAccountSchema>;

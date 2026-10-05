@@ -23,7 +23,11 @@ export const createDraftSchema = z.object({
   developerRepositoryId: z.string().optional(),
   developerOpportunityId: z.string().optional(),
   evidence: z.any().optional(),
-  aiMetadata: z.any().optional()
+  aiMetadata: z.any().optional(),
+  // Account-level targeting — validated server-side (ownership, workspace,
+  // platform, connection). Absent on legacy clients → historical fan-out.
+  targetAccountIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional()
 });
 
 export const uploadMediaSchema = z.object({
@@ -36,11 +40,15 @@ export const updateDraftSchema = z.object({
   contentType: contentTypeEnum.optional(),
   caption: z.string().optional(),
   media: z.array(mediaRefSchema).optional(),
-  status: draftStatusEnum.optional()
+  status: draftStatusEnum.optional(),
+  targetAccountIds: z.array(z.string()).optional(),
+  workspaceId: z.string().optional()
 });
 
 export const publishDraftSchema = z.object({
-  scheduledAt: z.string().optional() // optional future timestamp for scheduling
+  scheduledAt: z.string().optional(), // optional future timestamp for scheduling
+  // Required by the server when the draft targets >= FANOUT_CONFIRM_THRESHOLD accounts.
+  confirmFanout: z.boolean().optional()
 });
 
 export const draftIdSchema = z.object({

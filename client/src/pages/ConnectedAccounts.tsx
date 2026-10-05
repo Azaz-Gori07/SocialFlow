@@ -6,7 +6,8 @@ import {
   Link2,
   CheckCircle2,
   Share2,
-  Info
+  Info,
+  Star
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
 
@@ -17,6 +18,24 @@ export const ConnectedAccounts: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [savingDefaultId, setSavingDefaultId] = useState<string | null>(null);
+
+  /**
+   * Toggles publishDefault — convenience preselection for NEW content only.
+   * Changing it never touches posts that are already scheduled (their target
+   * snapshot is immutable).
+   */
+  const handleToggleDefault = async (acc: any) => {
+    setSavingDefaultId(acc._id);
+    try {
+      await api.social.updateAccount(acc._id, { publishDefault: !acc.publishDefault });
+      setAccounts(prev => prev.map(a => a._id === acc._id ? { ...a, publishDefault: !acc.publishDefault } : a));
+    } catch (err: any) {
+      setStatusMessage(`❌ ${err.message || 'Failed to update default preference'}`);
+    } finally {
+      setSavingDefaultId(null);
+    }
+  };
 
   const loadAccounts = async () => {
     try {
@@ -207,6 +226,53 @@ export const ConnectedAccounts: React.FC = () => {
                         {plat.desc}
                       </p>
                     </div>
+
+                    {connectedForPlat.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                        <div style={{ fontSize: '0.66rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: '#9ca3af', marginBottom: '4px' }}>
+                          Linked accounts · default publishing
+                        </div>
+                        {connectedForPlat.map(acc => (
+                          <div key={acc._id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px', padding: '6px 8px', borderRadius: '8px', border: '1px solid #f3f4f6' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                              <span style={{
+                                width: '24px', height: '24px', borderRadius: '999px',
+                                background: acc.avatarUrl ? `url(${acc.avatarUrl}) center/cover` : '#ebe8e2',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                fontSize: '0.7rem', fontWeight: 700, color: '#18181b', flexShrink: 0
+                              }}>
+                                {!acc.avatarUrl && (acc.displayName || acc.username || '?').charAt(0).toUpperCase()}
+                              </span>
+                              <span style={{ minWidth: 0, display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                                <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {acc.displayName || acc.username}
+                                </span>
+                                <span style={{ fontSize: '0.68rem', color: '#6b7280' }}>@{acc.username}</span>
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleDefault(acc)}
+                              disabled={savingDefaultId === acc._id}
+                              title="Default: preselected for new content. Never affects already scheduled posts."
+                              style={{
+                                display: 'flex', alignItems: 'center', gap: '4px',
+                                fontSize: '0.68rem', fontWeight: 700,
+                                padding: '4px 8px', borderRadius: '9999px',
+                                border: acc.publishDefault ? '1px solid #fde68a' : '1px solid #e5e7eb',
+                                background: acc.publishDefault ? '#fef3c7' : '#ffffff',
+                                color: acc.publishDefault ? '#b45309' : '#6b7280',
+                                cursor: savingDefaultId === acc._id ? 'wait' : 'pointer',
+                                flexShrink: 0
+                              }}
+                            >
+                              <Star size={11} fill={acc.publishDefault ? '#f59e0b' : 'none'} color={acc.publishDefault ? '#f59e0b' : '#9ca3af'} />
+                              {acc.publishDefault ? 'Default' : 'Set default'}
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {OAUTH_PLATFORMS.includes(plat.id) ? (
                       <button

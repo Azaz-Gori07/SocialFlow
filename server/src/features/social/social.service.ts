@@ -252,6 +252,25 @@ export class SocialService {
   }
 
   /** Disconnects a social account (ownership checked) and cascades its data. */
+  /**
+   * Sets the default-publishing preference for one account. Convenience for
+   * NEW content only — never affects already scheduled posts (their target
+   * snapshot is immutable).
+   */
+  async setPublishDefault(
+    id: string,
+    userId: string,
+    publishDefault: boolean
+  ): Promise<ReturnType<typeof toSafeAccount>> {
+    const account = await this.socialRepository.findAccountById(id);
+    if (!account) throw AppError.notFound('Social account not found');
+    if (account.userId !== userId) throw AppError.forbidden('Unauthorized access to this social account');
+
+    const updated = await this.socialRepository.updateAccount(id, { publishDefault });
+    if (!updated) throw AppError.internal('Failed to update social account');
+    return toSafeAccount(updated);
+  }
+
   async disconnectAccount(id: string, userId: string): Promise<void> {
     const account = await this.socialRepository.findAccountById(id);
     if (!account) throw AppError.notFound('Social account not found');

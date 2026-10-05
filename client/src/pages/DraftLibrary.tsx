@@ -22,6 +22,9 @@ import {
   ShieldCheck
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
+import { AccountTargetPicker } from '../components/AccountTargetPicker';
+import { FANOUT_CONFIRM_THRESHOLD } from '../config/publishing';
+import { useAuth } from '../context/AuthContext';
 
 type DraftPlatform = 'instagram' | 'facebook' | 'linkedin' | 'twitter' | 'youtube' | 'threads';
 type DraftStatus = 'draft' | 'ready' | 'publishing' | 'archived' | 'published' | 'failed';
@@ -57,6 +60,8 @@ interface Draft {
   lastAttemptAt?: string;
   errorMessage?: string;
   scheduledAt?: string;
+  /** Explicit publish targets (SocialAccount _ids); absent on legacy drafts. */
+  targetAccountIds?: string[];
 }
 
 const PLATFORMS: { key: DraftPlatform; label: string; color: string }[] = [
@@ -134,6 +139,26 @@ export const DraftLibrary: React.FC = () => {
     status: 'draft' as DraftStatus
   });
 
+  // Account-level targeting
+  const [accountMap, setAccountMap] = useState<Record<string, any>>({});
+  const [createTargets, setCreateTargets] = useState<string[]>([]);
+  const [editTargets, setEditTargets] = useState<string[]>([]);
+  const [editTargetsDirty, setEditTargetsDirty] = useState(false);
+  const { workspace } = useAuth();
+
+  useEffect(() => {
+    let alive = true;
+    api.social.getAccounts()
+      .then(list => {
+        if (!alive) return;
+        const m: Record<string, any> = {};
+        (list || []).forEach((a: any) => { m[a._id] = a; });
+        setAccountMap(m);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
   const fetchDrafts = useCallback(async (resetPage = false) => {
     setLoading(true);
     try {
@@ -174,11 +199,14 @@ export const DraftLibrary: React.FC = () => {
         platform: createForm.platform,
         contentType: createForm.contentType,
         caption: createForm.caption || undefined,
-        media: media.length > 0 ? media : undefined
+        media: media.length > 0 ? media : undefined,
+        targetAccountIds: createTargets,
+        workspaceId: workspace?.id
       });
       setMessage({ type: 'success', text: 'Draft created successfully' });
       setShowCreateModal(false);
       setCreateForm({ platform: '', contentType: 'post', caption: '', mediaUrl: '', mediaType: 'image', mediaName: '' });
+      setCreateTargets([]);
       fetchDrafts(true);
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Failed to create draft' });
@@ -191,7 +219,8 @@ export const DraftLibrary: React.FC = () => {
       await api.drafts.update(editingDraft._id, {
         contentType: editForm.contentType,
         caption: editForm.caption || undefined,
-        status: editForm.status
+        status: editForm.status,
+        ...(editTargetsDirty ? { targetAccountIds: editTargets, workspaceId: workspace?.id } : {})
       });
       setMessage({ type: 'success', text: 'Draft updated successfully' });
       setShowEditModal(false);
@@ -226,10 +255,14 @@ export const DraftLibrary: React.FC = () => {
 
   // Phase 2: Publish actions
   const handlePublish = async (draft: Draft) => {
-    if (!window.confirm(`Publish this ${draft.platform} draft now?`)) return;
+    const targetCount = draft.targetAccountIds?.length ?? 0;
+    const bigFanout = targetCount >= FANOUT_CONFIRM_THRESHOLD;
+    if (bigFanout) {
+      if (!window.confirm(`You're about to publish this post to ${targetCount} accounts.`)) return;
+    } else if (!window.confirm(`Publish this ${draft.platform} draft now?`)) return;
     setPublishingIds(prev => new Set(prev).add(draft._id));
     try {
-      const result = await api.drafts.publish(draft._id);
+      const result = await api.drafts.publish(draft._id, bigFanout ? { confirmFanout: true } : undefined);
       setMessage({
         type: result.status === 'published' ? 'success' : 'error',
         text: result.status === 'published'
@@ -250,8 +283,11 @@ export const DraftLibrary: React.FC = () => {
   };
 
   const handleQueue = async (draft: Draft) => {
+    const targetCount = draft.targetAccountIds?.length ?? 0;
+    const bigFanout = targetCount >= FANOUT_CONFIRM_THRESHOLD;
+    if (bigFanout && !window.confirm(`You're about to publish this post to ${targetCount} accounts.`)) return;
     try {
-      await api.drafts.queue(draft._id);
+      await api.drafts.queue(draft._id, bigFanout ? { confirmFanout: true } : undefined);
       setMessage({ type: 'success', text: 'Draft queued for publishing. Scheduler will process it shortly.' });
       fetchDrafts(true);
     } catch (err: any) {
@@ -290,6 +326,8 @@ export const DraftLibrary: React.FC = () => {
       caption: draft.caption || '',
       status: draft.status === 'published' || draft.status === 'publishing' ? 'draft' : draft.status
     });
+    setEditTargets(draft.targetAccountIds ?? []);
+    setEditTargetsDirty(false);
     setShowEditModal(true);
   };
 
@@ -358,7 +396,7 @@ export const DraftLibrary: React.FC = () => {
         </div>
 
         <button 
-          onClick={() => setShowCreateModal(true)} 
+          onClick={() => { setCreateTargets([]); setShowCreateModal(true); }} 
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -603,7 +641,7 @@ export const DraftLibrary: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => { setCreateTargets([]); setShowCreateModal(true); }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -655,6 +693,33 @@ export const DraftLibrary: React.FC = () => {
                     <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '8px', lineHeight: 1.5, maxHeight: '2.8em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                       {draft.caption}
                     </p>
+                  )}
+
+                  {/* Target accounts for this draft (absent = legacy fan-out) */}
+                  {draft.targetAccountIds !== undefined && (
+                    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }} data-testid="draft-targets">
+                      <span style={{ fontSize: '0.66rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                        Publish to
+                      </span>
+                      {draft.targetAccountIds.length === 0 && (
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '2px 8px', borderRadius: '9999px' }}>
+                          No accounts selected — pick targets before queueing
+                        </span>
+                      )}
+                      {draft.targetAccountIds.slice(0, 4).map(id => {
+                        const acc = accountMap[id];
+                        return (
+                          <span key={id} title={acc ? `@${acc.username}` : id} style={{ fontSize: '0.7rem', fontWeight: 600, color: '#374151', background: '#f3f4f6', border: '1px solid #e5e7eb', padding: '2px 8px', borderRadius: '9999px' }}>
+                            {acc ? `@${acc.username}` : `…${id.slice(-5)}`}
+                          </span>
+                        );
+                      })}
+                      {draft.targetAccountIds.length > 4 && (
+                        <span style={{ fontSize: '0.7rem', fontWeight: 600, color: '#6b7280', padding: '2px 4px' }}>
+                          +{draft.targetAccountIds.length - 4} more
+                        </span>
+                      )}
+                    </div>
                   )}
 
                   {draft.media.length > 0 && (
@@ -761,6 +826,13 @@ export const DraftLibrary: React.FC = () => {
                   ))}
                 </div>
               </div>
+              {createForm.platform && (
+                <AccountTargetPicker
+                  platforms={[createForm.platform]}
+                  selected={createTargets}
+                  onChange={(ids) => setCreateTargets(ids)}
+                />
+              )}
               <div>
                 <label className="form-label">Content Type</label>
                 <select value={createForm.contentType} onChange={e => setCreateForm(f => ({ ...f, contentType: e.target.value }))} className="form-input">
@@ -806,6 +878,11 @@ export const DraftLibrary: React.FC = () => {
               </button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <AccountTargetPicker
+                platforms={[editingDraft.platform]}
+                selected={editTargets}
+                onChange={(ids) => { setEditTargets(ids); setEditTargetsDirty(true); }}
+              />
               <div>
                 <label className="form-label">Content Type</label>
                 <select value={editForm.contentType} onChange={e => setEditForm(f => ({ ...f, contentType: e.target.value }))} className="form-input">

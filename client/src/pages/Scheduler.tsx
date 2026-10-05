@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { api } from '../services/api';
 import { 
   Calendar, 
@@ -11,6 +11,8 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
+import { AccountTargetPicker } from '../components/AccountTargetPicker';
+import { useAuth } from '../context/AuthContext';
 
 export const Scheduler: React.FC = () => {
   const [posts, setPosts] = useState<any[]>([]);
@@ -29,6 +31,14 @@ export const Scheduler: React.FC = () => {
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('12:00');
   const [timeError, setTimeError] = useState('');
+  const [creating, setCreating] = useState(false);
+  // Synchronous guard: React state alone is stale for a second click in the
+  // same tick (both handlers would pass the check before the re-render).
+  const creatingRef = useRef(false);
+  // Account-level targeting for the create flow
+  const [createTargets, setCreateTargets] = useState<string[]>([]);
+  const [createFanoutOk, setCreateFanoutOk] = useState(true);
+  const { workspace } = useAuth();
 
   // Clear time validation error when inputs change
   const onDateChange = (val: string) => { setScheduleDate(val); setTimeError(''); };
@@ -38,6 +48,23 @@ export const Scheduler: React.FC = () => {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [csvContent, setCsvContent] = useState('');
   const [bulkStatus, setBulkStatus] = useState('');
+
+  // Account metadata for the per-account delivery status matrix.
+  const [accountMap, setAccountMap] = useState<Record<string, any>>({});
+  const [showAllDeliveries, setShowAllDeliveries] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    let alive = true;
+    api.social.getAccounts()
+      .then(list => {
+        if (!alive) return;
+        const m: Record<string, any> = {};
+        (list || []).forEach((a: any) => { m[a._id] = a; });
+        setAccountMap(m);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
 
   const loadPosts = async () => {
     setLoading(true);
@@ -67,11 +94,18 @@ export const Scheduler: React.FC = () => {
       return;
     }
 
+    // Double-click guard: one in-flight create per modal session.
+    if (creatingRef.current) return;
+    creatingRef.current = true;
+    setCreating(true);
     try {
       await api.posts.create({
         platforms,
         content,
         scheduledAt: targetDate ? targetDate.toISOString() : undefined,
+        targetAccountIds: createTargets,
+        workspaceId: workspace?.id,
+        confirmFanout: createFanoutOk,
         ...(targetDate ? { status: 'scheduled' } : {})
       });
 
@@ -83,6 +117,9 @@ export const Scheduler: React.FC = () => {
     } catch (err) {
       console.error(err);
       alert('Failed to schedule post.');
+    } finally {
+      creatingRef.current = false;
+      setCreating(false);
     }
   };
 
@@ -112,22 +149,28 @@ export const Scheduler: React.FC = () => {
           const plats = parts[0].split(',').map(p => p.trim());
           const text = parts[1].trim();
           const time = parts[2].trim();
-          
+          const handles = (parts[3] || '').trim();
+
           payload.push({
             platforms: plats,
             content: text,
-            scheduledAt: time
+            scheduledAt: time,
+            // CSV provenance: never fabricated, set only by this flow.
+            source: 'csv',
+            ...(handles
+              ? { accountHandles: handles.split(',').map(h => h.trim()).filter(Boolean) }
+              : {})
           });
           count++;
         }
       }
 
       if (payload.length === 0) {
-        setBulkStatus('Error: Invalid format. Please use: platforms|content|ISOtime');
+        setBulkStatus('Error: Invalid format. Please use: platforms|content|ISOtime|account_handle(optional)');
         return;
       }
 
-      await api.posts.bulkSchedule(payload);
+      await api.posts.bulkSchedule(payload, workspace?.id);
       setBulkStatus(`Successfully queued ${count} posts!`);
       
       setTimeout(() => {
@@ -228,7 +271,7 @@ export const Scheduler: React.FC = () => {
           <div style={{ display: 'flex', gap: '12px' }}>
             <button 
               type="button"
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => { setCreateTargets([]); setCreateFanoutOk(true); setShowCreateModal(true); }}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -579,7 +622,7 @@ export const Scheduler: React.FC = () => {
             <div style={{ display: 'flex', gap: '12px' }}>
               <button
                 type="button"
-                onClick={() => setShowCreateModal(true)}
+                onClick={() => { setCreateTargets([]); setCreateFanoutOk(true); setShowCreateModal(true); }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -663,12 +706,65 @@ export const Scheduler: React.FC = () => {
                         fontSize: '0.72rem',
                         fontWeight: 600,
                         textTransform: 'capitalize',
-                        background: post.status === 'published' ? '#ecfdf5' : post.status === 'failed' ? '#fef2f2' : '#fef3c7',
-                        color: post.status === 'published' ? '#10b981' : post.status === 'failed' ? '#ef4444' : '#b45309'
+                        background: post.status === 'published' ? '#ecfdf5' : post.status === 'failed' ? '#fef2f2' : post.status === 'partial_failure' ? '#fffbeb' : '#fef3c7',
+                        color: post.status === 'published' ? '#10b981' : post.status === 'failed' ? '#ef4444' : post.status === 'partial_failure' ? '#d97706' : '#b45309'
                       }}>
-                        {post.status || 'scheduled'}
+                        {post.status === 'partial_failure' ? 'partial failure' : (post.status || 'scheduled')}
                       </span>
                     </div>
+
+                    {/* Account-level delivery matrix: one chip per target account */}
+                    {Array.isArray(post.deliveries) && post.deliveries.length > 0 && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }} data-testid="delivery-matrix">
+                        {(showAllDeliveries[post._id] ? post.deliveries : post.deliveries.slice(0, 8)).map((d: any) => {
+                          const acc = accountMap[d.socialAccountId];
+                          const willRetry = !d.deadLettered && d.nextRetryAt && (d.status === 'failed' || d.status === 'pending');
+                          const label =
+                            d.status === 'published' ? 'Published' :
+                            d.status === 'publishing' ? 'Publishing' :
+                            d.status === 'failed' ? (willRetry ? 'Retrying' : 'Failed') :
+                            willRetry ? 'Retrying' : 'Queued';
+                          const tone =
+                            label === 'Published' ? ['#ecfdf5', '#047857'] :
+                            label === 'Failed' ? ['#fef2f2', '#dc2626'] :
+                            label === 'Retrying' ? ['#fffbeb', '#b45309'] :
+                            label === 'Publishing' ? ['#eff6ff', '#1d4ed8'] :
+                            ['#f3f4f6', '#4b5563'];
+                          return (
+                            <span
+                              key={d.socialAccountId}
+                              data-testid="delivery-chip"
+                              title={d.lastError || (acc ? `@${acc.username}` : d.socialAccountId)}
+                              style={{
+                                display: 'inline-flex', alignItems: 'center', gap: '5px',
+                                padding: '2px 8px', borderRadius: '9999px',
+                                fontSize: '0.68rem', fontWeight: 600,
+                                background: tone[0], color: tone[1],
+                                border: `1px solid ${tone[1]}22`
+                              }}
+                            >
+                              {acc ? `@${acc.username}` : `…${d.socialAccountId.slice(-5)}`}
+                              <span style={{ opacity: 0.75 }}>→ {label}{d.attempts > 1 ? ` · ${d.attempts}` : ''}</span>
+                            </span>
+                          );
+                        })}
+                        {post.deliveries.length > 8 && (
+                          <button
+                            type="button"
+                            onClick={() => setShowAllDeliveries(prev => ({ ...prev, [post._id]: !prev[post._id] }))}
+                            style={{
+                              padding: '2px 8px', borderRadius: '9999px', border: '1px dashed #d1d5db',
+                              fontSize: '0.68rem', fontWeight: 600, color: '#6b7280',
+                              background: '#ffffff', cursor: 'pointer'
+                            }}
+                          >
+                            {showAllDeliveries[post._id]
+                              ? 'Show less'
+                              : `+${post.deliveries.length - 8} more`}
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -747,6 +843,12 @@ export const Scheduler: React.FC = () => {
                 </div>
               </div>
 
+              <AccountTargetPicker
+                platforms={platforms}
+                selected={createTargets}
+                onChange={(ids, fanoutOk) => { setCreateTargets(ids); setCreateFanoutOk(fanoutOk); }}
+              />
+
               <div>
                 <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '6px' }}>
                   Post Content
@@ -799,9 +901,9 @@ export const Scheduler: React.FC = () => {
                 <button
                   type="submit"
                   className="btn btn-primary"
-                  disabled={platforms.length === 0 || !content.trim()}
+                  disabled={creating || platforms.length === 0 || !content.trim() || createTargets.length === 0 || !createFanoutOk}
                 >
-                  Confirm & Schedule
+                  {creating ? 'Scheduling…' : 'Confirm & Schedule'}
                 </button>
               </div>
             </form>
@@ -843,7 +945,7 @@ export const Scheduler: React.FC = () => {
             </div>
 
             <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: 0 }}>
-              Format: <code>platforms|content|ISOtime</code> (one post per line, separated by vertical bar).
+              Format: <code>platforms|content|ISOtime|account_handle</code> (one post per line; the 4th column is optional — one handle, or several separated by commas, e.g. <code>handle1,handle2</code>). Rows naming an unknown or disconnected handle are rejected with a row-level error — they never fall back to every account.
             </p>
 
             <textarea

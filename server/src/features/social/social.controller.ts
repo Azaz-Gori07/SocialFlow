@@ -98,6 +98,21 @@ export class SocialController {
   };
 
   /** DELETE /api/social/accounts/:id */
+  /** PATCH /api/social/accounts/:id — account preferences (publishDefault). */
+  updateAccount = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const account = await this.socialService.setPublishDefault(
+        req.params.id,
+        req.user.id,
+        req.body.publishDefault
+      );
+      return ApiResponse.success(res, account, 'Account preference updated');
+    } catch (error) {
+      next(error);
+    }
+  };
+
   disconnect = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) return next(AppError.unauthorized());

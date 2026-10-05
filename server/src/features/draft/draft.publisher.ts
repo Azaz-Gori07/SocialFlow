@@ -4,6 +4,8 @@ import { IDraft, DraftPlatform } from './draft.model';
 import { AppError } from '../../shared/errors/appError';
 import { PostRepository } from '../post/post.repository';
 import { SocialRepository } from '../social/social.repository';
+import { resolveTargetAccounts } from '../social/targeting';
+import { ISocialAccount } from '../social/social.model';
 import { IPost } from '../post/post.model';
 import mongoose from 'mongoose';
 import { runPostDeliveries } from '../../services/scheduler';
@@ -15,8 +17,9 @@ import { logger } from '../../shared/utils/logger';
  * Publishing flow (guideline §18/§19/§20):
  *   Draft -> Post(+deliveries) -> DeliveryEngine -> Platform -> Draft terminal
  *
- * - Drafts are converted into Post records; every connected account of the
- *   draft's platform becomes one delivery with its own idempotency key
+ * - Drafts are converted into Post records; one delivery per selected target
+ *   account (legacy drafts: every connected account of the draft's platform),
+ *   each with its own idempotency key
  * - A draft is only marked PUBLISHED after a successful platform response
  * - Retries re-run only the failed deliveries (bounded, with backoff)
  * - Preserves PublishHistory and never deletes the draft record
@@ -31,7 +34,12 @@ export class DraftPublisher {
     this.publishHistoryRepository = new PublishHistoryRepository();
   }
 
-  async queueForPublishing(draftId: string, userId: string, scheduledAt?: string): Promise<IDraft> {
+  async queueForPublishing(
+    draftId: string,
+    userId: string,
+    scheduledAt?: string,
+    confirmFanout?: boolean
+  ): Promise<IDraft> {
     const draft = await this.draftRepository.findById(draftId);
     if (!draft) {
       throw AppError.notFound('Draft not found');
@@ -43,6 +51,27 @@ export class DraftPublisher {
     if (draft.status !== 'draft' && draft.status !== 'failed') {
       throw AppError.badRequest(
         `Cannot queue draft with status "${draft.status}". Only "draft" or "failed" drafts can be queued for publishing.`
+      );
+    }
+
+    // Resolve and validate targets BEFORE scheduling: explicit targeting must
+    // be non-empty and still valid (ownership, platform, connection); the
+    // fan-out confirmation gate fires here. `draft.status === 'failed'` means
+    // a retry — it was already confirmed on the first queue. Legacy drafts
+    // (no targetAccountIds) keep their historical fan-out.
+    if (draft.targetAccountIds !== undefined) {
+      if (draft.targetAccountIds.length === 0) {
+        throw AppError.badRequest('Select at least one account before scheduling this draft.');
+      }
+      await resolveTargetAccounts(
+        {
+          userId,
+          platforms: [draft.platform],
+          targetAccountIds: draft.targetAccountIds,
+          requireWorkspace: false, // workspace validated when targets were written
+          fanoutConfirmed: draft.status === 'failed' || confirmFanout === true
+        },
+        { socialRepository: this.socialRepository }
       );
     }
 
@@ -94,10 +123,39 @@ export class DraftPublisher {
       return this.retryExistingPost(draft, existing);
     }
 
-    // Find all connected accounts for this platform (no accounts[0]).
-    const accounts = (await this.socialRepository.findAccountsByUserId(userId)).filter(
-      a => a.platform === platform
-    );
+    // Resolve delivery targets: explicit snapshot only, otherwise legacy
+    // fan-out. The scheduler must never re-derive targets from the current
+    // account list for targeted drafts.
+    let accounts: ISocialAccount[];
+    if (draft.targetAccountIds !== undefined) {
+      if (draft.targetAccountIds.length === 0) {
+        await this.failDraft(draft, 'No target accounts selected for this draft', 'NO_TARGETS');
+        const refetched0 = await this.draftRepository.findById(draftIdStr);
+        return refetched0 || draft;
+      }
+      try {
+        const resolved = await resolveTargetAccounts(
+          {
+            userId,
+            platforms: [platform],
+            targetAccountIds: draft.targetAccountIds,
+            requireWorkspace: false, // workspace validated when targets were written
+            fanoutConfirmed: true // fan-out confirmed at queue time
+          },
+          { socialRepository: this.socialRepository }
+        );
+        accounts = resolved.accounts;
+      } catch (err: any) {
+        await this.failDraft(draft, err.message || 'Target accounts are no longer valid', 'TARGETS_INVALID');
+        const refetched1 = await this.draftRepository.findById(draftIdStr);
+        return refetched1 || draft;
+      }
+    } else {
+      // Legacy fan-out: every connected account of the draft's platform.
+      accounts = (await this.socialRepository.findAccountsByUserId(userId)).filter(
+        a => a.platform === platform
+      );
+    }
     if (accounts.length === 0) {
       await this.failDraft(draft, 'No connected ' + platform + ' account found for user ' + userId, 'ACCOUNT_MISSING');
       const refetched = await this.draftRepository.findById(draftIdStr);
@@ -120,6 +178,8 @@ export class DraftPublisher {
       scheduledAt: new Date().toISOString(),
       scheduledAttempt,
       draftId: draftIdStr,
+      // Immutable target snapshot travels with the post (absent for legacy drafts).
+      ...(draft.targetAccountIds !== undefined ? { targetAccountIds: draft.targetAccountIds } : {}),
       deliveries: accounts.map(acc => ({
         socialAccountId: acc._id.toString(),
         platform,

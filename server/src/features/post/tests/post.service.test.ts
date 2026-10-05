@@ -49,6 +49,9 @@ describe('PostService Unit Tests', () => {
         media: [],
         platformContent: undefined,
         scheduledAt: undefined,
+        // New posts always record provenance; 'manual' unless a real
+        // AI/CSV/auto-schedule flow says otherwise.
+        source: 'manual',
         deliveries: []
       });
       expect(result).toBe(mockPost);
