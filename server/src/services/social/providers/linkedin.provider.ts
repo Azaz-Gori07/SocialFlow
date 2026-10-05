@@ -46,19 +46,20 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
   }
 
   getAuthorizationUrl(params: { state: string; redirectUri: string; scopes?: string[]; codeChallenge?: string }): string {
+    // No PKCE on purpose: the proven-working integration for this exact app
+    // (DevFlow, same client_id + secret) authorizes without code_challenge —
+    // LinkedIn's token endpoint rejected our PKCE+secret exchange with
+    // `invalid_client: Client authentication failed`. state still covers CSRF.
     return this.buildAuthorizationUrl(
       params.state,
       params.redirectUri,
-      params.scopes ?? LINKEDIN_SCOPES,
-      {
-        ...(params.codeChallenge
-          ? { code_challenge: params.codeChallenge, code_challenge_method: 'S256' }
-          : {}),
-      }
+      params.scopes ?? LINKEDIN_SCOPES
     );
   }
 
   async exchangeCode(params: { code: string; redirectUri: string; codeVerifier?: string }): Promise<AuthTokens> {
+    // Mirror the working exchange body exactly: no code_verifier, no scope
+    // echo — only grant_type, code, redirect_uri, client_id, client_secret.
     return this.doCodeExchange({
       code: params.code,
       redirectUri: params.redirectUri,
