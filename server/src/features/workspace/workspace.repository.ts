@@ -27,6 +27,12 @@ export class WorkspaceRepository {
     return WorkspaceMemberModel.find({ userId }).exec();
   }
 
+  /** Batch fetch — avoids one roundtrip per membership (N+1). */
+  async findWorkspacesByIds(ids: string[]): Promise<IWorkspace[]> {
+    if (ids.length === 0) return [];
+    return WorkspaceModel.find({ _id: { $in: ids } } as any).exec();
+  }
+
   async updateMemberRole(workspaceId: string, userId: string, role: 'owner' | 'admin' | 'editor' | 'viewer'): Promise<IWorkspaceMember | null> {
     return WorkspaceMemberModel.findOneAndUpdate(
       { workspaceId, userId },

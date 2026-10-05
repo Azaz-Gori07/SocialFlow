@@ -3,22 +3,27 @@ import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar } from './components/Sidebar';
 import { BootScreen } from './components/BootScreen';
-import { Auth } from './pages/Auth';
-import { Dashboard } from './pages/Dashboard';
-import { ContentStudio } from './pages/ContentStudio';
-import { Scheduler } from './pages/Scheduler';
-import { Comments } from './pages/Comments';
-import { Analytics } from './pages/Analytics';
-import { Workspaces } from './pages/Workspaces';
-import { Settings } from './pages/Settings';
-import { ConnectedAccounts } from './pages/ConnectedAccounts';
-import { NotificationCenter } from './pages/NotificationCenter';
-import { NotificationPreferences } from './pages/NotificationPreferences';
-import { AuthCallback } from './pages/AuthCallback';
-import { DeveloperGitHubCallback } from './pages/developer/DeveloperGitHubCallback';
-import { DeveloperShell } from './pages/developer/DeveloperShell';
-import { DraftLibrary } from './pages/DraftLibrary';
-import { Profile } from './pages/Profile';
+import { GenericSkeleton } from './components/Skeleton';
+import { Suspense } from 'react';
+// Pages are route/tab-level code split: the shell paints first and each
+// page chunk streams in on navigation instead of shipping everything in the
+// initial bundle.
+const Auth = React.lazy(() => import('./pages/Auth').then(m => ({ default: m.Auth })));
+const Dashboard = React.lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
+const ContentStudio = React.lazy(() => import('./pages/ContentStudio').then(m => ({ default: m.ContentStudio })));
+const Scheduler = React.lazy(() => import('./pages/Scheduler').then(m => ({ default: m.Scheduler })));
+const Comments = React.lazy(() => import('./pages/Comments').then(m => ({ default: m.Comments })));
+const Analytics = React.lazy(() => import('./pages/Analytics').then(m => ({ default: m.Analytics })));
+const Workspaces = React.lazy(() => import('./pages/Workspaces').then(m => ({ default: m.Workspaces })));
+const Settings = React.lazy(() => import('./pages/Settings').then(m => ({ default: m.Settings })));
+const ConnectedAccounts = React.lazy(() => import('./pages/ConnectedAccounts').then(m => ({ default: m.ConnectedAccounts })));
+const NotificationCenter = React.lazy(() => import('./pages/NotificationCenter').then(m => ({ default: m.NotificationCenter })));
+const NotificationPreferences = React.lazy(() => import('./pages/NotificationPreferences').then(m => ({ default: m.NotificationPreferences })));
+const AuthCallback = React.lazy(() => import('./pages/AuthCallback').then(m => ({ default: m.AuthCallback })));
+const DeveloperGitHubCallback = React.lazy(() => import('./pages/developer/DeveloperGitHubCallback').then(m => ({ default: m.DeveloperGitHubCallback })));
+const DeveloperShell = React.lazy(() => import('./pages/developer/DeveloperShell').then(m => ({ default: m.DeveloperShell })));
+const DraftLibrary = React.lazy(() => import('./pages/DraftLibrary').then(m => ({ default: m.DraftLibrary })));
+const Profile = React.lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
 import { 
   Menu, 
   Layers, 
@@ -116,7 +121,9 @@ const AppContent: React.FC = () => {
     return (
       <>
         {boot}
-        <Auth />
+        <Suspense fallback={<GenericSkeleton />}>
+          <Auth />
+        </Suspense>
       </>
     );
   }
@@ -331,7 +338,9 @@ const AppContent: React.FC = () => {
 
         {/* Active Page View */}
         <main className="content-wrapper">
-          {renderActivePage()}
+          <Suspense fallback={<GenericSkeleton />}>
+            {renderActivePage()}
+          </Suspense>
         </main>
       </div>
 
@@ -473,6 +482,7 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <AuthProvider>
+      <Suspense fallback={<GenericSkeleton minHeight={200} />}>
       <Routes>
         <Route path="/auth/callback" element={<AuthCallback />} />
         {/* GitHub sends the developer OAuth handshake back to the app: the
@@ -480,6 +490,7 @@ export const App: React.FC = () => {
         <Route path="/developer/github/callback" element={<DeveloperGitHubCallback />} />
         <Route path="*" element={<AppContent />} />
       </Routes>
+      </Suspense>
     </AuthProvider>
   );
 };

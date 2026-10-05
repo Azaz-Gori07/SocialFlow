@@ -64,11 +64,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Background refresh — never gates first paint.
         (async () => {
           try {
-            const freshUser = await api.auth.me();
+            // Both calls are independent — run them in parallel.
+            const [freshUser, wsList] = await Promise.all([
+              api.auth.me(),
+              api.workspaces.list()
+            ]);
             setUser(freshUser);
             localStorage.setItem('user', JSON.stringify(freshUser));
 
-            const wsList = await api.workspaces.list();
             setWorkspaces(wsList);
 
             const currentWS = cachedWorkspace ? JSON.parse(cachedWorkspace) : null;

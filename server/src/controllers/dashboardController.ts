@@ -3,13 +3,38 @@ import { db } from '../database/db';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { SocialPlatform } from '../types';
 
+/**
+ * Latest + previous analytics document per account, resolved inside MongoDB
+ * in one roundtrip instead of pulling the entire history over the wire and
+ * sorting it in JS. (Analytics rows are cascade-deleted with their account,
+ * so filtering by userId matches the account-scoped behavior exactly.)
+ */
+async function latestAnalyticsPairs(userId: string): Promise<Array<{ accountId: string; latest: any; prev: any }>> {
+  const rows = await db.analytics.aggregate([
+    { $match: { userId } },
+    { $sort: { accountId: 1, date: -1 } },
+    { $group: { _id: '$accountId', docs: { $push: '$$ROOT' } } },
+    {
+      $project: {
+        accountId: '$_id',
+        latest: { $arrayElemAt: ['$docs', 0] },
+        prev: { $arrayElemAt: ['$docs', 1] }
+      }
+    }
+  ]);
+  return rows as any;
+}
+
 export const DashboardController = {
   getOverview: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-      const accounts = await db.socialAccounts.find({ userId });
+      const [accounts, pairs] = await Promise.all([
+        db.socialAccounts.find({ userId }).select('platform'),
+        latestAnalyticsPairs(userId)
+      ]);
       if (accounts.length === 0) {
         return res.json({
           totalFollowers: 0,
@@ -24,23 +49,12 @@ export const DashboardController = {
         });
       }
 
-      // Fetch analytics for all accounts
-      const accountIds = accounts.map(a => a._id);
-      const analyticsRecords = await db.analytics.find({ accountId: { $in: accountIds } });
-
-      // Group records by date to find the latest data points
+      // Latest/previous record per account — computed by the aggregation above.
       const latestRecordsByAccount: Record<string, any> = {};
       const previousRecordsByAccount: Record<string, any> = {};
-
-      // Sort analytics by date descending
-      const sortedRecords = [...analyticsRecords].sort((a, b) => b.date.localeCompare(a.date));
-
-      for (const record of sortedRecords) {
-        if (!latestRecordsByAccount[record.accountId]) {
-          latestRecordsByAccount[record.accountId] = record;
-        } else if (!previousRecordsByAccount[record.accountId]) {
-          previousRecordsByAccount[record.accountId] = record;
-        }
+      for (const pair of pairs) {
+        if (pair.latest) latestRecordsByAccount[pair.accountId] = pair.latest;
+        if (pair.prev) previousRecordsByAccount[pair.accountId] = pair.prev;
       }
 
       let totalFollowers = 0;
@@ -114,13 +128,10 @@ export const DashboardController = {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-      const accounts = await db.socialAccounts.find({ userId });
-      if (accounts.length === 0) {
-        return res.json([]);
-      }
-
-      const accountIds = accounts.map(a => a._id);
-      const analyticsRecords = await db.analytics.find({ accountId: { $in: accountIds } });
+      // Analytics rows are cascade-deleted with their account, so a userId
+      // filter equals the old account-scoped filter — one query, no accounts
+      // roundtrip needed.
+      const analyticsRecords = await db.analytics.find({ userId }).sort({ date: 1 });
 
       // Group analytics by date
       const dataByDate: Record<string, {
@@ -166,21 +177,18 @@ export const DashboardController = {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-      const accounts = await db.socialAccounts.find({ userId });
+      const [accounts, pairs] = await Promise.all([
+        db.socialAccounts.find({ userId }).select('platform'),
+        latestAnalyticsPairs(userId)
+      ]);
       if (accounts.length === 0) {
         return res.json([]);
       }
 
-      const accountIds = accounts.map(a => a._id);
-      const analyticsRecords = await db.analytics.find({ accountId: { $in: accountIds } });
-
-      // Get latest record for each account
+      // Latest record for each account (from the one-roundtrip aggregate).
       const latestRecords: Record<string, any> = {};
-      const sortedRecords = [...analyticsRecords].sort((a, b) => b.date.localeCompare(a.date));
-      for (const rec of sortedRecords) {
-        if (!latestRecords[rec.accountId]) {
-          latestRecords[rec.accountId] = rec;
-        }
+      for (const pair of pairs) {
+        if (pair.latest) latestRecords[pair.accountId] = pair.latest;
       }
 
       // Aggregate metrics by platform

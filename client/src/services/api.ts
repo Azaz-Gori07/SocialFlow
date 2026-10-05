@@ -92,6 +92,11 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   return json as T;
 }
 
+/** Shared cache for the connected-accounts list (many surfaces ask for it). */
+const ACCOUNTS_TTL_MS = 30_000;
+let accountsCache: { at: number; data: any[] } | null = null;
+let accountsInflight: Promise<any[]> | null = null;
+
 export const api = {
   auth: {
     register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
@@ -106,10 +111,37 @@ export const api = {
   },
   
   social: {
-    getAccounts: () => request<any[]>('/social/accounts'),
-    disconnect: (id: string) => request<any>(`/social/accounts/${id}`, { method: 'DELETE' }),
-    updateAccount: (id: string, body: { publishDefault: boolean }) =>
-      request<any>(`/social/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) }),
+    // 30s cache: pickers/pages reopen constantly; the server re-validates
+    // every target id anyway, so a briefly stale list can never publish wrong.
+    getAccounts: async (opts?: { force?: boolean }) => {
+      if (!opts?.force && accountsCache && Date.now() - accountsCache.at < ACCOUNTS_TTL_MS) {
+        return accountsCache.data;
+      }
+      // Concurrent callers (StrictMode double-mount, picker + page at once)
+      // share one request instead of racing.
+      if (!opts?.force && accountsInflight) return accountsInflight;
+      accountsInflight = request<any[]>('/social/accounts')
+        .then(data => {
+          accountsCache = { at: Date.now(), data };
+          return data;
+        })
+        .finally(() => { accountsInflight = null; });
+      return accountsInflight;
+    },
+    invalidateAccounts: () => { accountsCache = null; },
+    disconnect: async (id: string) => {
+      const res = await request<any>(`/social/accounts/${id}`, { method: 'DELETE' });
+      accountsCache = null;
+      return res;
+    },
+    updateAccount: async (id: string, body: { publishDefault: boolean }) => {
+      const res = await request<any>(`/social/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+      // Keep the cache coherent without a refetch.
+      if (accountsCache) {
+        accountsCache.data = accountsCache.data.map(a => (a._id === id ? { ...a, ...body } : a));
+      }
+      return res;
+    },
     connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`, { method: 'POST' })
   },
   

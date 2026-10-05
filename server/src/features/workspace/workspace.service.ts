@@ -195,10 +195,17 @@ export class WorkspaceService {
 
   async listWorkspacesForUser(userId: string) {
     const memberships = await this.workspaceRepository.listWorkspacesForUser(userId);
-    
+
+    // One batch query instead of one roundtrip per membership (N+1).
+    const workspaces = await this.workspaceRepository.findWorkspacesByIds(
+      memberships.map((m) => m.workspaceId)
+    );
+    const byId = new Map(workspaces.map((w) => [w._id.toString(), w]));
+
+    // Preserve membership order — the client treats workspaces[0] as default.
     const workspacesList = [];
     for (const member of memberships) {
-      const workspace = await this.workspaceRepository.findWorkspaceById(member.workspaceId);
+      const workspace = byId.get(member.workspaceId);
       if (workspace) {
         workspacesList.push({
           id: workspace._id.toString(),
