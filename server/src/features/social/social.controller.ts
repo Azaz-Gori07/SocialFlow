@@ -42,6 +42,9 @@ export class SocialController {
 
       return res.redirect(`${env.FRONTEND_URL}/connected-accounts?connection=success&platform=${platform}`);
     } catch (error: any) {
+      // The redirect tells the user; this line is what tells US — without it,
+      // a failed callback (bad state, exchange rejection) is invisible in logs.
+      console.error(`[social] ${req.params.platform} callback failed:`, error?.message || error);
       const message = encodeURIComponent(error?.message || 'OAuth Connection Failed');
       return res.redirect(`${env.FRONTEND_URL}/connected-accounts?connection=error&message=${message}`);
     }
