@@ -1,0 +1,18 @@
+name: Warm production functions
+# Vercel recycles idle serverless instances after ~10-15 min. The first user
+# after that pays the full module-graph cold start (seconds). Pinging every
+# few minutes keeps a warm instance so user-facing pings stay fast.
+on:
+  schedule:
+    - cron: '*/5 * * * *'
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping API (health + edge-cached status)
+        run: |
+          curl -fsS -o /dev/null -m 30 https://viraldrift-server.vercel.app/health || true
+          sleep 45
+          curl -fsS -o /dev/null -m 30 https://viraldrift-server.vercel.app/health || true
