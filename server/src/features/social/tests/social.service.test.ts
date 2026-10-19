@@ -118,4 +118,43 @@ describe('SocialService Unit Tests', () => {
       ).rejects.toThrow(new AppError('Social account not found', 404));
     });
   });
+
+  describe('resolveAccountTokenBundle — undecryptable tokens', () => {
+    it('flags the account expired and throws a 401 ProviderError when the stored token cannot be decrypted', async () => {
+      const staleAccount = {
+        ...mockSocialAccount,
+        _id: 'sa_stale',
+        connectionId: 'conn_1',
+        encryptedAccessToken: 'deadbeef:unreadable-ciphertext',
+      };
+      mockSocialRepository.findAccountById.mockResolvedValue(staleAccount as any);
+      mockSocialRepository.updateAccount.mockResolvedValue(staleAccount as any);
+      mockConnectionRepository.setStatus.mockResolvedValue(undefined as any);
+
+      await expect(socialService.resolveAccountTokenBundle('sa_stale')).rejects.toMatchObject({
+        name: 'ProviderError',
+        status: 401,
+        providerCode: 'TOKEN_UNREADABLE',
+      });
+
+      expect(mockSocialRepository.updateAccount).toHaveBeenCalledWith(
+        'sa_stale',
+        expect.objectContaining({ connectionStatus: 'expired', status: 'error' })
+      );
+      expect(mockConnectionRepository.setStatus).toHaveBeenCalledWith(
+        'conn_1',
+        'expired',
+        expect.stringContaining('reconnect')
+      );
+    });
+
+    it('still throws the auth-expired AppError when there is nothing to decrypt', async () => {
+      const emptyAccount = { ...mockSocialAccount, _id: 'sa_empty', encryptedAccessToken: undefined };
+      mockSocialRepository.findAccountById.mockResolvedValue(emptyAccount as any);
+
+      await expect(socialService.resolveAccountTokenBundle('sa_empty')).rejects.toMatchObject({
+        code: 'PROVIDER_AUTH_EXPIRED',
+      });
+    });
+  });
 });

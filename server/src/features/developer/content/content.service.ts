@@ -359,8 +359,15 @@ export class ContentService {
   private async autoPublishGenerated(userId: string, drafts: GeneratedDraft[]): Promise<number> {
     let accountPlatforms: Set<string>;
     try {
+      // Only publish where a healthy connection exists — expired/pending
+      // connections are flagged by the delivery layer and belong on the
+      // re-login path, not the retry queue.
       const accounts = await this.socialRepository.findAccountsByUserId(userId);
-      accountPlatforms = new Set(accounts.map((a) => a.platform));
+      accountPlatforms = new Set(
+        accounts
+          .filter((acc) => acc.connectionStatus === 'connected' && acc.status === 'active')
+          .map((acc) => acc.platform)
+      );
     } catch (error) {
       // A failed lookup must not eat the generation — drafts stay for review.
       logger.error('[developer] connected-account lookup failed during auto-publish', {

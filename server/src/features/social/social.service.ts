@@ -333,15 +333,39 @@ export class SocialService {
     let expiresAt = account.accessTokenExpiresAt;
 
     if (account.encryptedAccessToken) {
-      accessToken = EncryptionAdapter.decrypt(account.encryptedAccessToken);
-      if (account.encryptedRefreshToken) refreshToken = EncryptionAdapter.decrypt(account.encryptedRefreshToken);
+      try {
+        accessToken = EncryptionAdapter.decrypt(account.encryptedAccessToken);
+        if (account.encryptedRefreshToken) refreshToken = EncryptionAdapter.decrypt(account.encryptedRefreshToken);
+      } catch (error) {
+        // Tokens encrypted by a previous cipher/key are unrecoverable — the
+        // only fix is a fresh login, so flag the account for the re-auth UI.
+        await this.markAccountAuthExpired(accountId, 'Stored token could not be decrypted. Please reconnect the account.');
+        throw new ProviderError(
+          'Stored social token is unreadable and the account needs to be reconnected',
+          account.platform,
+          401,
+          'TOKEN_UNREADABLE',
+          false
+        );
+      }
     } else if (account.connectionId) {
       const connection = await this.connectionRepository.findById(account.connectionId);
       if (!connection || connection.status !== 'connected') {
         throw AppError.providerAuthExpired();
       }
-      accessToken = EncryptionAdapter.decrypt(connection.encryptedAccessToken);
-      if (connection.encryptedRefreshToken) refreshToken = EncryptionAdapter.decrypt(connection.encryptedRefreshToken);
+      try {
+        accessToken = EncryptionAdapter.decrypt(connection.encryptedAccessToken);
+        if (connection.encryptedRefreshToken) refreshToken = EncryptionAdapter.decrypt(connection.encryptedRefreshToken);
+      } catch (error) {
+        await this.markAccountAuthExpired(accountId, 'Stored token could not be decrypted. Please reconnect the account.');
+        throw new ProviderError(
+          'Stored social token is unreadable and the account needs to be reconnected',
+          account.platform,
+          401,
+          'TOKEN_UNREADABLE',
+          false
+        );
+      }
       expiresAt = connection.accessTokenExpiresAt;
     }
 
@@ -350,6 +374,29 @@ export class SocialService {
     }
 
     return { account, accessToken, refreshToken, expiresAt };
+  }
+
+  /**
+   * Flags an account (and its underlying OAuth connection) as expired after an
+   * authentication failure. The Connected Accounts page and the app-level
+   * re-login warning read this state instead of a dead token being retried
+   * silently in the background.
+   */
+  async markAccountAuthExpired(accountId: string, reason?: string): Promise<void> {
+    try {
+      const account = await this.socialRepository.findAccountById(accountId);
+      if (!account) return;
+      await this.socialRepository.updateAccount(accountId, {
+        status: 'error',
+        connectionStatus: 'expired',
+        lastError: reason || 'Login expired. Reconnect this account.',
+      } as any);
+      if (account.connectionId) {
+        await this.connectionRepository.setStatus(account.connectionId, 'expired', reason);
+      }
+    } catch (error) {
+      logger.warn('[social] failed to flag account as expired', { accountId, error: String(error) });
+    }
   }
 
   /**

@@ -7,11 +7,16 @@ import {
   CheckCircle2,
   Share2,
   Info,
-  Star
+  Star,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
 
 const OAUTH_PLATFORMS = ['twitter', 'linkedin', 'youtube', 'facebook', 'instagram', 'threads'];
+
+/** Server flags failed logins as connectionStatus 'expired' (status 'error' belt-and-braces). */
+const isExpiredAcc = (acc: any) => acc.connectionStatus === 'expired' || acc.status === 'error';
 
 export const ConnectedAccounts: React.FC = () => {
   const [accounts, setAccounts] = useState<any[]>([]);
@@ -81,12 +86,13 @@ export const ConnectedAccounts: React.FC = () => {
   };
 
   const handleDisconnect = async (id: string) => {
-    const act = accounts.find(a => a.id === id);
+    const act = accounts.find(a => a._id === id);
     if (!act) return;
     if (!confirm(`Are you sure you want to disconnect @${act.username} from ${act.platform}? All associated analytics and comments will be deleted.`)) return;
 
     try {
       await api.social.disconnect(id);
+      api.social.invalidateAccounts();
       await loadAccounts();
     } catch (err) {
       console.error(err);
@@ -179,6 +185,8 @@ export const ConnectedAccounts: React.FC = () => {
               {platforms.map(plat => {
                 const connectedForPlat = accounts.filter(a => a.platform === plat.id);
                 const isConnected = connectedForPlat.length > 0;
+                const expiredForPlat = connectedForPlat.filter(isExpiredAcc);
+                const platformExpired = isConnected && expiredForPlat.length === connectedForPlat.length;
 
                 return (
                   <div 
@@ -201,7 +209,39 @@ export const ConnectedAccounts: React.FC = () => {
                           </h4>
                         </div>
 
-                        {isConnected ? (
+                        {platformExpired ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            color: '#b45309',
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            padding: '2px 7px',
+                            borderRadius: '9999px'
+                          }}>
+                            <AlertTriangle size={11} />
+                            <span>Login expired</span>
+                          </span>
+                        ) : expiredForPlat.length > 0 ? (
+                          <span style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            fontSize: '0.7rem',
+                            fontWeight: 600,
+                            color: '#b45309',
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            padding: '2px 7px',
+                            borderRadius: '9999px'
+                          }}>
+                            <AlertTriangle size={11} />
+                            <span>{expiredForPlat.length} expired</span>
+                          </span>
+                        ) : isConnected ? (
                           <span style={{
                             display: 'inline-flex',
                             alignItems: 'center',
@@ -247,7 +287,14 @@ export const ConnectedAccounts: React.FC = () => {
                                 <span style={{ fontSize: '0.76rem', fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                                   {acc.displayName || acc.username}
                                 </span>
-                                <span style={{ fontSize: '0.68rem', color: '#6b7280' }}>@{acc.username}</span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '0.68rem' }}>
+                                  <span style={{ color: '#6b7280' }}>@{acc.username}</span>
+                                  {isExpiredAcc(acc) ? (
+                                    <span style={{ color: '#b45309', fontWeight: 700 }}>
+                                      · Login expired
+                                    </span>
+                                  ) : null}
+                                </span>
                               </span>
                             </div>
                             <button
@@ -299,6 +346,8 @@ export const ConnectedAccounts: React.FC = () => {
                       >
                         {oauthLoading === plat.id ? (
                           <span>Connecting...</span>
+                        ) : platformExpired ? (
+                          <><RefreshCw size={14} /><span>Reconnect</span></>
                         ) : isConnected ? (
                           <><Plus size={14} /><span>Connect Another</span></>
                         ) : (
@@ -384,15 +433,45 @@ export const ConnectedAccounts: React.FC = () => {
                       <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827', whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' }}>
                         {act.displayName || act.username}
                       </span>
-                      <span style={{ fontSize: '0.72rem', color: '#6b7280' }}>
-                        @{act.username} • <span style={{ color: '#10b981', fontWeight: 600 }}>Active</span>
+                      <span style={{ fontSize: '0.72rem' }}>
+                        @{act.username} •{' '}
+                        {isExpiredAcc(act) ? (
+                          <span style={{ color: '#b45309', fontWeight: 700 }}>Login expired</span>
+                        ) : (
+                          <span style={{ color: '#10b981', fontWeight: 600 }}>Active</span>
+                        )}
                       </span>
                     </div>
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDisconnect(act.id)}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    {isExpiredAcc(act) && (
+                      <button
+                        type="button"
+                        onClick={() => handleOAuthConnect(act.platform)}
+                        disabled={oauthLoading === act.platform}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: '#18181b',
+                          color: '#ffffff',
+                          border: 'none',
+                          borderRadius: '8px',
+                          padding: '6px 10px',
+                          fontSize: '0.7rem',
+                          fontWeight: 600,
+                          cursor: oauthLoading === act.platform ? 'wait' : 'pointer'
+                        }}
+                        title="Log in again to restore publishing"
+                      >
+                        <RefreshCw size={11} />
+                        Reconnect
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleDisconnect(act._id || act.id)}
                     style={{
                       background: 'none',
                       border: 'none',
@@ -410,6 +489,7 @@ export const ConnectedAccounts: React.FC = () => {
                   >
                     <Trash2 size={15} />
                   </button>
+                  </div>
                 </div>
               ))}
             </div>

@@ -9,6 +9,7 @@ import { ProviderFactory } from './providers/provider.factory';
 import { ProviderError } from './errors/providerError';
 import { ProviderCapabilities, MediaItem } from './interfaces/socialProvider.interface';
 import { logger } from '../../shared/utils/logger';
+import { AppError } from '../../shared/errors/appError';
 
 export const RETRY_BASE_BACKOFF_MS = 60 * 1000;
 export const RETRY_MAX_BACKOFF_MS = 15 * 60 * 1000;
@@ -55,10 +56,17 @@ export class DeliveryEngine {
 
   /** True only for failures that a token refresh could plausibly fix. */
   private isAuthFailure(error: unknown): boolean {
-    if (!(error instanceof ProviderError)) return false;
-    if (error.status === 401) return true;
-    // Provider-specific expired-token codes (Meta 190, X 89).
-    return error.providerCode === '190' || error.providerCode === '89';
+    if (error instanceof ProviderError) {
+      if (error.status === 401) return true;
+      // Provider-specific expired-token codes (Meta 190, X 89).
+      return error.providerCode === '190' || error.providerCode === '89';
+    }
+    // e.g. AppError.providerAuthExpired from token resolution (missing
+    // connection / no token at all) — also a re-login situation.
+    if (error instanceof AppError) {
+      return error.statusCode === 401 || error.code === 'PROVIDER_AUTH_EXPIRED';
+    }
+    return false;
   }
 
   /**
@@ -255,6 +263,14 @@ export class DeliveryEngine {
 
     const permanent = !classified.retryable;
     const deadLettered = permanent || attempts >= delivery.maxAttempts;
+
+    // Auth failures should never retry in silence: flag the account so the UI
+    // shows "Login expired" with a reconnect CTA instead of a generic failure.
+    if (this.isAuthFailure(classified)) {
+      await this.socialService
+        .markAccountAuthExpired(delivery.socialAccountId, `Login expired: ${message}`)
+        .catch((err) => logger.warn('[delivery] could not flag expired account', { error: String(err) }));
+    }
 
     const updated = await this.postUpdated(post._id.toString(), delivery.socialAccountId, {
       status: 'failed',

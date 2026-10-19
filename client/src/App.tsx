@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import { Sidebar } from './components/Sidebar';
 import { BootScreen } from './components/BootScreen';
 import { GenericSkeleton } from './components/Skeleton';
+import { ReauthWarning } from './components/ReauthWarning';
 import { Suspense } from 'react';
 // Pages are route/tab-level code split: the shell paints first and each
 // page chunk streams in on navigation instead of shipping everything in the
@@ -170,6 +171,7 @@ const AppContent: React.FC = () => {
   return (
     <>
       {boot}
+      <ReauthWarning active={currentTab !== 'connected-accounts'} />
       <div className="app-container">
       {/* Mobile Top Bar */}
       <header className="mobile-header-bar">

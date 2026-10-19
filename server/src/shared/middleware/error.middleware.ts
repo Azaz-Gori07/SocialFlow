@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { AppError } from '../errors/appError';
 import { ApiResponse } from '../utils/response.util';
+import { ProviderError } from '../../services/social/errors/providerError';
 
 export function errorMiddleware(
   err: Error,
@@ -16,6 +17,12 @@ export function errorMiddleware(
   // Handle operational AppErrors
   if (err instanceof AppError) {
     return ApiResponse.error(res, err.message, err.errors, err.statusCode);
+  }
+
+  // Handle provider failures (expired tokens, capability gaps) with their HTTP
+  // status instead of falling through to a generic 500.
+  if (err instanceof ProviderError) {
+    return ApiResponse.error(res, err.message, err.providerCode ?? null, err.status || 502);
   }
 
   // Handle mongoose validation/cast errors
