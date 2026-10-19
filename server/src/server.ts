@@ -33,7 +33,7 @@ import { processDuePosts } from './services/scheduler';
 import { runDraftSweep } from './features/draft/draft.scheduler';
 
 // Import the Atlas database connection and fail fast on startup if it cannot connect.
-import { connectDb, isConnected } from './database/db';
+import { connectDb, isConnected, ensureFreshDb, markDbActivity } from './database/db';
 
 
 
@@ -177,6 +177,22 @@ app.use(async (req, res, next) => {
         success: false,
         message: 'Database service temporarily unavailable. Please try again shortly.',
       });
+    }
+  } else {
+    // Long-idle warm instance: verify the socket is truly alive before the
+    // handler's first query hangs on a reaped connection.
+    markDbActivity();
+    const fresh = await ensureFreshDb();
+    if (!fresh) {
+      try {
+        await connectDb();
+      } catch (error: any) {
+        console.error(`[${new Date().toISOString()}] DB reconnect failed for ${req.method} ${req.path}:`, error.message);
+        return res.status(503).json({
+          success: false,
+          message: 'Database service temporarily unavailable. Please try again shortly.',
+        });
+      }
     }
   }
 

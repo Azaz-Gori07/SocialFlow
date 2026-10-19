@@ -187,6 +187,8 @@ async function connectDb(): Promise<typeof mongoose> {
         maxPoolSize: 50,
         retryWrites: true,
         family: 4,
+        maxIdleTimeMS: 60000,
+        heartbeatFrequencyMS: 10000,
         dbName: process.env.MONGO_DB_NAME || undefined
       });
       console.log('✅ Database connected successfully');
@@ -204,6 +206,8 @@ async function connectDb(): Promise<typeof mongoose> {
             maxPoolSize: 50,
             retryWrites: true,
             family: 4,
+            maxIdleTimeMS: 60000,
+            heartbeatFrequencyMS: 10000,
             dbName: process.env.MONGO_DB_NAME || undefined
           });
           console.log('✅ Database connected successfully');
@@ -239,6 +243,55 @@ async function connectDb(): Promise<typeof mongoose> {
 
 export function isConnected(): boolean {
   return mongoose.connection.readyState === 1;
+}
+
+/**
+ * Serverless instances sit idle between requests and their Atlas sockets can
+ * be silently reaped by load balancers. The driver keeps reporting
+ * readyState=1, so the first query after a long idle hangs on a dead socket.
+ * Track per-instance liveness: any DB-touching request refreshes the stamp;
+ * a request arriving after a long idle gets a bounded ping first, and a
+ * dead connection is force-dropped so the normal reconnect path kicks in.
+ */
+const DB_FRESHNESS_MS = 60 * 1000;
+let lastDbOpAt = 0;
+let checkingFreshness: Promise<boolean> | null = null;
+
+export function markDbActivity(): void {
+  lastDbOpAt = Date.now();
+}
+
+export async function ensureFreshDb(): Promise<boolean> {
+  if (mongoose.connection.readyState !== 1) return false;
+  if (Date.now() - lastDbOpAt < DB_FRESHNESS_MS) return true;
+  if (!checkingFreshness) {
+    checkingFreshness = (async () => {
+      try {
+        const admin = mongoose.connection.db?.admin();
+        if (admin) {
+          // Bounded ping: a dead socket must fail fast, never hang the request.
+          const res = await Promise.race([
+            admin.ping(),
+            new Promise<never>((_, rej) => setTimeout(() => rej(new Error('ping-timeout')), 3000)),
+          ]);
+          if (res && typeof res === 'object') {
+            lastDbOpAt = Date.now();
+            return true;
+          }
+        }
+        throw new Error('ping-unavailable');
+      } catch {
+        // Dead connection — drop it so the connectDb() path runs again.
+        cachedConnection = null;
+        try { await mongoose.connection.close(); } catch { /* already closed */ }
+        lastDbOpAt = Date.now();
+        return false;
+      } finally {
+        checkingFreshness = null;
+      }
+    })();
+  }
+  return checkingFreshness;
 }
 
 export const db = {

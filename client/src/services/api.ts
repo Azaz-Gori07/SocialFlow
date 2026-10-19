@@ -56,7 +56,9 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
 
   const config: RequestInit = {
     ...options,
-    headers
+    headers,
+    // Never let a request hang forever: bounded timeouts (own signal wins).
+    signal: options.signal ?? AbortSignal.timeout(options.body instanceof FormData ? 180000 : 45000)
   };
 
   let response = await fetch(`${API_BASE}${endpoint}`, config);
