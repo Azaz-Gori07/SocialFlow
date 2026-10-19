@@ -237,6 +237,8 @@ if (env.developerFlowEnabled) {
 
 // Developer Intelligence (gated inside the router; /status stays reachable)
 app.use('/api/developer', developerRouter);
+import diagRouter from './features/social/diag.routes';
+app.use('/api/diag', diagRouter);
 
 // Dashboard routes (mounted from legacy controller)
 app.get('/api/dashboard/overview', authMiddleware as any, DashboardController.getOverview as any);
