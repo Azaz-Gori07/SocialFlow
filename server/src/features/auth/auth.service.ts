@@ -17,6 +17,9 @@ interface TokenPayload {
 const hashToken = (token: string): string => createHash('sha256').update(token).digest('hex');
 
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+// Multi-tab refresh grace: tabs racing on the same just-rotated token get a
+// fresh rotation instead of a hard logout. Enemies paused for >60s do not.
+const ROTATION_GRACE_MS = 60 * 1000;
 const AUTH_CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 export class AuthService {
@@ -188,8 +191,19 @@ export class AuthService {
       if (!stored) {
         throw AppError.unauthorized('Invalid session');
       }
-      if (stored.revokedAt || (stored.expiresAt && new Date(stored.expiresAt).getTime() < Date.now())) {
+      if (stored.expiresAt && new Date(stored.expiresAt).getTime() < Date.now()) {
         throw AppError.unauthorized('Session expired');
+      }
+      if (stored.revokedAt) {
+        // Single-use rotation races between tabs: when a token was rotated
+        // moments ago (another tab holding the same session refreshed first),
+        // rotating again is harmless; past the grace window a reuse means a
+        // replayed token and must be refused. Logouts are always final.
+        const isLogout = (stored as { revokedByLogout?: boolean }).revokedByLogout === true;
+        const revokedAge = Date.now() - new Date(stored.revokedAt).getTime();
+        if (isLogout || revokedAge > ROTATION_GRACE_MS) {
+          throw AppError.unauthorized('Session expired');
+        }
       }
 
       const user = await this.userRepository.findById(decoded.id);
@@ -218,7 +232,7 @@ export class AuthService {
     if (!refreshToken) return;
     await db.refreshTokens.updateOne(
       { tokenHash: hashToken(refreshToken) },
-      { $set: { revokedAt: new Date() } }
+      { $set: { revokedAt: new Date(), revokedByLogout: true } }
     );
   }
 
