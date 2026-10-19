@@ -24,6 +24,9 @@ export const ConnectedAccounts: React.FC = () => {
   const [oauthLoading, setOauthLoading] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
   const [savingDefaultId, setSavingDefaultId] = useState<string | null>(null);
+  // Native confirm() gets blocked by browsers ("Never allow"), which made
+  // disconnect silently no-op. Two-step in-app confirmation instead.
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
   /**
    * Toggles publishDefault — convenience preselection for NEW content only.
@@ -86,15 +89,24 @@ export const ConnectedAccounts: React.FC = () => {
   };
 
   const handleDisconnect = async (id: string) => {
+    // First click arms the button, second click (within 4s) actually deletes.
+    if (confirmingId !== id) {
+      setConfirmingId(id);
+      window.setTimeout(() => setConfirmingId(cur => (cur === id ? null : cur)), 4000);
+      return;
+    }
+    setConfirmingId(null);
+
     const act = accounts.find(a => a._id === id);
     if (!act) return;
-    if (!confirm(`Are you sure you want to disconnect @${act.username} from ${act.platform}? All associated analytics and comments will be deleted.`)) return;
 
     try {
       await api.social.disconnect(id);
       api.social.invalidateAccounts();
+      setStatusMessage(`✅ @${act.username} disconnected from ${act.platform}. Its analytics and comments were removed.`);
       await loadAccounts();
-    } catch (err) {
+    } catch (err: any) {
+      setStatusMessage(`❌ Failed to disconnect: ${err.message || 'Unknown error'}`);
       console.error(err);
     }
   };
@@ -472,23 +484,25 @@ export const ConnectedAccounts: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => handleDisconnect(act._id || act.id)}
-                    style={{
-                      background: 'none',
-                      border: 'none',
-                      color: '#9ca3af',
-                      cursor: 'pointer',
-                      padding: '6px',
-                      borderRadius: '6px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      transition: 'color 0.15s ease'
-                    }}
-                    title="Disconnect account"
-                    onMouseEnter={e => (e.currentTarget.style.color = '#ef4444')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#9ca3af')}
-                  >
-                    <Trash2 size={15} />
-                  </button>
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        background: confirmingId === (act._id || act.id) ? '#fef2f2' : 'none',
+                        border: confirmingId === (act._id || act.id) ? '1px solid #fecaca' : 'none',
+                        color: confirmingId === (act._id || act.id) ? '#b91c1c' : '#9ca3af',
+                        cursor: 'pointer',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        whiteSpace: 'nowrap'
+                      }}
+                      title={confirmingId === (act._id || act.id) ? 'Click again to confirm disconnect' : 'Disconnect account'}
+                    >
+                      <Trash2 size={15} />
+                      {confirmingId === (act._id || act.id) ? 'Confirm?' : null}
+                    </button>
                   </div>
                 </div>
               ))}
