@@ -120,12 +120,15 @@ app.use('/api/webhooks/meta', express.json({ type: '*/*' }));
 
 // Database connection check middleware for serverless/production requests
 app.use(async (req, res, next) => {
-  // Skip check for root health check, API health route, and swagger UI assets/docs
+  // Skip check for root health check, API health route, and swagger UI assets/docs.
+  // '/api/developer/status' is DB-free by design — making it wait behind a cold
+  // Mongo connect multiplies every navigation ping by the cold-start cost.
   if (
     req.path === '/' ||
     req.path === '/health' ||
     req.path === '/cors-debug' ||
     req.path === '/api/test/limit' ||
+    req.path === '/api/developer/status' ||
     req.path.startsWith('/api-docs')
   ) {
     return next();

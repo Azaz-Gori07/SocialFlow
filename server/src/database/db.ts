@@ -181,7 +181,8 @@ async function connectDb(): Promise<typeof mongoose> {
     try {
       console.log(`🔌 Connecting to MongoDB Atlas: ${MONGO_URI.replace(/\/\/.*@/, '//***:***@')}`);
       const conn = await mongoose.connect(MONGO_URI, {
-        serverSelectionTimeoutMS: 20000,
+        serverSelectionTimeoutMS: 10000,
+        connectTimeoutMS: 10000,
         socketTimeoutMS: 20000,
         maxPoolSize: 50,
         retryWrites: true,
@@ -197,7 +198,8 @@ async function connectDb(): Promise<typeof mongoose> {
         try {
           dns.setServers(['8.8.8.8', '1.1.1.1']);
           const conn = await mongoose.connect(MONGO_URI, {
-            serverSelectionTimeoutMS: 20000,
+            serverSelectionTimeoutMS: 10000,
+            connectTimeoutMS: 10000,
             socketTimeoutMS: 20000,
             maxPoolSize: 50,
             retryWrites: true,

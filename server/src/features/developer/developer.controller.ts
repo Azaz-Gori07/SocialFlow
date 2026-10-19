@@ -14,6 +14,10 @@ export class DeveloperController {
   getStatus = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       const { enabled } = this.developerService.getStatus();
+      // Public, stable for long stretches and needed by the sidebar on every
+      // page load — serve it from the Vercel edge cache instead of a lambda
+      // (and its cold-start DB connect) on every navigation.
+      res.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600');
       return ApiResponse.success(res, { enabled }, 'Developer feature status');
     } catch (error) { next(error); }
   };
