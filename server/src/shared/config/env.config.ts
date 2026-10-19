@@ -30,6 +30,9 @@ const envSchema = z.object({
   CLAUDE_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY: z.string().optional(),
   OPENROUTER_API_KEY_MODEL: z.string().optional(),
+  // OpenAI-compatible endpoint override. Same key slots power any compatible
+  // provider — e.g. z.ai's GLM models: https://api.z.ai/api/paas/v4
+  OPENROUTER_BASE_URL: z.string().url().optional(),
   OPENROUTER_API_KEY_2: z.string().optional(),
   OPENROUTER_API_KEY_2_MODEL: z.string().optional(),
 
