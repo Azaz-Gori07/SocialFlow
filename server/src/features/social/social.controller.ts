@@ -16,7 +16,11 @@ export class SocialController {
     try {
       if (!req.user) return next(AppError.unauthorized());
       const { platform } = req.params;
-      const redirectHost = `${req.protocol}://${req.get('host')}`;
+      // Canonical backend URL — provider redirect_uri is registered as an EXACT
+      // string (localhost vs 127.0.0.1 are different candidates), so it must not
+      // vary with whichever address the UI happens to be opened from. Keep
+      // BACKEND_URL in sync with the address actually served (dev + prod).
+      const redirectHost = env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
       const result = await this.socialService.getConnectUrl(platform, req.user.id, redirectHost);
       return ApiResponse.success(res, result, 'Authorization URL generated');
     } catch (error) {
@@ -37,7 +41,7 @@ export class SocialController {
         throw AppError.badRequest('Authorization code and state are required parameters');
       }
 
-      const redirectHost = `${req.protocol}://${req.get('host')}`;
+      const redirectHost = env.BACKEND_URL || `${req.protocol}://${req.get('host')}`;
       await this.socialService.handleCallback(platform, code, state, redirectHost);
 
       return res.redirect(`${env.FRONTEND_URL}/connected-accounts?connection=success&platform=${platform}`);
