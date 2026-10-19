@@ -7,6 +7,7 @@ export type DeveloperSettingsPatch = Partial<{
   generateDrafts: boolean;
   autoPublish: boolean;
   autoContent: boolean;
+  autoPostPlatforms: string[];
   aiInstructions: string | null;
   aiLength: string | null;
   aiTechnicalDepth: string | null;

@@ -10,9 +10,11 @@ export interface IDeveloperSettings extends Document {
   generateDrafts: boolean;
   // Global account-wide switch: meaningful activity in ANY non-blocked repo
   // may trigger AI draft generation. OFF by default — user opts in.
-  // ON means generate+review, NEVER auto-publish (autoPublish stays separate).
+  // ON means drafts are generated; real auto-publishing is a separate switch.
   autoContent: boolean;
   autoPublish: boolean;
+  /** Platforms the commit-based auto-post pipeline targets (Linkedin by default). */
+  autoPostPlatforms: string[];
   /** User-controlled content instructions (appended below system safety rules). */
   aiInstructions?: string | null;
   /** short | medium | long */
@@ -37,6 +39,11 @@ const DeveloperSettingsSchema = new Schema<IDeveloperSettings>(
     generateDrafts: { type: Boolean, default: false },
     autoContent: { type: Boolean, default: false },
     autoPublish: { type: Boolean, default: false },
+    autoPostPlatforms: {
+      type: [String],
+      enum: ['linkedin', 'twitter', 'facebook', 'instagram', 'youtube', 'threads'],
+      default: ['linkedin']
+    },
     aiInstructions: { type: String, default: null },
     aiLength: { type: String, default: null },
     aiTechnicalDepth: { type: String, default: null },

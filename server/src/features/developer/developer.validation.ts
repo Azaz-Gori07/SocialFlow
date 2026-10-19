@@ -98,12 +98,16 @@ export const pipelineSchema = z.strictObject({});
  */
 const toneEnum = z.enum(['technical', 'casual', 'storytelling', 'founder', 'learning', 'short_form']);
 
+/** Draft platforms the commit-based auto-post pipeline can target. */
+const autoPostPlatformEnum = z.enum(['linkedin', 'twitter', 'facebook', 'instagram', 'youtube', 'threads']);
+
 export const settingsPatchSchema = z
   .object({
     detectOpportunities: z.boolean().optional(),
     generateDrafts: z.boolean().optional(),
     autoContent: z.boolean().optional(),
     autoPublish: z.boolean().optional(),
+    autoPostPlatforms: z.array(autoPostPlatformEnum).max(6).optional(),
     aiInstructions: z.string().max(4000).nullable().optional(),
     aiLength: z.enum(['short', 'medium', 'long']).nullable().optional(),
     aiTechnicalDepth: z.enum(['high_level', 'technical', 'deep_dive']).nullable().optional(),

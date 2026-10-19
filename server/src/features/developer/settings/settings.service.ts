@@ -8,6 +8,7 @@ export interface AutomationSettings {
   generateDrafts: boolean;
   autoPublish: boolean;
   autoContent: boolean;
+  autoPostPlatforms: string[];
   aiInstructions: string | null;
   aiLength: string | null;
   aiTechnicalDepth: string | null;
@@ -24,6 +25,7 @@ export const SETTINGS_DEFAULTS: AutomationSettings = {
   generateDrafts: false,
   autoPublish: false,
   autoContent: false,
+  autoPostPlatforms: ['linkedin'],
   aiInstructions: null,
   aiLength: null,
   aiTechnicalDepth: null,
@@ -38,6 +40,9 @@ export const SETTINGS_DEFAULTS: AutomationSettings = {
 const AI_LENGTHS = ['short', 'medium', 'long'];
 const AI_DEPTHS = ['high_level', 'technical', 'deep_dive'];
 const SCHED_PERIODS = ['day', 'week', 'month'];
+
+/** Draft platforms eligible for the developer auto-post pipeline. */
+const AUTO_POST_PLATFORMS = ['linkedin', 'twitter', 'facebook', 'instagram', 'youtube', 'threads'];
 
 /** Maximum stored user instructions; longer input is truncated, not rejected. */
 const AI_INSTRUCTIONS_MAX = 4000;
@@ -61,6 +66,11 @@ export class SettingsService {
     if (typeof patch.generateDrafts === 'boolean') allowed.generateDrafts = patch.generateDrafts;
     if (typeof patch.autoPublish === 'boolean') allowed.autoPublish = patch.autoPublish;
     if (typeof patch.autoContent === 'boolean') allowed.autoContent = patch.autoContent;
+    if (Array.isArray(patch.autoPostPlatforms)) {
+      // De-duplicate and drop unknown platforms; an empty array is a valid state
+      // (all platform auto-posting disabled) — LinkedIn is only the default, not a floor.
+      allowed.autoPostPlatforms = AUTO_POST_PLATFORMS.filter((p) => patch.autoPostPlatforms!.includes(p));
+    }
     if (patch.aiInstructions !== undefined) {
       // Cap stored instructions; empty string clears back to null.
       const v = patch.aiInstructions;
@@ -135,6 +145,10 @@ function rowToSettings(row: IDeveloperSettings): AutomationSettings {
     generateDrafts: row.generateDrafts,
     autoPublish: row.autoPublish,
     autoContent: row.autoContent,
+    // Rows written before autoPostPlatforms existed have no value stored —
+    // they get the LinkedIn default. An explicit `[]` (all platforms off)
+    // is real state and must not be upgraded silently.
+    autoPostPlatforms: row.autoPostPlatforms instanceof Array ? row.autoPostPlatforms : ['linkedin'],
     aiInstructions: row.aiInstructions ?? null,
     aiLength: row.aiLength ?? null,
     aiTechnicalDepth: row.aiTechnicalDepth ?? null,

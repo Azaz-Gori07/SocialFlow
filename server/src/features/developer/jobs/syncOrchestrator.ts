@@ -14,7 +14,7 @@ export interface SyncProcessResult {
   errors: string[];
 }
 
-const EMPTY_GENERATION: AutoGenerationResult = { generated: 0, skipped: 0, pending: 0, created: [] };
+const EMPTY_GENERATION: AutoGenerationResult = { generated: 0, skipped: 0, pending: 0, created: [], published: 0 };
 
 function message(error: unknown): string {
   return error instanceof Error ? error.message : String(error);

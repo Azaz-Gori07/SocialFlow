@@ -8,6 +8,7 @@ interface AutomationSettings {
   generateDrafts: boolean;
   autoPublish: boolean;
   autoContent: boolean;
+  autoPostPlatforms: string[];
   aiInstructions: string | null;
   aiLength: string | null;
   aiTechnicalDepth: string | null;
@@ -49,9 +50,18 @@ const TONES = [
 
 const TOGGLES: Array<{ key: keyof AutomationSettings; label: string; help: string }> = [
   { key: 'detectOpportunities', label: 'Detect opportunities', help: 'Turn detected development work into postable opportunities.' },
-  { key: 'generateDrafts', label: 'Generate drafts', help: 'Create LinkedIn drafts for pending opportunities during a sync run.' },
+  { key: 'generateDrafts', label: 'Generate drafts', help: 'Create drafts for your enabled auto-post platforms during a sync run.' },
   { key: 'autoContent', label: 'Run content generation automatically', help: 'Run the automatic generation pass after each repository sync.' },
-  { key: 'autoPublish', label: 'Automatic publishing', help: 'Reserved setting. Drafts always wait in the Draft Library for your review.' }
+  { key: 'autoPublish', label: 'Automatic publishing', help: 'Automatically publish one generated draft per enabled platform. With it off, drafts wait in the Draft Library for your review.' }
+];
+
+const AUTO_POST_PLATFORMS: Array<{ value: string; label: string; help?: string }> = [
+  { value: 'linkedin', label: 'LinkedIn', help: 'Enabled by default' },
+  { value: 'twitter', label: 'Twitter / X' },
+  { value: 'facebook', label: 'Facebook' },
+  { value: 'instagram', label: 'Instagram' },
+  { value: 'youtube', label: 'YouTube' },
+  { value: 'threads', label: 'Threads' }
 ];
 
 export const DeveloperSettings: React.FC = () => {
@@ -94,6 +104,7 @@ export const DeveloperSettings: React.FC = () => {
         generateDrafts: form.generateDrafts,
         autoPublish: form.autoPublish,
         autoContent: form.autoContent,
+        autoPostPlatforms: form.autoPostPlatforms,
         aiInstructions: form.aiInstructions ? form.aiInstructions : null,
         aiLength: form.aiLength || null,
         aiTechnicalDepth: form.aiTechnicalDepth || null,
@@ -211,6 +222,87 @@ export const DeveloperSettings: React.FC = () => {
                 {/* iOS Style Toggle */}
                 <div
                   onClick={() => setForm(f => (f ? { ...f, [toggle.key]: !isChecked } : f))}
+                  style={{
+                    width: '44px',
+                    height: '24px',
+                    borderRadius: '9999px',
+                    background: isChecked ? '#18181b' : '#e5e7eb',
+                    padding: '2px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    transition: 'background 0.2s ease',
+                    flexShrink: 0
+                  }}
+                >
+                  <div style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    transform: isChecked ? 'translateX(20px)' : 'translateX(0)',
+                    transition: 'transform 0.2s ease',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)'
+                  }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Card 1b: Auto-Post Platforms */}
+      <div className="card" style={{ padding: '24px 26px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <Sparkles size={18} style={{ color: '#111827' }} />
+          <div>
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#111827', margin: 0 }}>
+              Auto-Post Platforms
+            </h3>
+            <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: '2px 0 0 0' }}>
+              Which of your connected platforms receive commit-based auto-post drafts. LinkedIn is enabled by default.
+            </p>
+          </div>
+        </div>
+
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '12px' }} className="responsive-grid-3-col">
+          {AUTO_POST_PLATFORMS.map(platform => {
+            const isChecked = form.autoPostPlatforms.includes(platform.value);
+            return (
+              <div
+                key={platform.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '12px 16px',
+                  background: '#f9fafb',
+                  borderRadius: '10px',
+                  border: '1px solid #f3f4f6',
+                  gap: '16px'
+                }}
+                title={platform.help ?? platform.label}
+              >
+                <div>
+                  <div style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827' }}>
+                    {platform.label}
+                    {platform.help && (
+                      <span style={{ fontSize: '0.68rem', fontWeight: 500, color: '#059669', marginLeft: '8px' }}>
+                        {platform.help}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* iOS Style Toggle (same pattern as the automation toggles) */}
+                <div
+                  onClick={() => setForm(f => {
+                    if (!f) return f;
+                    const enabled = isChecked
+                      ? f.autoPostPlatforms.filter(p => p !== platform.value)
+                      : [...f.autoPostPlatforms, platform.value];
+                    return { ...f, autoPostPlatforms: enabled };
+                  })}
                   style={{
                     width: '44px',
                     height: '24px',

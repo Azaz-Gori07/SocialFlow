@@ -3,6 +3,8 @@ import { logger } from '../../../shared/utils/logger';
 import { AIService } from '../../../services/ai/ai.service';
 import { DraftService } from '../../draft/draft.service';
 import { DraftRepository } from '../../draft/draft.repository';
+import { DraftPlatform } from '../../draft/draft.model';
+import { SocialRepository } from '../../social/social.repository';
 import { ActivityService } from '../activities/activity.service';
 import { MemoryService } from '../memory/memory.service';
 import { MemoryRepository } from '../memory/memory.repository';
@@ -39,6 +41,31 @@ const PERIOD_MS: Record<string, number> = {
 const AUTO_SCAN_LIMIT = 200;
 
 /**
+ * Hard caption caps per platform. The X API rejects posts over 280 characters
+ * (unless a premium tier is enabled), so twitter drafts are trimmed at
+ * generation time. Platform-specific AI prompts would be the finer upgrade;
+ * for now every platform shares the LinkedIn-style variants and only the
+ * caption length is adjusted.
+ * ponytail: single limit (twitter); add a provider when another API rejects length.
+ */
+const PLATFORM_CAPTION_LIMITS: Partial<Record<DraftPlatform, number>> = {
+  twitter: 280
+};
+
+/** Variant preference for auto-publish: short form fits tweet-length platforms. */
+const AUTO_PUBLISHED_VARIANT: Partial<Record<DraftPlatform, PostVariant>> = {
+  twitter: 'short_casual',
+  threads: 'short_casual'
+};
+const DEFAULT_AUTO_PUBLISHED_VARIANT: PostVariant = 'story';
+
+function capCaption(content: string, platform: string): string {
+  const limit = PLATFORM_CAPTION_LIMITS[platform as DraftPlatform];
+  if (!limit || content.length <= limit) return content;
+  return `${content.slice(0, limit - 1).trimEnd()}…`;
+}
+
+/**
  * User free-text instructions plus the two structural preferences. Both land in
  * the same USER CONTENT PREFERENCES block, so they are concatenated rather than
  * passed separately — the prompt builder treats that block as one string.
@@ -58,6 +85,8 @@ export interface GeneratedDraft {
   id: string;
   variant: PostVariant;
   content: string;
+  /** Draft platform (from settings.autoPostPlatforms) — used by the publish stage. */
+  platform: DraftPlatform;
 }
 
 export interface GenerateResult {
@@ -74,12 +103,15 @@ export interface AutoGenerationResult {
   skipped: number;
   pending: number;
   created: Array<{ draftId: string; opportunityId: string; opportunityTitle: string }>;
+  /** Drafts pushed through the real publishing flow (requires settings.autoPublish). */
+  published: number;
 }
 
 export class ContentService {
   private ai = new AIService();
   private draftRepository = new DraftRepository();
   private draftService = new DraftService(this.draftRepository);
+  private socialRepository = new SocialRepository();
 
   constructor(
     private opportunityRepository: OpportunityRepository,
@@ -91,11 +123,14 @@ export class ContentService {
   ) {}
 
   /**
-   * Generate LinkedIn drafts for one opportunity: detect → context → style →
-   * generate → fact-check → validate → persist as SocialFlow drafts.
+   * Generate drafts for one opportunity across the user's enabled auto-post
+   * platforms: detect → context → style → generate → fact-check → validate →
+   * persist as SocialFlow drafts (per platform × variant).
    *
-   * NEVER publishes. Drafts land in status 'draft' and stay under the user's
-   * control in SocialFlow's own review flow.
+   * Platform selection comes from settings.autoPostPlatforms (LinkedIn is the
+   * default; other platforms must be enabled in Developer Settings). Drafts
+   * land in status 'draft' and stay under the user's control in SocialFlow's
+   * own review flow.
    */
   async generateForOpportunity(
     userId: string,
@@ -159,33 +194,38 @@ export class ContentService {
     });
 
     // Structural gate: never persist degenerate variants (model misfires,
-    // reasoning leaks) into the review queue.
+    // reasoning leaks) into the review queue. One draft per enabled platform
+    // × valid variant; the caption is length-aware per platform.
+    // Platform values are whitelisted at the settings layer, so no re-filter here.
+    const platforms = (settings.autoPostPlatforms ?? []) as unknown as DraftPlatform[];
     const drafts: GeneratedDraft[] = [];
-    for (const post of generated.posts) {
-      const v = validation.find((x) => x.variant === post.variant);
-      if (v && !v.valid) continue;
-      const draft = await this.draftService.createDraft(
-        {
-          platform: 'linkedin',
-          contentType: 'post',
-          caption: post.content,
-          media: [],
-          sourceType: 'developer_activity',
-          developerActivityId: opportunity.activityId,
-          developerRepositoryId: opportunity.repositoryId,
-          developerOpportunityId: opportunity._id.toString(),
-          evidence: detected.evidence,
-          aiMetadata: {
-            variant: post.variant,
-            factCheck,
-            validation: v,
-            style: profile,
-            opportunityTitle: detected.title
-          }
-        },
-        userId
-      );
-      drafts.push({ id: draft._id.toString(), variant: post.variant, content: post.content });
+    for (const platform of platforms) {
+      for (const post of generated.posts) {
+        const v = validation.find((x) => x.variant === post.variant);
+        if (v && !v.valid) continue;
+        const draft = await this.draftService.createDraft(
+          {
+            platform,
+            contentType: 'post',
+            caption: capCaption(post.content, platform),
+            media: [],
+            sourceType: 'developer_activity',
+            developerActivityId: opportunity.activityId,
+            developerRepositoryId: opportunity.repositoryId,
+            developerOpportunityId: opportunity._id.toString(),
+            evidence: detected.evidence,
+            aiMetadata: {
+              variant: post.variant,
+              factCheck,
+              validation: v,
+              style: profile,
+              opportunityTitle: detected.title
+            }
+          },
+          userId
+        );
+        drafts.push({ id: draft._id.toString(), variant: post.variant, content: post.content, platform });
+      }
     }
 
     if (drafts.length === 0) {
@@ -202,13 +242,12 @@ export class ContentService {
    * Auto content loop: for pending opportunities, generate drafts when the
    * settings allow. Respects the frequency cap and covered-topic dedup.
    *
-   * ponytail: `autoPublish` is accepted but never publishes — SocialFlow has no
-   * approved/auto-publish path for developer drafts and publishing must stay
-   * SocialFlow-owned. Upgrade: queue via DraftPublisher.queueForPublishing once
-   * the product wants developer drafts to auto-queue.
+   * With settings.autoPublish on, one draft per enabled platform goes through
+   * the standard real publishing flow (Draft → Post + deliveries → platform)
+   * right after generation; with it off, drafts wait for review as before.
    */
   async runAutoGeneration(userId: string): Promise<AutoGenerationResult> {
-    const empty: AutoGenerationResult = { generated: 0, skipped: 0, pending: 0, created: [] };
+    const empty: AutoGenerationResult = { generated: 0, skipped: 0, pending: 0, created: [], published: 0 };
     try {
       const settings = await resolveSettings(this.settingsRepository, userId);
       if (!settings.autoContent && !settings.generateDrafts && !settings.autoPublish) return empty;
@@ -220,7 +259,7 @@ export class ContentService {
         offset: 0
       });
 
-      const result: AutoGenerationResult = { generated: 0, skipped: 0, pending: pending.length, created: [] };
+      const result: AutoGenerationResult = { generated: 0, skipped: 0, pending: pending.length, created: [], published: 0 };
       if (pending.length === 0) return result;
 
       // Scheduler maximum: count drafts already produced in the period window.
@@ -289,6 +328,9 @@ export class ContentService {
               opportunityTitle: opportunity.title
             });
           }
+          if (settings.autoPublish) {
+            result.published += await this.autoPublishGenerated(userId, generated.drafts);
+          }
         } catch (error) {
           logger.error('[developer] auto-generate failed for opportunity', {
             opportunityId: opportunity._id.toString(),
@@ -305,6 +347,59 @@ export class ContentService {
       });
       return empty;
     }
+  }
+
+  /**
+   * Real publishing stage for generated drafts (settings.autoPublish).
+   * One draft per platform is chosen and pushed through the standard publish-now
+   * flow (queue + deliveries → platform API). Platforms with no connected
+   * account are left as review drafts instead of being failed by the publisher —
+   * that keeps unrelated failures out of the retry queue.
+   */
+  private async autoPublishGenerated(userId: string, drafts: GeneratedDraft[]): Promise<number> {
+    let accountPlatforms: Set<string>;
+    try {
+      const accounts = await this.socialRepository.findAccountsByUserId(userId);
+      accountPlatforms = new Set(accounts.map((a) => a.platform));
+    } catch (error) {
+      // A failed lookup must not eat the generation — drafts stay for review.
+      logger.error('[developer] connected-account lookup failed during auto-publish', {
+        userId,
+        error: error instanceof Error ? error.message : String(error)
+      });
+      return 0;
+    }
+
+    const chosen = new Map<string, GeneratedDraft>();
+    for (const draft of drafts) {
+      if (!accountPlatforms.has(draft.platform)) continue;
+      const previous = chosen.get(draft.platform);
+      const preferredVariant = AUTO_PUBLISHED_VARIANT[draft.platform] ?? DEFAULT_AUTO_PUBLISHED_VARIANT;
+      if (!previous || draft.variant === preferredVariant) chosen.set(draft.platform, draft);
+    }
+
+    let published = 0;
+    for (const [platform, draft] of chosen) {
+      try {
+        const result = await this.draftService.publishNow(draft.id, userId);
+        if (result.status === 'published') {
+          published++;
+        } else {
+          logger.warn('[developer] auto-publish did not reach the platform', {
+            platform,
+            draftId: draft.id,
+            status: result.status
+          });
+        }
+      } catch (error) {
+        logger.error('[developer] auto-publish failed', {
+          platform,
+          draftId: draft.id,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      }
+    }
+    return published;
   }
 
   /**

@@ -48,6 +48,7 @@ describe('Developer automation settings', () => {
       expect(settings.generateDrafts).toBe(false);
       expect(settings.autoContent).toBe(false);
       expect(settings.autoPublish).toBe(false);
+      expect(settings.autoPostPlatforms).toEqual(['linkedin']);
       expect(settings.schedPeriod).toBe('week');
       expect(settings.schedMinPosts).toBe(1);
       expect(settings.schedMaxPosts).toBe(3);
@@ -139,6 +140,34 @@ describe('Developer automation settings', () => {
 
       expect(settings.aiInstructions).toBeNull();
     });
+
+    it('drops unknown platforms from autoPostPlatforms and de-duplicates the rest', async () => {
+      const settings = await settingsService.updateSettings(userId, {
+        autoPostPlatforms: ['twitter', 'nuclear_powered', 'twitter'] as unknown as string[]
+      });
+
+      // Route-level zod would 400 an unknown value; the service whitelist is
+      // the deeper defence-in-depth gate for direct service callers.
+      expect(settings.autoPostPlatforms).toEqual(['twitter']);
+    });
+
+    it('preserves an explicit empty autoPostPlatforms (all platforms disabled)', async () => {
+      const settings = await settingsService.updateSettings(userId, { autoPostPlatforms: [] });
+
+      expect(settings.autoPostPlatforms).toEqual([]);
+    });
+
+    it('upgrades a legacy row with no stored autoPostPlatforms to the LinkedIn default', async () => {
+      // Bypass mongoose defaults the way a pre-existing row looks.
+      await DeveloperSettingsModel.collection.insertOne({ userId: 'user_settings_legacy' });
+
+      try {
+        const settings = await settingsService.getSettings('user_settings_legacy');
+        expect(settings.autoPostPlatforms).toEqual(['linkedin']);
+      } finally {
+        await DeveloperSettingsModel.collection.deleteOne({ userId: 'user_settings_legacy' });
+      }
+    });
   });
 
   describe('Route validation (flag on)', () => {
@@ -188,6 +217,26 @@ describe('Developer automation settings', () => {
         .send({ aiInstructions: 'x'.repeat(4001) });
 
       expect(response.status).toBe(400);
+    });
+
+    it('rejects an invalid auto-post platform with 400', async () => {
+      const response = await request(app)
+        .patch('/api/developer/settings/automation')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ autoPostPlatforms: ['twitter', 'myspace'] });
+
+      expect(response.status).toBe(400);
+      expect(response.body.success).toBe(false);
+    });
+
+    it('applies a valid platform set and returns the stored settings', async () => {
+      const response = await request(app)
+        .patch('/api/developer/settings/automation')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ autoPostPlatforms: ['linkedin', 'twitter'] });
+
+      expect(response.status).toBe(200);
+      expect(response.body.data.autoPostPlatforms).toEqual(['linkedin', 'twitter']);
     });
 
     it('applies a valid patch and returns the stored settings', async () => {
