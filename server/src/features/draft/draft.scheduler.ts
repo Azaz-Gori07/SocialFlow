@@ -13,7 +13,7 @@ export class DraftScheduler {
     private draftPublisher: DraftPublisher
   ) {}
 
-  private async processReadyDrafts(platform: DraftPlatform): Promise<void> {
+  async processReadyDrafts(platform: DraftPlatform): Promise<void> {
     const pending = await this.draftRepository.findReadyByPlatform(platform, 5);
     if (pending.length === 0) return;
     console.log('[DraftScheduler] ' + platform + ': Found ' + pending.length + ' draft(s) ready to publish.');
@@ -32,7 +32,7 @@ export class DraftScheduler {
     }
   }
 
-  private async processRetryQueue(platform: DraftPlatform): Promise<void> {
+  async processRetryQueue(platform: DraftPlatform): Promise<void> {
     const failed = await this.draftRepository.findFailedForRetry(platform, this.MAX_RETRIES);
     if (failed.length === 0) return;
     console.log('[DraftScheduler] ' + platform + ': Found ' + failed.length + ' failed draft(s) eligible for retry.');
@@ -78,6 +78,25 @@ export class DraftScheduler {
     this.intervals = [];
     console.log('[DraftScheduler] All platform schedulers stopped.');
   }
+}
+
+const SWEEP_PLATFORMS: DraftPlatform[] = ['instagram', 'facebook', 'linkedin', 'twitter', 'youtube'];
+const sweepRepo = new DraftRepository();
+const sweepPublisher = new DraftPublisher(sweepRepo);
+
+/**
+ * One pass over every platform's ready-to-publish drafts + retry queue.
+ * On serverless there is no setInterval tick — the scheduler pipeline is
+ * driven by this sweep, invoked opportunistically from the request
+ * pipeline and explicitly from POST /api/cron/sweep.
+ */
+export async function runDraftSweep(): Promise<{ checked: number }> {
+  const scheduler = new DraftScheduler(sweepRepo, sweepPublisher);
+  for (const platform of SWEEP_PLATFORMS) {
+    await scheduler.processReadyDrafts(platform);
+    await scheduler.processRetryQueue(platform);
+  }
+  return { checked: SWEEP_PLATFORMS.length };
 }
 
 export default DraftScheduler;

@@ -29,6 +29,8 @@ import { authMiddleware } from './middleware/auth';
 import swaggerDocument from './docs/swagger.json';
 import { initSocketIO } from './services/socket/socket.service';
 import { SchedulerService } from './services/scheduler';
+import { processDuePosts } from './services/scheduler';
+import { runDraftSweep } from './features/draft/draft.scheduler';
 
 // Import the Atlas database connection and fail fast on startup if it cannot connect.
 import { connectDb, isConnected } from './database/db';
@@ -118,8 +120,39 @@ app.use('/api/webhooks/meta', express.raw({ type: '*/*' }), (req: any, _res: any
 app.use(express.json());
 app.use('/api/webhooks/meta', express.json({ type: '*/*' }));
 
+// Serverless scheduler sweep: there is no setInterval on Vercel, so due
+// scheduled posts / ready drafts are processed opportunistically — fired on
+// any API request (throttled per instance) and by POST /api/cron/sweep.
+let sweepRunning = false;
+let lastSweepAt = 0;
+const SWEEP_COOLDOWN_MS = 25 * 1000;
+
+async function runSweepOnce(): Promise<void> {
+  if (sweepRunning) return;
+  sweepRunning = true;
+  try {
+    await Promise.allSettled([processDuePosts(), runDraftSweep()]);
+  } catch (error: any) {
+    console.error('[Sweep] error:', error.message);
+  } finally {
+    lastSweepAt = Date.now();
+    sweepRunning = false;
+  }
+}
+
+function maybeSweep(force = false): void {
+  if (process.env.NODE_ENV === 'test') return;
+  if (sweepRunning) return;
+  if (!force && Date.now() - lastSweepAt < SWEEP_COOLDOWN_MS) return;
+  if (!force && !isConnected()) return;
+  void runSweepOnce();
+}
+
 // Database connection check middleware for serverless/production requests
 app.use(async (req, res, next) => {
+  // Every request (including DB-free ones) doubles as a scheduler tick.
+  maybeSweep();
+
   // Skip check for root health check, API health route, and swagger UI assets/docs.
   // '/api/developer/status' is DB-free by design — making it wait behind a cold
   // Mongo connect multiplies every navigation ping by the cold-start cost.
@@ -129,6 +162,7 @@ app.use(async (req, res, next) => {
     req.path === '/cors-debug' ||
     req.path === '/api/test/limit' ||
     req.path === '/api/developer/status' ||
+    req.path === '/api/cron/sweep' ||
     req.path.startsWith('/api-docs')
   ) {
     return next();
@@ -147,6 +181,13 @@ app.use(async (req, res, next) => {
   }
 
   next();
+});
+
+// Explicit scheduler tick for external warmups/crons. Idempotent: posts are
+// claimed atomically so overlapping sweeps can never double-publish.
+app.post('/api/cron/sweep', async (_req, res) => {
+  await runSweepOnce();
+  res.json({ success: true, swept: true, at: new Date().toISOString() });
 });
 
 // Zenuxs OAuth callback (registered redirect URI) — see the router for why the
@@ -187,6 +228,9 @@ app.get('/api/dashboard/growth', authMiddleware as any, DashboardController.getG
 app.get('/api/dashboard/platforms', authMiddleware as any, DashboardController.getPlatformBreakdown as any);
 
 // AI & Insights routes (mounted from legacy controller)
+app.post('/api/ai/generate-post', authMiddleware as any, AIController.generatePost as any);
+app.post('/api/ai/regenerate', authMiddleware as any, AIController.regeneratePost as any);
+app.post('/api/ai/reply-suggestion', authMiddleware as any, AIController.suggestReply as any);
 app.post('/api/ai/generate-post', authMiddleware as any, AIController.generatePost as any);
 app.post('/api/ai/regenerate', authMiddleware as any, AIController.regeneratePost as any);
 app.post('/api/ai/reply-suggestion', authMiddleware as any, AIController.suggestReply as any);

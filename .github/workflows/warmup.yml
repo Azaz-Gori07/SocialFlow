@@ -11,8 +11,9 @@ jobs:
   warm:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping API (health + edge-cached status)
+      - name: Ping API (health + scheduler sweep + cached status)
         run: |
           curl -fsS -o /dev/null -m 30 https://viraldrift-server.vercel.app/health || true
+          curl -fsS -m 30 -X POST https://viraldrift-server.vercel.app/api/cron/sweep || true
           sleep 45
           curl -fsS -o /dev/null -m 30 https://viraldrift-server.vercel.app/health || true

@@ -134,16 +134,114 @@ export const AIController = {
     }
   },
 
-  repurposeYoutube: async (_req: AuthenticatedRequest, res: Response) => {
-    return res.status(501).json({
-      message: 'YouTube repurpose is not supported yet: no transcript pipeline is available on this server.',
-    });
+  repurposeYoutube: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const { url } = req.body;
+      if (!url || !/^https:\/\/(www\.)?youtube\.com\/|https:\/\/youtu\.be\//.test(String(url))) {
+        return res.status(400).json({ message: 'A valid YouTube URL is required' });
+      }
+
+      const ai = new AIService();
+      if (!ai.isConfigured) {
+        return res.status(503).json({ message: 'AI provider is not configured on the server' });
+      }
+
+      // No transcript pipeline exists on the serverless host, so re-purpose from
+      // the video's public metadata (oEmbed: title + author). That is real data
+      // fetched live from YouTube — never fabricated.
+      const oeRes = await fetch(
+        `https://www.youtube.com/oembed?url=${encodeURIComponent(String(url))}&format=json`
+      );
+      if (!oeRes.ok) {
+        return res.status(502).json({ message: 'YouTube metadata could not be fetched (video may be private)' });
+      }
+      const meta = (await oeRes.json()) as { title?: string; author_name?: string };
+
+      const response = await ai.execute({
+        prompt: `You are a social media manager. A new YouTube video was published: "${meta.title}" by ${meta.author_name || 'a creator'} (watch at ${url}).
+
+Write launch posts for each platform announcing it, grounded ONLY in the title/channel above — do not invent plot details or claims.
+
+Return ONLY valid JSON with one key per platform:
+{"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}`,
+      });
+      const text = AIService.extractText(response.data);
+      let outputs: Partial<Record<SocialPlatform, string>>;
+      try {
+        outputs = AIService.parseJson(text);
+      } catch {
+        return res.status(502).json({ message: 'AI provider did not return structured output' });
+      }
+
+      const generation = await db.aiGenerations.create({
+        userId,
+        prompt: `Repurpose YouTube video: ${meta.title || url}`,
+        outputs,
+      });
+      return res.status(201).json(generation);
+    } catch (error) {
+      console.error('AI repurpose youtube error', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   },
 
-  repurposeBlog: async (_req: AuthenticatedRequest, res: Response) => {
-    return res.status(501).json({
-      message: 'Blog repurpose is not supported yet: no article ingestion pipeline is available on this server.',
-    });
+  repurposeBlog: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const { url } = req.body;
+      if (!url || !/^https?:\/\//.test(String(url))) {
+        return res.status(400).json({ message: 'A valid blog URL is required' });
+      }
+
+      const ai = new AIService();
+      if (!ai.isConfigured) {
+        return res.status(503).json({ message: 'AI provider is not configured on the server' });
+      }
+
+      const articleRes = await fetch(String(url), { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SocialFlowBot/1.0)' } });
+      if (!articleRes.ok) {
+        return res.status(502).json({ message: `The blog could not be fetched (${articleRes.status})` });
+      }
+      const html = await articleRes.text();
+      // Strip script/style/tags, collapse whitespace: plain-text article body.
+      const excerpt = html
+        .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;|&amp;/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 6000);
+      if (excerpt.length < 120) {
+        return res.status(502).json({ message: 'The page fetched contains no readable article text' });
+      }
+
+      const response = await ai.execute({
+        prompt: `You are a social media copywriter. Summarize this article into launch posts for every platform:\n\n"""${excerpt}"""\n\nReturn ONLY valid JSON with one key per platform:\n{"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}`,
+      });
+      const text = AIService.extractText(response.data);
+      let outputs: Partial<Record<SocialPlatform, string>>;
+      try {
+        outputs = AIService.parseJson(text);
+      } catch {
+        return res.status(502).json({ message: 'AI provider did not return structured output' });
+      }
+
+      const generation = await db.aiGenerations.create({
+        userId,
+        prompt: `Repurpose blog article: ${String(url)}`,
+        outputs,
+      });
+      return res.status(201).json(generation);
+    } catch (error) {
+      console.error('AI repurpose blog error', error);
+      return res.status(500).json({ message: 'Internal server error' });
+    }
   },
 
   getInsights: async (req: AuthenticatedRequest, res: Response) => {
