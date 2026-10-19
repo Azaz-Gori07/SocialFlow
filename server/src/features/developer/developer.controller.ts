@@ -1,11 +1,16 @@
 import { Response, NextFunction } from 'express';
 import { DeveloperService } from './developer.service';
 import { syncAndProcess } from './jobs/syncOrchestrator';
+import { GitHubApiError } from './github/github.client';
+import { ConnectionService } from './connections/connection.service';
+import { ConnectionRepository } from './connections/connection.repository';
 import { ApiResponse } from '../../shared/utils/response.util';
 import { AuthenticatedRequest } from '../../shared/middleware/rbac.middleware';
 import { AppError } from '../../shared/errors/appError';
 import { DeveloperMemoryCategory } from './memory/memory.model';
 import { DeveloperOpportunityStatus } from './opportunities/opportunity.model';
+
+const connectionService = new ConnectionService(new ConnectionRepository());
 
 export class DeveloperController {
   constructor(private developerService: DeveloperService) {}
@@ -134,7 +139,14 @@ export class DeveloperController {
         generation: result.generation,
         errors: result.errors
       }, 'Repository sync completed');
-    } catch (error) { next(error); }
+    } catch (error) {
+      // A provider-rejected token is never a "500" — it is a reconnect prompt.
+      if (error instanceof GitHubApiError && error.status === 401 && req.user) {
+        await connectionService.markTokenInvalid(req.user.id, 'GitHub rejected the stored token (401). Please reconnect.');
+        return next(AppError.unauthorized('GitHub access token is no longer valid. Reconnect GitHub from Developer settings.'));
+      }
+      next(error);
+    }
   };
 
   listSyncLogs = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
