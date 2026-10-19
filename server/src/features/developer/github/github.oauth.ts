@@ -28,6 +28,11 @@ export function getAuthUrl(userId: string): string {
   });
   const params = new URLSearchParams({
     client_id: clientId,
+    // Explicit redirect_uri keeps GitHub's return target deterministic instead
+    // of silently depending on the URL registered on the OAuth app settings.
+    // GitHub only accepts a redirect_uri at or under the registered callback URL,
+    // so keep that configured in sync (github.com/settings/developers).
+    redirect_uri: `${env.FRONTEND_URL}/developer/github/callback`,
     scope: 'read:user repo',
     state
   });

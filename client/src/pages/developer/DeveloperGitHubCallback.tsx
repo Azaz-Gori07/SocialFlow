@@ -4,10 +4,11 @@ import { api } from '../../services/api';
 /**
  * Landing page for the developer GitHub OAuth handshake.
  *
- * The server builds the authorize URL without a redirect_uri
- * (server/src/features/developer/github/github.oauth.ts), so GitHub returns to
- * whichever callback URL is registered on the OAuth app. It must point at this
- * route for the handshake to complete. The page trades the code for a stored
+ * The server builds the authorize URL with redirect_uri =
+ * `${FRONTEND_URL}/developer/github/callback`
+ * (server/src/features/developer/github/github.oauth.ts). GitHub only accepts a
+ * redirect_uri at or under the callback URL registered on the OAuth app, so that
+ * must also point at this route for the handshake to complete. The page trades the code for a stored
  * connection, then closes itself and tells the opener window to refetch.
  */
 export const DeveloperGitHubCallback: React.FC = () => {
