@@ -239,7 +239,8 @@ export class AuthService {
   async logoutAll(userId: string) {
     this.requireDb();
     const result = await db.refreshTokens.updateMany(
-      { userId, revokedAt: { $exists: false } },
+      // Active tokens can have no revokedAt field or an explicit null.
+      { userId, $or: [{ revokedAt: { $exists: false } }, { revokedAt: null }] },
       { $set: { revokedAt: new Date(), revokedByLogout: true } }
     );
     return { revoked: (result as any)?.modifiedCount ?? 0 };
@@ -332,7 +333,7 @@ export class AuthService {
 
     await db.refreshTokens.updateMany(
       { userId },
-      { $set: { revokedAt: new Date() } }
+      { $set: { revokedAt: new Date(), revokedByLogout: true } }
     );
 
     return { email: user.email };
@@ -399,7 +400,7 @@ export class AuthService {
     // A password change invalidates every other session. Mint a fresh pair for
     // the caller so the tab that performed the change stays signed in.
     await db.refreshTokens.updateMany(
-      { userId: user._id.toString(), revokedAt: { $exists: false } },
+      { userId: user._id.toString(), $or: [{ revokedAt: { $exists: false } }, { revokedAt: null }] },
       { $set: { revokedAt: new Date(), revokedByLogout: true } }
     );
 

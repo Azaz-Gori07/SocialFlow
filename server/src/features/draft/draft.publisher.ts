@@ -171,7 +171,9 @@ export class DraftPublisher {
     const postDoc: Partial<IPost> = {
       _id: new mongoose.Types.ObjectId(postId),
       userId,
-      workspaceId: accounts[0].workspaceId || undefined,
+      // Accounts connected before workspace scoping have no workspaceId. A
+      // draft still knows where it belongs, so keep webhook/export scoping.
+      workspaceId: accounts[0].workspaceId || (draft as any).workspaceId || undefined,
       platforms: [platform],
       content: caption || '',
       media: (media || []).map(m => ({ url: m.url, kind: m.type as any, name: m.name })),

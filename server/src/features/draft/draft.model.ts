@@ -21,6 +21,8 @@ export interface IMediaRef {
 
 export interface IDraft extends Document {
   userId: string;
+  /** Workspace the draft belongs to; used for webhooks and scoped exports. */
+  workspaceId?: string;
   platform: DraftPlatform;
   contentType: 'post' | 'story' | 'reel' | 'video' | 'carousel' | 'thread';
   media: IMediaRef[];
@@ -72,10 +74,11 @@ const PlatformResponseSchema = new Schema<IPlatformResponse>({
 
 const DraftSchema = new Schema<IDraft>({
   userId: { type: String, required: true, index: true },
+  workspaceId: { type: String, index: true },
   platform: {
     type: String,
     required: true,
-    enum: ['instagram', 'facebook', 'linkedin', 'twitter', 'youtube'],
+    enum: ['instagram', 'facebook', 'linkedin', 'twitter', 'youtube', 'threads'],
     index: true
   },
   contentType: {

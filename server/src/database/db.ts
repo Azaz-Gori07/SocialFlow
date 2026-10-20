@@ -120,6 +120,9 @@ const RefreshTokenSchema = new Schema({
   tokenHash: { type: String, required: true, unique: true },
   expiresAt: { type: Date, required: true },
   revokedAt: { type: Date },
+  // Without this field Mongoose strict mode dropped the flag, so a logged-out
+  // token looked like a normal rotation race and survived the grace window.
+  revokedByLogout: { type: Boolean, default: false },
   rotatedFrom: { type: String },
   createdAt: { type: Date, default: Date.now }
 }, schemaOptions);

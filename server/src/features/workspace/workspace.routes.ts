@@ -81,7 +81,7 @@ router.patch(
 router.get(
   '/:workspaceId/settings',
   authenticate as any,
-  requireRole(['owner', 'admin', 'editor', 'viewer']) as any,
+  requireRole(['owner', 'admin']) as any,
   workspaceController.getSettings as any
 );
 
@@ -96,28 +96,28 @@ router.put(
 router.get(
   '/:workspaceId/api-key',
   authenticate as any,
-  requireRole(['owner', 'admin']) as any,
+  requireRole(['owner']) as any,
   workspaceController.getApiKey as any
 );
 
 router.post(
   '/:workspaceId/api-key',
   authenticate as any,
-  requireRole(['owner', 'admin']) as any,
+  requireRole(['owner']) as any,
   workspaceController.createApiKey as any
 );
 
 router.delete(
   '/:workspaceId/api-key',
   authenticate as any,
-  requireRole(['owner', 'admin']) as any,
+  requireRole(['owner']) as any,
   workspaceController.revokeApiKey as any
 );
 
 router.get(
   '/:workspaceId/export',
   authenticate as any,
-  requireRole(['owner', 'admin', 'editor', 'viewer']) as any,
+  requireRole(['owner', 'admin']) as any,
   workspaceController.exportWorkspace as any
 );
 

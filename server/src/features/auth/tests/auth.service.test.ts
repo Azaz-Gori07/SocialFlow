@@ -194,7 +194,7 @@ describe('AuthService Unit Tests', () => {
       expect(mockUserRepository.update).toHaveBeenCalledWith('user_123', { passwordHash: 'new_hashed_pw' });
       const { db } = require('../../../database/db');
       expect(db.refreshTokens.updateMany).toHaveBeenCalledWith(
-        { userId: 'user_123', revokedAt: { $exists: false } },
+        { userId: 'user_123', $or: [{ revokedAt: { $exists: false } }, { revokedAt: null }] },
         expect.objectContaining({ $set: expect.objectContaining({ revokedByLogout: true }) })
       );
       expect(result).toHaveProperty('accessToken');
@@ -209,7 +209,7 @@ describe('AuthService Unit Tests', () => {
       const result = await authService.logoutAll('user_123');
 
       expect(db.refreshTokens.updateMany).toHaveBeenCalledWith(
-        { userId: 'user_123', revokedAt: { $exists: false } },
+        { userId: 'user_123', $or: [{ revokedAt: { $exists: false } }, { revokedAt: null }] },
         expect.objectContaining({ $set: expect.objectContaining({ revokedByLogout: true }) })
       );
       expect(result.revoked).toBe(2);

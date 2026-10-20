@@ -388,11 +388,14 @@ export class WorkspaceService {
         this.workspaceRepository.listMembers(workspaceId),
         this.userRepository.findById(ownerId),
         db.posts.find({ workspaceId }).limit(5000).lean(),
-        DraftModel.find({ userId: ownerId }).limit(5000).lean(),
+        // Personal collections belong to the caller, not the workspace owner:
+        // an admin must not be able to export someone else's drafts, alerts or
+        // accounts. Workspace-scoped content stays scoped to the workspace.
+        DraftModel.find({ userId: callerId }).limit(5000).lean(),
         db.comments.find({ workspaceId }).limit(5000).lean(),
-        db.notifications.find({ userId: ownerId }).limit(5000).lean(),
-        db.socialAccounts.find({ userId: ownerId }).limit(200).lean(),
-        db.analytics.find({ userId: ownerId }).limit(10000).lean(),
+        db.notifications.find({ userId: callerId }).limit(5000).lean(),
+        db.socialAccounts.find({ userId: callerId }).limit(200).lean(),
+        db.analytics.find({ userId: callerId }).limit(10000).lean(),
         db.activityLogs.find({ workspaceId }).limit(5000).lean()
       ]);
 

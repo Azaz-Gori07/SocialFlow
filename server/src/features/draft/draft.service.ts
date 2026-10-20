@@ -5,6 +5,8 @@ import { IDraft } from './draft.model';
 import { CreateDraftInput, UpdateDraftInput, PublishDraftInput } from './draft.validation';
 import { resolveTargetAccounts } from '../social/targeting';
 import { logActivity } from '../../shared/utils/activityLog';
+import { db } from '../../database/db';
+import mongoose from 'mongoose';
 
 export interface PaginatedDrafts {
   items: IDraft[];
@@ -22,6 +24,9 @@ export class DraftService {
   }
 
   async createDraft(input: CreateDraftInput, userId: string): Promise<IDraft> {
+    // A draft's workspace scopes webhooks, exports and the audit feed. The id
+    // arrives in the body, so verify membership instead of trusting it.
+    await this.assertWorkspaceAccess(userId, input.workspaceId);
     // Validate explicit targets at write time (ownership, workspace, platform,
     // connection). `[]` is allowed here as "not yet targeted" — it is rejected
     // at queue/publish time and never means "publish everywhere". Absent
@@ -32,6 +37,7 @@ export class DraftService {
 
     const draft = await this.draftRepository.create({
       userId,
+      workspaceId: input.workspaceId,
       platform: input.platform,
       contentType: input.contentType,
       caption: input.caption,
@@ -66,6 +72,19 @@ export class DraftService {
       });
     }
     return draft;
+  }
+
+  /** Membership check for a client-supplied workspace id. */
+  private async assertWorkspaceAccess(userId: string, workspaceId?: string): Promise<void> {
+    if (!workspaceId) return;
+    if (!mongoose.isValidObjectId(workspaceId)) {
+      throw AppError.badRequest('Invalid workspace id');
+    }
+    const workspace = await db.workspaces.findById(workspaceId).select('ownerId').lean();
+    if (!workspace) throw AppError.notFound('Workspace not found');
+    if (String(workspace.ownerId) === userId) return;
+    const membership = await db.workspaceMembers.findOne({ workspaceId, userId }).lean();
+    if (!membership) throw AppError.forbidden('You do not have access to this workspace');
   }
 
   /** Server-side target validation at write time. Never trusts client ids. */
@@ -119,7 +138,9 @@ export class DraftService {
     if (!draft) throw AppError.notFound('Draft not found');
     if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
     if (draft.status === 'published' || draft.status === 'publishing') throw AppError.badRequest('Published or publishing drafts cannot be edited');
+    if (input.workspaceId !== undefined) await this.assertWorkspaceAccess(userId, input.workspaceId);
     const updateData: Record<string, unknown> = {};
+    if (input.workspaceId !== undefined) updateData.workspaceId = input.workspaceId;
     if (input.contentType !== undefined) updateData.contentType = input.contentType;
     if (input.caption !== undefined) updateData.caption = input.caption;
     if (input.media !== undefined) updateData.media = input.media;
