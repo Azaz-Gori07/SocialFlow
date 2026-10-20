@@ -14,7 +14,8 @@ jest.mock('../../../database/db', () => ({
     refreshTokens: {
       create: jest.fn().mockResolvedValue({}),
       findOne: jest.fn().mockResolvedValue(null),
-      updateOne: jest.fn().mockResolvedValue({})
+      updateOne: jest.fn().mockResolvedValue({}),
+      updateMany: jest.fn().mockResolvedValue({ modifiedCount: 2 })
     },
     authCodes: {
       create: jest.fn().mockResolvedValue({}),
@@ -146,6 +147,72 @@ describe('AuthService Unit Tests', () => {
           password: 'password123'
         })
       ).rejects.toThrow(new AppError('Account not activated — verify your email first', 401));
+    });
+  });
+
+  describe('updateProfile', () => {
+    it('updates the name and returns the fresh profile', async () => {
+      mockUserRepository.findById
+        .mockResolvedValueOnce({ ...mockUser, save: jest.fn() })
+        .mockResolvedValueOnce({ ...mockUser, fullName: 'New Name', save: jest.fn() });
+      mockUserRepository.update.mockResolvedValue(undefined as any);
+
+      const result = await authService.updateProfile('user_123', { fullName: 'New Name' });
+
+      expect(mockUserRepository.update).toHaveBeenCalledWith('user_123', { fullName: 'New Name' });
+      expect(result.fullName).toBe('New Name');
+    });
+  });
+
+  describe('changePassword', () => {
+    it('rejects an incorrect current password', async () => {
+      mockUserRepository.findById.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(false);
+
+      await expect(
+        authService.changePassword('user_123', 'wrong-password', 'new-password-123')
+      ).rejects.toThrow(new AppError('Current password is incorrect', 400));
+      expect(mockUserRepository.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects OAuth-only accounts that have no password', async () => {
+      mockUserRepository.findById.mockResolvedValue({ ...mockUser, passwordHash: undefined });
+
+      await expect(
+        authService.changePassword('user_123', 'anything', 'new-password-123')
+      ).rejects.toThrow('This account uses a social sign-in');
+    });
+
+    it('hashes the new password, revokes every other refresh token, and mints a fresh pair', async () => {
+      mockUserRepository.findById.mockResolvedValue(mockUser);
+      (bcrypt.compare as jest.Mock).mockResolvedValue(true);
+      (bcrypt.hash as jest.Mock).mockResolvedValue('new_hashed_pw');
+      mockUserRepository.update.mockResolvedValue(undefined as any);
+
+      const result = await authService.changePassword('user_123', 'current-password', 'new-password-123');
+
+      expect(mockUserRepository.update).toHaveBeenCalledWith('user_123', { passwordHash: 'new_hashed_pw' });
+      const { db } = require('../../../database/db');
+      expect(db.refreshTokens.updateMany).toHaveBeenCalledWith(
+        { userId: 'user_123', revokedAt: { $exists: false } },
+        expect.objectContaining({ $set: expect.objectContaining({ revokedByLogout: true }) })
+      );
+      expect(result).toHaveProperty('accessToken');
+      expect(result).toHaveProperty('refreshToken');
+    });
+  });
+
+  describe('logoutAll', () => {
+    it('revokes every active refresh token for the user', async () => {
+      const { db } = require('../../../database/db');
+      (db.refreshTokens.updateMany as jest.Mock).mockResolvedValue({ modifiedCount: 2 });
+      const result = await authService.logoutAll('user_123');
+
+      expect(db.refreshTokens.updateMany).toHaveBeenCalledWith(
+        { userId: 'user_123', revokedAt: { $exists: false } },
+        expect.objectContaining({ $set: expect.objectContaining({ revokedByLogout: true }) })
+      );
+      expect(result.revoked).toBe(2);
     });
   });
 

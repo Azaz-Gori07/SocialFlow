@@ -99,5 +99,78 @@ export class WorkspaceController {
       next(error);
     }
   };
+
+  getSettings = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const result = await this.workspaceService.getSettings(req.params.workspaceId, req.user.id);
+      return ApiResponse.success(res, result, 'Workspace settings retrieved');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateWorkspace = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const result = await this.workspaceService.updateWorkspace(req.params.workspaceId, req.user.id, req.body);
+      return ApiResponse.success(res, result, 'Workspace updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  updateSettings = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const result = await this.workspaceService.updateWorkspace(req.params.workspaceId, req.user.id, {
+        settings: req.body
+      });
+      return ApiResponse.success(res, result, 'Workspace settings saved');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  getApiKey = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const result = await this.workspaceService.getApiKey(req.params.workspaceId, req.user.id);
+      return ApiResponse.success(res, result, 'Workspace API key retrieved');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  createApiKey = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const result = await this.workspaceService.createApiKey(req.params.workspaceId, req.user.id);
+      return ApiResponse.success(res, result, 'Workspace API key generated', 201);
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  revokeApiKey = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const result = await this.workspaceService.revokeApiKey(req.params.workspaceId, req.user.id);
+      return ApiResponse.success(res, result, 'Workspace API key revoked');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  exportWorkspace = async (req: AuthenticatedUserRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const archive = await this.workspaceService.exportWorkspace(req.params.workspaceId, req.user.id);
+      res.setHeader('Content-Disposition', `attachment; filename="socialflow-workspace-${req.params.workspaceId}.json"`);
+      return res.status(200).json(archive);
+    } catch (error) {
+      next(error);
+    }
+  };
 }
 export default WorkspaceController;

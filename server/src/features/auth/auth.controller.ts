@@ -104,11 +104,48 @@ export class AuthController {
     }
   };
 
+  updateMe = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return ApiResponse.error(res, 'Authentication required', null, 401);
+      }
+      const profile = await this.authService.updateProfile(req.user.id, req.body);
+      return ApiResponse.success(res, profile, 'Profile updated successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  changePassword = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return ApiResponse.error(res, 'Authentication required', null, 401);
+      }
+      const { currentPassword, newPassword } = req.body;
+      const tokens = await this.authService.changePassword(req.user.id, currentPassword, newPassword);
+      return ApiResponse.success(res, tokens, 'Password changed successfully. Other sessions have been signed out.');
+    } catch (error) {
+      next(error);
+    }
+  };
+
   logout = async (req: any, res: Response, next: NextFunction) => {
     try {
       const { refreshToken } = req.body || {};
       await this.authService.logout(refreshToken);
       return ApiResponse.success(res, null, 'Logged out successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  logoutAll = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) {
+        return ApiResponse.error(res, 'Authentication required', null, 401);
+      }
+      const result = await this.authService.logoutAll(req.user.id);
+      return ApiResponse.success(res, result, 'All sessions signed out successfully');
     } catch (error) {
       next(error);
     }

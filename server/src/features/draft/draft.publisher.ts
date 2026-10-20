@@ -12,6 +12,7 @@ import { runPostDeliveries } from '../../services/scheduler';
 import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/notification.types';
 import { logger } from '../../shared/utils/logger';
+import { WorkspaceWebhookService } from '../workspace/workspace.webhook';
 
 /**
  * Publishing flow (guideline §18/§19/§20):
@@ -29,6 +30,7 @@ export class DraftPublisher {
   private postRepository = new PostRepository();
   private socialRepository = new SocialRepository();
   private notificationService = new NotificationService();
+  private webhooks = new WorkspaceWebhookService();
 
   constructor(private draftRepository: DraftRepository) {
     this.publishHistoryRepository = new PublishHistoryRepository();
@@ -259,11 +261,27 @@ export class DraftPublisher {
       await this.draftRepository.archive(draftId);
       await this.recordHistory(draftId, draft.userId, draft.platform, 'success', errors, first?.externalPostId);
       await this.notify(draft.userId, NotificationType.DRAFT_PUBLISHED, `Published to ${draft.platform}`, `Your draft has been successfully published to ${draft.platform}.`);
+      void this.webhooks.dispatch(post.workspaceId, 'post.published', {
+        draftId,
+        platform: draft.platform,
+        externalPostId: first?.externalPostId || null,
+        externalPostUrl: first?.externalPostUrl || null
+      });
       logger.info(`[DraftPublisher] Draft ${draftId} published to ${draft.platform}. Auto-archived.`);
     } else if (allFailed) {
       await this.failDraft(draft, errors.join('; ') || 'Unknown publishing error', 'PUBLISH_FAILED', true);
+      void this.webhooks.dispatch(post.workspaceId, 'post.failed', {
+        draftId,
+        platform: draft.platform,
+        error: errors.join('; ') || 'Unknown publishing error'
+      });
     } else {
       await this.failDraft(draft, 'No delivery reached the platform', 'NO_DELIVERY', false);
+      void this.webhooks.dispatch(post.workspaceId, 'post.failed', {
+        draftId,
+        platform: draft.platform,
+        error: 'No delivery reached the platform'
+      });
     }
 
     const refetched = await this.draftRepository.findById(draftId);

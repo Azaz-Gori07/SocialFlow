@@ -25,6 +25,7 @@ import githubWebhookRouter from './features/developer/github/github.webhook.rout
 import { startDeveloperScheduler } from './features/developer/jobs/developer.scheduler';
 import { DashboardController } from './controllers/dashboardController';
 import { AIController } from './controllers/aiController';
+import { SearchController } from './features/search/search.controller';
 import { authMiddleware } from './middleware/auth';
 import swaggerDocument from './docs/swagger.json';
 import { initSocketIO } from './services/socket/socket.service';
@@ -242,11 +243,10 @@ app.use('/api/developer', developerRouter);
 app.get('/api/dashboard/overview', authMiddleware as any, DashboardController.getOverview as any);
 app.get('/api/dashboard/growth', authMiddleware as any, DashboardController.getGrowth as any);
 app.get('/api/dashboard/platforms', authMiddleware as any, DashboardController.getPlatformBreakdown as any);
+app.get('/api/dashboard/platform-growth', authMiddleware as any, DashboardController.getPlatformGrowth as any);
+app.get('/api/search', authMiddleware as any, SearchController.search as any);
 
 // AI & Insights routes (mounted from legacy controller)
-app.post('/api/ai/generate-post', authMiddleware as any, AIController.generatePost as any);
-app.post('/api/ai/regenerate', authMiddleware as any, AIController.regeneratePost as any);
-app.post('/api/ai/reply-suggestion', authMiddleware as any, AIController.suggestReply as any);
 app.post('/api/ai/generate-post', authMiddleware as any, AIController.generatePost as any);
 app.post('/api/ai/regenerate', authMiddleware as any, AIController.regeneratePost as any);
 app.post('/api/ai/reply-suggestion', authMiddleware as any, AIController.suggestReply as any);

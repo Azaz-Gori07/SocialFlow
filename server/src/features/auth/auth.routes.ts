@@ -10,7 +10,7 @@ import { WorkspaceService } from '../workspace/workspace.service';
 import { WorkspaceRepository } from '../workspace/workspace.repository';
 import { validate } from '../../shared/middleware/validate.middleware';
 import { authenticate } from '../../shared/middleware/rbac.middleware';
-import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema, exchangeCodeSchema, forgotPasswordSchema, resetPasswordSchema } from './auth.validation';
+import { registerSchema, verifyOtpSchema, loginSchema, refreshSchema, exchangeCodeSchema, forgotPasswordSchema, resetPasswordSchema, updateProfileSchema, changePasswordSchema } from './auth.validation';
 
 const router = Router();
 
@@ -45,6 +45,7 @@ router.post('/refresh', authLimiterHandler, validate({ body: refreshSchema }), a
 router.post('/exchange', authLimiterHandler, validate({ body: exchangeCodeSchema }), authController.exchange as any);
 
 router.post('/logout', authController.logout as any);
+router.post('/logout-all', authenticate as any, authController.logoutAll as any);
 
 router.get('/oauth/zenuxs/:provider', authController.oauthRedirect as any);
 router.get('/oauth/zenuxs/:provider/callback', authController.oauthCallback as any);
@@ -53,6 +54,14 @@ router.get('/oauth/zenuxs/:provider/callback', authController.oauthCallback as a
 router.get('/oauth/zenuxs/browser/callback', authController.oauthCallback as any);
 
 router.get('/me', authenticate as any, authController.me as any);
+router.patch('/me', authenticate as any, validate({ body: updateProfileSchema }), authController.updateMe as any);
+router.post(
+  '/change-password',
+  authLimiterHandler,
+  authenticate as any,
+  validate({ body: changePasswordSchema }),
+  authController.changePassword as any
+);
 
 export default router;
 export { authController, authService, userRepository };

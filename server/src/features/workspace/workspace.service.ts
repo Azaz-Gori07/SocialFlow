@@ -2,6 +2,11 @@ import { WorkspaceRepository } from './workspace.repository';
 import { UserRepository } from '../user/user.repository';
 import { AppError } from '../../shared/errors/appError';
 import { InviteMemberInput, UpdateRoleInput } from './workspace.validation';
+import crypto from 'crypto';
+import { db } from '../../database/db';
+import { DraftModel } from '../draft/draft.model';
+import { EncryptionAdapter } from '../../services/social/adapters/encryption.adapter';
+import { DEFAULT_WORKSPACE_SETTINGS, IWorkspace, IWorkspaceSettings } from './workspace.model';
 
 /**
  * Minimal notification interface for dependency injection.
@@ -245,6 +250,195 @@ export class WorkspaceService {
 
     await this.workspaceRepository.removeMember(workspaceId, targetUserId);
     return true;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Workspace settings / API key / data export
+  // ---------------------------------------------------------------------------
+
+  private settingsWithDefaults(settings?: IWorkspaceSettings | any): IWorkspaceSettings {
+    const current = settings && typeof settings.toObject === 'function' ? settings.toObject() : settings || {};
+    const merged = { ...DEFAULT_WORKSPACE_SETTINGS, ...current };
+    delete (merged as any)._id;
+    return merged;
+  }
+
+  private async requireWorkspaceMembership(workspaceId: string, callerId: string): Promise<IWorkspace> {
+    const workspace = await this.workspaceRepository.findWorkspaceById(workspaceId);
+    if (!workspace) throw AppError.notFound('Workspace not found');
+
+    const member = await this.workspaceRepository.findMember(workspaceId, callerId);
+    if (!member && workspace.ownerId !== callerId) {
+      throw AppError.forbidden('Unauthorized access to workspace data');
+    }
+    return workspace;
+  }
+
+  private async requireWorkspaceAdmin(workspaceId: string, callerId: string): Promise<IWorkspace> {
+    const workspace = await this.requireWorkspaceMembership(workspaceId, callerId);
+    if (workspace.ownerId === callerId) return workspace;
+
+    const member = await this.workspaceRepository.findMember(workspaceId, callerId);
+    if (!member || (member.role !== 'owner' && member.role !== 'admin')) {
+      throw AppError.forbidden('Only workspace Owners or Admins can change these settings');
+    }
+    return workspace;
+  }
+
+  async getSettings(workspaceId: string, callerId: string) {
+    const workspace = await this.requireWorkspaceMembership(workspaceId, callerId);
+    return {
+      workspaceId: workspace._id.toString(),
+      name: workspace.name,
+      settings: this.settingsWithDefaults(workspace.settings)
+    };
+  }
+
+  async updateWorkspace(
+    workspaceId: string,
+    callerId: string,
+    input: { name?: string; settings?: Partial<IWorkspaceSettings> }
+  ) {
+    const workspace = await this.requireWorkspaceAdmin(workspaceId, callerId);
+
+    const patch: Record<string, unknown> = {};
+    if (input.name !== undefined) patch.name = input.name.trim();
+    if (input.settings !== undefined) {
+      patch.settings = {
+        ...this.settingsWithDefaults(workspace.settings),
+        ...input.settings
+      };
+    }
+
+    const updated = await this.workspaceRepository.updateWorkspace(workspaceId, patch as any);
+    if (!updated) throw AppError.notFound('Workspace not found');
+
+    return {
+      workspaceId: updated._id.toString(),
+      name: updated.name,
+      settings: this.settingsWithDefaults(updated.settings)
+    };
+  }
+
+  private buildApiKey() {
+    const key = `sf_live_${crypto.randomBytes(24).toString('base64url')}`;
+    return {
+      key,
+      hash: crypto.createHash('sha256').update(key).digest('hex'),
+      prefix: key.slice(0, 16)
+    };
+  }
+
+  async getApiKey(workspaceId: string, callerId: string) {
+    const workspace = await this.requireWorkspaceAdmin(workspaceId, callerId);
+    if (!workspace.apiKeyHash) {
+      return { exists: false, key: null, prefix: null, createdAt: null };
+    }
+
+    let key: string | null = null;
+    if (workspace.apiKeyEncrypted) {
+      try {
+        key = EncryptionAdapter.decrypt(workspace.apiKeyEncrypted);
+      } catch {
+        key = null;
+      }
+    }
+
+    return {
+      exists: true,
+      key,
+      prefix: workspace.apiKeyPrefix || null,
+      createdAt: workspace.apiKeyCreatedAt || null
+    };
+  }
+
+  async createApiKey(workspaceId: string, callerId: string) {
+    await this.requireWorkspaceAdmin(workspaceId, callerId);
+    const generated = this.buildApiKey();
+    await this.workspaceRepository.updateWorkspace(workspaceId, {
+      apiKeyHash: generated.hash,
+      apiKeyPrefix: generated.prefix,
+      apiKeyEncrypted: EncryptionAdapter.encrypt(generated.key),
+      apiKeyCreatedAt: new Date(),
+      apiKeyLastUsedAt: undefined
+    } as any);
+
+    return { exists: true, key: generated.key, prefix: generated.prefix, createdAt: new Date() };
+  }
+
+  async revokeApiKey(workspaceId: string, callerId: string) {
+    const workspace = await this.requireWorkspaceAdmin(workspaceId, callerId);
+    if (!workspace.apiKeyHash) {
+      return { revoked: false };
+    }
+    await this.workspaceRepository.clearApiKey(workspaceId);
+    return { revoked: true };
+  }
+
+  /**
+   * Full workspace backup. Tokens/session secrets are stripped: the archive is
+   * for content and analytics, not credentials.
+   */
+  async exportWorkspace(workspaceId: string, callerId: string) {
+    const workspace = await this.requireWorkspaceMembership(workspaceId, callerId);
+    const ownerId = workspace.ownerId;
+
+    const [members, owner, posts, drafts, comments, notifications, accounts, analytics, activity] =
+      await Promise.all([
+        this.workspaceRepository.listMembers(workspaceId),
+        this.userRepository.findById(ownerId),
+        db.posts.find({ workspaceId }).limit(5000).lean(),
+        DraftModel.find({ userId: ownerId }).limit(5000).lean(),
+        db.comments.find({ workspaceId }).limit(5000).lean(),
+        db.notifications.find({ userId: ownerId }).limit(5000).lean(),
+        db.socialAccounts.find({ userId: ownerId }).limit(200).lean(),
+        db.analytics.find({ userId: ownerId }).limit(10000).lean(),
+        db.activityLogs.find({ workspaceId }).limit(5000).lean()
+      ]);
+
+    const safeAccounts = (accounts as any[]).map((account) => {
+      const {
+        encryptedAccessToken,
+        encryptedRefreshToken,
+        accessToken,
+        refreshToken,
+        xSessionAuthTokenEncrypted,
+        xSessionCt0Encrypted,
+        ...rest
+      } = account;
+      return rest;
+    });
+
+    return {
+      exportedAt: new Date().toISOString(),
+      version: 1,
+      workspace: {
+        id: workspace._id.toString(),
+        name: workspace.name,
+        ownerId: workspace.ownerId,
+        settings: this.settingsWithDefaults(workspace.settings),
+        createdAt: workspace.createdAt
+      },
+      owner: owner
+        ? {
+            id: owner._id.toString(),
+            email: owner.email,
+            fullName: owner.fullName
+          }
+        : null,
+      members: members.map((m) => ({
+        userId: m.userId,
+        role: m.role,
+        joinedAt: m.createdAt
+      })),
+      posts,
+      drafts,
+      comments,
+      notifications,
+      accounts: safeAccounts,
+      analytics,
+      activity
+    };
   }
 }
 export default WorkspaceService;

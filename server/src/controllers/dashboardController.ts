@@ -123,6 +123,56 @@ export const DashboardController = {
     }
   },
 
+  /**
+   * Daily analytics for one platform. Powers the Analytics CTR channel filter;
+   * the aggregate endpoint above intentionally merges every platform.
+   */
+  getPlatformGrowth: async (req: AuthenticatedRequest, res: Response) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) return res.status(401).json({ message: 'Unauthorized' });
+
+      const platform = String(req.query.platform || '').trim().toLowerCase();
+      if (!platform) {
+        return res.status(400).json({ message: 'platform query parameter is required' });
+      }
+
+      const accounts = await db.socialAccounts.find({ userId, platform: platform as any }).select('_id').lean();
+      const accountIds = accounts.map((account: any) => String(account._id));
+      const rows = await db.analytics
+        .find({
+          userId,
+          $or: [{ platform }, { accountId: { $in: accountIds } }]
+        })
+        .sort({ date: 1 });
+
+      const byDate = new Map<string, any>();
+      for (const row of rows) {
+        const key = row.date;
+        if (!byDate.has(key)) {
+          byDate.set(key, {
+            date: key,
+            followers: 0,
+            reach: 0,
+            impressions: 0,
+            engagement: 0,
+            clicks: 0
+          });
+        }
+        const point = byDate.get(key);
+        point.followers += row.followers || 0;
+        point.reach += row.reach || 0;
+        point.impressions += row.impressions || 0;
+        point.engagement += row.engagement || 0;
+        point.clicks += row.clicks || 0;
+      }
+
+      return res.json(Array.from(byDate.values()));
+    } catch (error: any) {
+      return res.status(500).json({ message: error.message || 'Failed to load platform analytics' });
+    }
+  },
+
   getGrowth: async (req: AuthenticatedRequest, res: Response) => {
     try {
       const userId = req.user?.id;
@@ -202,9 +252,6 @@ export const DashboardController = {
       }> = {} as any;
 
       for (const act of accounts) {
-        const latest = latestRecords[String(act._id)];
-        if (!latest) continue;
-
         const platform = act.platform as SocialPlatform;
         if (!platformStats[platform]) {
           platformStats[platform] = {
@@ -216,12 +263,18 @@ export const DashboardController = {
             accountsCount: 0
           };
         }
-
-        platformStats[platform].followers += latest.followers;
-        platformStats[platform].reach += latest.reach;
-        platformStats[platform].impressions += latest.impressions;
-        platformStats[platform].engagement += latest.engagement;
+        // Count the connection even before the first analytics sync. Skipping
+        // metric-less accounts made a connected profile look disconnected in
+        // the Analytics empty state ("No connected accounts").
         platformStats[platform].accountsCount++;
+
+        const latest = latestRecords[String(act._id)];
+        if (!latest) continue;
+
+        platformStats[platform].followers += latest.followers ?? 0;
+        platformStats[platform].reach += latest.reach ?? 0;
+        platformStats[platform].impressions += latest.impressions ?? 0;
+        platformStats[platform].engagement += latest.engagement ?? 0;
       }
 
       return res.json(Object.values(platformStats));

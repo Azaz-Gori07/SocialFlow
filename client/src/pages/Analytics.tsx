@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../services/api';
 import { 
@@ -28,14 +28,18 @@ import {
   Bar
 } from 'recharts';
 import { PlatformBadge } from '../components/SocialIcons';
+import { useAuth } from '../context/AuthContext';
+import { downloadAnalyticsPdf } from '../utils/pdf';
 import { GenericSkeleton } from '../components/Skeleton';
 
 export const Analytics: React.FC = () => {
   const navigate = useNavigate();
+  const { workspace } = useAuth();
   const [growthData, setGrowthData] = useState<any[]>([]);
   const [platformsData, setPlatformsData] = useState<any[]>([]);
   const [overview, setOverview] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [ctrChannelData, setCtrChannelData] = useState<any[] | null>(null);
   const [exporting, setExporting] = useState<string | null>(null);
   
   // Dropdown states
@@ -72,22 +76,134 @@ export const Analytics: React.FC = () => {
     return <GenericSkeleton minHeight={360} />;
   }
 
+  const rangeDays = useMemo(() => {
+    switch (timeRange) {
+      case 'Last 7 days': return 7;
+      case 'Last 14 days': return 14;
+      case 'Last 28 days': return 28;
+      case 'Last 90 days': return 90;
+      default: return null;
+    }
+  }, [timeRange]);
+
+  const withinRange = (dateValue: string) => {
+    if (rangeDays === null) return true;
+    const date = new Date(`${dateValue}T00:00:00Z`);
+    if (Number.isNaN(date.getTime())) return true;
+    const cutoff = new Date();
+    cutoff.setUTCHours(0, 0, 0, 0);
+    cutoff.setUTCDate(cutoff.getUTCDate() - (rangeDays - 1));
+    return date >= cutoff;
+  };
+
+  const filteredGrowth = useMemo(
+    () => growthData.filter((point: any) => withinRange(point.date)),
+    [growthData, rangeDays]
+  );
+
+  const rangeTotals = useMemo(
+    () =>
+      filteredGrowth.reduce(
+        (acc: any, point: any) => ({
+          reach: acc.reach + (point.reach || 0),
+          impressions: acc.impressions + (point.impressions || 0),
+          engagement: acc.engagement + (point.engagement || 0),
+          clicks: acc.clicks + (point.clicks || 0)
+        }),
+        { reach: 0, impressions: 0, engagement: 0, clicks: 0 }
+      ),
+    [filteredGrowth]
+  );
+
+  const latestFollowers =
+    filteredGrowth.length > 0
+      ? filteredGrowth[filteredGrowth.length - 1].followers || 0
+      : overview?.totalFollowers || 0;
+
+  useEffect(() => {
+    if (ctrChannel === 'All Channels') {
+      setCtrChannelData(null);
+      return;
+    }
+    const platformMap: Record<string, string> = {
+      'X (Twitter)': 'twitter',
+      LinkedIn: 'linkedin',
+      Instagram: 'instagram',
+      Facebook: 'facebook',
+      Threads: 'threads',
+      YouTube: 'youtube'
+    };
+    let cancelled = false;
+    api.dashboard
+      .getPlatformGrowth(platformMap[ctrChannel] || ctrChannel.toLowerCase())
+      .then((rows) => {
+        if (!cancelled) setCtrChannelData(Array.isArray(rows) ? rows : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCtrChannelData([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [ctrChannel]);
+
+  const ctrSeries = useMemo(() => {
+    const source = ctrChannel === 'All Channels' ? filteredGrowth : (ctrChannelData || []).filter((point: any) => withinRange(point.date));
+    return source.map((point: any) => ({
+      ...point,
+      ctr: point.impressions > 0 ? point.clicks / point.impressions : 0
+    }));
+  }, [ctrChannel, ctrChannelData, filteredGrowth, rangeDays]);
+
   const handleExport = (type: 'csv' | 'pdf') => {
     setExporting(type);
-    setTimeout(() => {
+    try {
+      if (type === 'pdf') {
+        // Real PDF (PDF 1.4) — the old handler downloaded CSV bytes with a
+        // .pdf extension, which no PDF reader could open.
+        downloadAnalyticsPdf({
+          overview,
+          growth: filteredGrowth,
+          platforms: platformsData,
+          range: timeRange,
+          workspaceName: workspace?.name
+        });
+      } else {
+        const escapeCell = (value: any) => {
+          const text = String(value ?? '');
+          return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+        };
+        const header = 'Date,Platform,Followers,Reach,Impressions,Engagement,Clicks,CTR\n';
+        const rows = filteredGrowth
+          .map((d) =>
+            [
+              d.date,
+              'All',
+              d.followers,
+              d.reach,
+              d.impressions,
+              d.engagement,
+              d.clicks,
+              (d.clicks / d.impressions || 0).toFixed(4)
+            ]
+              .map(escapeCell)
+              .join(',')
+          )
+          .join('\n');
+
+        const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('href', url);
+        a.setAttribute('download', `SocialFlow_Analytics_Report_${new Date().toISOString().split('T')[0]}.csv`);
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+      }
+    } finally {
       setExporting(null);
-      const header = 'Date,Platform,Followers,Reach,Impressions,Engagement,Clicks,CTR\n';
-      const rows = growthData.map(d => 
-        `${d.date},All,${d.followers},${d.reach},${d.impressions},${d.engagement},${d.clicks},${(d.clicks/d.impressions || 0).toFixed(4)}`
-      ).join('\n');
-      
-      const blob = new Blob([header + rows], { type: type === 'csv' ? 'text/csv' : 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.setAttribute('href', url);
-      a.setAttribute('download', `SocialFlow_Analytics_Report_${new Date().toISOString().split('T')[0]}.${type}`);
-      a.click();
-    }, 1200);
+    }
   };
 
   const formatNumber = (num: number) => {
@@ -96,7 +212,8 @@ export const Analytics: React.FC = () => {
     return num.toString();
   };
 
-  const hasData = growthData.length > 0 && growthData.some((d: any) => d.reach > 0 || d.impressions > 0);
+  const hasData = filteredGrowth.length > 0 && filteredGrowth.some((d: any) => d.reach > 0 || d.impressions > 0);
+  const ctrHasData = ctrSeries.some((d: any) => d.ctr > 0);
   const hasAccounts = platformsData.length > 0;
 
   // Mock timeline dates for empty graph matching the exact visual
@@ -320,10 +437,10 @@ export const Analytics: React.FC = () => {
               Reach & Impressions
             </span>
             <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', lineHeight: 1.1, marginBottom: '4px' }}>
-              {hasData ? formatNumber(overview?.totalReach || 0) : '—'}
+              {hasData ? formatNumber(rangeTotals.reach) : '—'}
             </span>
             <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-              {hasData ? `${formatNumber(overview?.totalImpressions || 0)} views` : 'Connect accounts to view data'}
+              {hasData ? `${formatNumber(rangeTotals.impressions)} impressions` : (hasAccounts ? 'Awaiting first sync' : 'Connect accounts to view data')}
             </span>
           </div>
         </div>
@@ -347,10 +464,10 @@ export const Analytics: React.FC = () => {
               Engagement
             </span>
             <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', lineHeight: 1.1, marginBottom: '4px' }}>
-              {hasData ? formatNumber(overview?.totalEngagement || 0) : '—'}
+              {hasData ? formatNumber(rangeTotals.engagement) : '—'}
             </span>
             <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-              {hasData ? `${overview?.growth?.engagement || 0}% velocity` : 'Connect accounts to view data'}
+              {hasData ? `${overview?.growth?.engagement || 0}% velocity` : (hasAccounts ? 'Awaiting first sync' : 'Connect accounts to view data')}
             </span>
           </div>
         </div>
@@ -374,10 +491,10 @@ export const Analytics: React.FC = () => {
               Followers / Audience
             </span>
             <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#111827', lineHeight: 1.1, marginBottom: '4px' }}>
-              {hasData ? formatNumber(overview?.totalFollowers || 0) : '—'}
+              {hasData ? formatNumber(latestFollowers) : '—'}
             </span>
             <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-              {hasData ? `${platformsData.length} active channels` : 'Connect accounts to view data'}
+              {hasData ? `${platformsData.length} active channels` : (hasAccounts ? 'Awaiting first sync' : 'Connect accounts to view data')}
             </span>
           </div>
         </div>
@@ -404,7 +521,7 @@ export const Analytics: React.FC = () => {
               {hasData ? `${((overview?.averageCtr || 0) * 100).toFixed(2)}%` : '—'}
             </span>
             <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>
-              {hasData ? `${overview?.totalClicks || 0} outbound clicks` : 'Connect accounts to view data'}
+              {hasData ? `${overview?.totalClicks || 0} outbound clicks` : (hasAccounts ? 'Awaiting first sync' : 'Connect accounts to view data')}
             </span>
           </div>
         </div>
@@ -501,7 +618,7 @@ export const Analytics: React.FC = () => {
           {/* Area Chart Container */}
           <div style={{ position: 'relative', width: '100%', height: '280px' }}>
             <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
-              <AreaChart data={hasData ? growthData : emptyTimelineDates} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <AreaChart data={hasData ? filteredGrowth : emptyTimelineDates} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <defs>
                   <linearGradient id="growthChartGrad" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25}/>
@@ -510,7 +627,7 @@ export const Analytics: React.FC = () => {
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                 <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={{ stroke: '#f3f4f6' }} />
-                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} domain={[0, 1000]} ticks={[0, 250, 500, 750, 1000]} tickFormatter={v => v === 1000 ? '1K' : v.toString()} />
+                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => Number(v) >= 1000 ? `${Math.round(Number(v) / 1000)}K` : String(v)} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                   labelStyle={{ color: '#111827', fontWeight: 600 }}
@@ -548,10 +665,10 @@ export const Analytics: React.FC = () => {
                   <BarChart2 size={22} style={{ color: '#71717a' }} />
                 </div>
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
-                  Connect your accounts to see analytics
+                  {hasAccounts ? 'Analytics will appear after the first sync' : 'Connect your accounts to see analytics'}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '14px', textAlign: 'center' }}>
-                  Once you connect your social accounts, your reach and impressions will appear here.
+                  {hasAccounts ? 'Your accounts are connected; no metrics history has been synced yet.' : 'Once you connect your social accounts, your reach and impressions will appear here.'}
                 </div>
                 <button
                   type="button"
@@ -569,7 +686,7 @@ export const Analytics: React.FC = () => {
                     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
                   }}
                 >
-                  Connect Accounts
+                  {hasAccounts ? 'Manage Accounts' : 'Connect Accounts'}
                 </button>
               </div>
             )}
@@ -586,7 +703,7 @@ export const Analytics: React.FC = () => {
                   Link Click-Through Rate (CTR)
                 </h3>
                 <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: 0 }}>
-                  Outbound link performance across all channels.
+                  Outbound link performance {ctrChannel === 'All Channels' ? 'across all channels' : `on ${ctrChannel}`}.
                 </p>
               </div>
             </div>
@@ -627,7 +744,7 @@ export const Analytics: React.FC = () => {
                   minWidth: '130px',
                   padding: '4px'
                 }}>
-                  {['All Channels', 'X (Twitter)', 'LinkedIn', 'Instagram', 'Facebook'].map(c => (
+                  {['All Channels', 'X (Twitter)', 'LinkedIn', 'Instagram', 'Facebook', 'Threads', 'YouTube'].map(c => (
                     <button
                       key={c}
                       type="button"
@@ -658,22 +775,22 @@ export const Analytics: React.FC = () => {
           {/* Bar Chart Container */}
           <div style={{ position: 'relative', width: '100%', height: '280px' }}>
             <ResponsiveContainer width="100%" height={280} minWidth={0} minHeight={280}>
-              <RechartsBarChart data={hasData ? growthData : emptyTimelineDates} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+              <RechartsBarChart data={ctrHasData ? ctrSeries : emptyTimelineDates} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
                 <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={{ stroke: '#f3f4f6' }} />
-                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} domain={[0, 0.1]} ticks={[0, 0.02, 0.04, 0.06, 0.08, 0.1]} tickFormatter={v => `${(v * 100).toFixed(0)}%`} />
+                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} tickFormatter={v => `${(Number(v) * 100).toFixed(1)}%`} />
                 <Tooltip 
                   contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px' }}
                   formatter={(val: any) => `${(val * 100).toFixed(2)}%`}
                 />
-                {hasData && (
-                  <Bar dataKey="clicks" fill="#18181b" radius={[4, 4, 0, 0]} name="CTR" />
+                {ctrHasData && (
+                  <Bar dataKey="ctr" fill="#18181b" radius={[4, 4, 0, 0]} name="CTR" />
                 )}
               </RechartsBarChart>
             </ResponsiveContainer>
 
             {/* Empty State Overlay */}
-            {!hasData && (
+            {!ctrHasData && (
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -699,7 +816,7 @@ export const Analytics: React.FC = () => {
                   <BarChart2 size={22} style={{ color: '#71717a' }} />
                 </div>
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
-                  Connect your accounts to see CTR data
+                  {hasAccounts ? 'CTR will appear after the first sync' : 'Connect your accounts to see CTR data'}
                 </div>
                 <div style={{ fontSize: '0.8rem', color: '#6b7280', textAlign: 'center' }}>
                   Track how your content drives clicks across platforms.
@@ -832,10 +949,22 @@ export const Analytics: React.FC = () => {
                       {ch.label}
                     </span>
                     <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', lineHeight: 1.2 }}>
-                      {data ? formatNumber(data.followers) : '—'}
+                      {data
+                        ? formatNumber(
+                            platformMetric === 'Followers'
+                              ? data.followers
+                              : platformMetric === 'Reach'
+                                ? data.reach
+                                : platformMetric === 'Impressions'
+                                  ? data.impressions
+                                  : platformMetric === 'Engagement'
+                                    ? data.engagement
+                                    : data.followers
+                          )
+                        : '—'}
                     </span>
                     <span style={{ fontSize: '0.68rem', color: '#6b7280' }}>
-                      {data ? 'Connected' : 'Connect account'}
+                      {data ? (platformMetric === 'All Metrics' ? 'Followers' : platformMetric) : 'Connect account'}
                     </span>
                   </div>
                 </div>
@@ -872,11 +1001,13 @@ export const Analytics: React.FC = () => {
             </div>
             <div>
               <span style={{ fontSize: '0.825rem', fontWeight: 600, color: '#111827' }}>
-                {hasAccounts ? 'Real-time telemetry connected' : 'No connected accounts'}
+                {hasAccounts ? (hasData ? `Showing ${timeRange.toLowerCase()}` : 'Accounts connected') : 'No connected accounts'}
               </span>
               <p style={{ fontSize: '0.78rem', color: '#6b7280', margin: 0 }}>
                 {hasAccounts
-                  ? 'Your channels are transmitting live audience, impression and CTR data.'
+                  ? (hasData
+                      ? 'Your channels are transmitting live audience, impression and CTR data.'
+                      : 'Your accounts are connected. Metrics will appear after the next analytics sync.')
                   : 'Connect your social accounts to start seeing real analytics, track performance, and export reports.'}
               </p>
             </div>

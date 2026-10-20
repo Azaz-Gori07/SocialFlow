@@ -10,6 +10,25 @@ export class WorkspaceRepository {
     return WorkspaceModel.findById(id).exec();
   }
 
+  async updateWorkspace(id: string, patch: Partial<IWorkspace>): Promise<IWorkspace | null> {
+    return WorkspaceModel.findByIdAndUpdate(id, { $set: patch }, { new: true }).exec();
+  }
+
+  async findByApiKeyHash(hash: string): Promise<IWorkspace | null> {
+    return WorkspaceModel.findOne({ apiKeyHash: hash }).exec();
+  }
+
+  async touchApiKeyLastUsed(id: string): Promise<void> {
+    await WorkspaceModel.updateOne({ _id: id }, { $set: { apiKeyLastUsedAt: new Date() } }).exec();
+  }
+
+  async clearApiKey(id: string): Promise<void> {
+    await WorkspaceModel.updateOne(
+      { _id: id },
+      { $unset: { apiKeyHash: 1, apiKeyPrefix: 1, apiKeyEncrypted: 1, apiKeyCreatedAt: 1, apiKeyLastUsedAt: 1 } }
+    ).exec();
+  }
+
   async findMember(workspaceId: string, userId: string): Promise<IWorkspaceMember | null> {
     return WorkspaceMemberModel.findOne({ workspaceId, userId }).exec();
   }

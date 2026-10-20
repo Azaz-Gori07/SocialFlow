@@ -4,6 +4,29 @@ export const createWorkspaceSchema = z.object({
   name: z.string().min(2, 'Workspace name must be at least 2 characters long').max(50, 'Workspace name cannot exceed 50 characters')
 });
 
+export const workspaceSettingsSchema = z.object({
+  timezone: z.string().trim().min(1).max(80).optional(),
+  dateFormat: z.enum(['MMM D, YYYY', 'DD/MM/YYYY', 'MM/DD/YYYY', 'YYYY-MM-DD']).optional(),
+  autoShortenUrls: z.boolean().optional(),
+  autoHashtags: z.boolean().optional(),
+  crossPostWarning: z.boolean().optional(),
+  webhookUrl: z.union([z.string().trim().url('Webhook must be a valid URL'), z.literal('')]).optional()
+});
+
+export const updateWorkspaceSchema = z
+  .object({
+    name: z.string().trim().min(2, 'Workspace name must be at least 2 characters long').max(50).optional(),
+    settings: workspaceSettingsSchema.optional()
+  })
+  .refine((value) => value.name !== undefined || value.settings !== undefined, {
+    message: 'Provide a name or settings to update'
+  });
+
+export const updateSettingsSchema = workspaceSettingsSchema.refine(
+  (value) => Object.keys(value).length > 0,
+  { message: 'Provide at least one setting to update' }
+);
+
 export const inviteMemberSchema = z.object({
   workspaceId: z.string().min(1, 'Workspace ID is required'),
   email: z.string().email('Invalid email address format'),

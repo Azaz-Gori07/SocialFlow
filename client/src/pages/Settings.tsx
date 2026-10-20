@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 import { 
   Settings as SettingsIcon, 
   Save, 
@@ -8,46 +9,215 @@ import {
   Key, 
   Copy, 
   ShieldAlert, 
-  Trash2, 
   Download, 
   Share2,
-  CheckCheck
+  CheckCheck,
+  Trash2,
+  RefreshCw,
+  LogOut,
+  AlertCircle
 } from 'lucide-react';
 
+const DEFAULT_SETTINGS = {
+  timezone: 'Asia/Kolkata (IST, UTC+05:30)',
+  dateFormat: 'MMM D, YYYY',
+  autoShortenUrls: true,
+  autoHashtags: true,
+  crossPostWarning: true,
+  webhookUrl: ''
+};
+
 export const Settings: React.FC = () => {
-  const { workspace } = useAuth();
-  const [workspaceName, setWorkspaceName] = useState(workspace?.name || "azaz's Workspace");
-  const [timezone, setTimezone] = useState('Asia/Kolkata (IST, UTC+05:30)');
-  const [dateFormat, setDateFormat] = useState('MMM D, YYYY');
-  
+  const { workspace, refreshWorkspaces, logout } = useAuth();
+  const [workspaceName, setWorkspaceName] = useState(workspace?.name || '');
+  const [timezone, setTimezone] = useState(DEFAULT_SETTINGS.timezone);
+  const [dateFormat, setDateFormat] = useState(DEFAULT_SETTINGS.dateFormat);
+
   // Publishing toggles
   const [autoShortenUrls, setAutoShortenUrls] = useState(true);
   const [autoHashtags, setAutoHashtags] = useState(true);
   const [crossPostWarning, setCrossPostWarning] = useState(true);
 
-  // API Key state
-  const [apiKey] = useState('sf_live_9a7d83f1c29e46a7b8e5c3d2');
+  // API Key state — populated from the real workspace key, never hardcoded.
+  const [apiKey, setApiKey] = useState('');
+  const [apiKeyExists, setApiKeyExists] = useState(false);
+  const [apiKeyPrefix, setApiKeyPrefix] = useState<string | null>(null);
+  const [apiKeyBusy, setApiKeyBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
-  const [webhookUrl, setWebhookUrl] = useState('https://api.myserver.com/webhooks/socialflow');
-  
-  // Save feedback state
+  const [webhookUrl, setWebhookUrl] = useState('');
+
+  // Save / load feedback state
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionMessage, setActionMessage] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const handleCopyKey = () => {
-    navigator.clipboard.writeText(apiKey);
-    setCopiedKey(true);
-    setTimeout(() => setCopiedKey(false), 2000);
+  useEffect(() => {
+    if (!workspace?.id) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const [settingsResult, keyResult] = await Promise.all([
+          api.workspaces.getSettings(workspace.id),
+          api.workspaces.getApiKey(workspace.id).catch(() => null)
+        ]);
+        if (cancelled) return;
+
+        const settings = settingsResult?.settings || {};
+        setWorkspaceName(settingsResult?.name || workspace.name || '');
+        setTimezone(settings.timezone || DEFAULT_SETTINGS.timezone);
+        setDateFormat(settings.dateFormat || DEFAULT_SETTINGS.dateFormat);
+        setAutoShortenUrls(settings.autoShortenUrls ?? true);
+        setAutoHashtags(settings.autoHashtags ?? true);
+        setCrossPostWarning(settings.crossPostWarning ?? true);
+        setWebhookUrl(settings.webhookUrl || '');
+
+        if (keyResult) {
+          setApiKeyExists(!!keyResult.exists);
+          setApiKey(keyResult.key || '');
+          setApiKeyPrefix(keyResult.prefix || null);
+        }
+      } catch (err: any) {
+        if (!cancelled) setLoadError(err?.message || 'Could not load workspace settings.');
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [workspace?.id]);
+
+  const handleCopyKey = async () => {
+    if (!apiKey) return;
+    try {
+      await navigator.clipboard.writeText(apiKey);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    } catch {
+      setLoadError('Clipboard access was blocked by the browser.');
+    }
   };
 
-  const handleSaveSettings = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveSettings = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!workspace?.id) return;
+    if (workspaceName.trim().length < 2) {
+      setLoadError('Workspace name must be at least 2 characters long.');
+      return;
+    }
     setSaving(true);
-    setTimeout(() => {
-      setSaving(false);
+    setLoadError(null);
+    setSaved(false);
+    try {
+      await api.workspaces.update(workspace.id, {
+        name: workspaceName.trim(),
+        settings: {
+          timezone,
+          dateFormat,
+          autoShortenUrls,
+          autoHashtags,
+          crossPostWarning,
+          webhookUrl: webhookUrl.trim()
+        }
+      });
       setSaved(true);
+      setActionMessage(null);
       setTimeout(() => setSaved(false), 3000);
-    }, 600);
+      await refreshWorkspaces();
+    } catch (err: any) {
+      setLoadError(err?.message || 'Could not save workspace settings.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGenerateKey = async () => {
+    if (!workspace?.id) return;
+    setApiKeyBusy(true);
+    setLoadError(null);
+    try {
+      const result = await api.workspaces.createApiKey(workspace.id);
+      setApiKey(result.key || '');
+      setApiKeyExists(true);
+      setApiKeyPrefix(result.prefix || null);
+      setActionMessage('API key generated. Copy it now and store it safely.');
+    } catch (err: any) {
+      setLoadError(err?.message || 'Could not generate an API key.');
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const handleRotateKey = async () => {
+    if (!workspace?.id) return;
+    if (!confirm('Rotate the API key? Clients using the old key will stop working immediately.')) return;
+    setApiKeyBusy(true);
+    setLoadError(null);
+    try {
+      const result = await api.workspaces.createApiKey(workspace.id);
+      setApiKey(result.key || '');
+      setApiKeyExists(true);
+      setApiKeyPrefix(result.prefix || null);
+      setActionMessage('API key rotated. The previous key is now invalid.');
+    } catch (err: any) {
+      setLoadError(err?.message || 'Could not rotate the API key.');
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const handleRevokeKey = async () => {
+    if (!workspace?.id) return;
+    if (!confirm('Revoke the API key? Any client using it will lose access immediately.')) return;
+    setApiKeyBusy(true);
+    setLoadError(null);
+    try {
+      await api.workspaces.revokeApiKey(workspace.id);
+      setApiKey('');
+      setApiKeyExists(false);
+      setApiKeyPrefix(null);
+      setActionMessage('API key revoked.');
+    } catch (err: any) {
+      setLoadError(err?.message || 'Could not revoke the API key.');
+    } finally {
+      setApiKeyBusy(false);
+    }
+  };
+
+  const handleExportWorkspace = async () => {
+    if (!workspace?.id) return;
+    setLoadError(null);
+    try {
+      const archive = await api.workspaces.exportData(workspace.id);
+      const blob = new Blob([JSON.stringify(archive, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `socialflow-workspace-${workspace.id}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setActionMessage('Workspace archive downloaded.');
+    } catch (err: any) {
+      setLoadError(err?.message || 'Could not export the workspace.');
+    }
+  };
+
+  const handleSignOutAll = async () => {
+    if (!confirm('Sign out every device? This browser will be signed out too.')) return;
+    try {
+      await api.auth.logoutAll();
+    } catch (err: any) {
+      setLoadError(err?.message || 'Could not revoke other sessions.');
+      return;
+    }
+    await logout();
   };
 
   return (
@@ -85,7 +255,7 @@ export const Settings: React.FC = () => {
         <button
           type="button"
           onClick={handleSaveSettings}
-          disabled={saving}
+          disabled={saving || loading}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -120,7 +290,43 @@ export const Settings: React.FC = () => {
           gap: '8px'
         }}>
           <CheckCircle2 size={16} />
-          <span>Application configurations and workspace dispatch policies updated successfully.</span>
+          <span>Workspace settings saved successfully.</span>
+        </div>
+      )}
+
+      {loadError && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '10px',
+          color: '#b91c1c',
+          fontSize: '0.85rem',
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <AlertCircle size={16} />
+          <span>{loadError}</span>
+        </div>
+      )}
+
+      {actionMessage && (
+        <div style={{
+          padding: '12px 16px',
+          background: '#eff6ff',
+          border: '1px solid #bfdbfe',
+          borderRadius: '10px',
+          color: '#1d4ed8',
+          fontSize: '0.85rem',
+          fontWeight: 500,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px'
+        }}>
+          <CheckCircle2 size={16} />
+          <span>{actionMessage}</span>
         </div>
       )}
 
@@ -439,13 +645,15 @@ export const Settings: React.FC = () => {
                 <label style={{ display: 'block', fontSize: '0.8125rem', fontWeight: 500, color: '#374151', marginBottom: '6px' }}>
                   Workspace Public API Key
                 </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <input
                     type="text"
                     readOnly
-                    value={apiKey}
+                    value={apiKey || (apiKeyExists ? `${apiKeyPrefix || 'sf_live_'}••••••••` : '')}
+                    placeholder={loading ? 'Loading…' : 'No API key generated yet'}
                     style={{
                       flexGrow: 1,
+                      minWidth: '180px',
                       height: '42px',
                       padding: '0 12px',
                       background: '#f9fafb',
@@ -460,16 +668,17 @@ export const Settings: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleCopyKey}
+                    disabled={!apiKey}
                     style={{
                       height: '42px',
-                      padding: '0 14px',
+                      padding: '0 12px',
                       background: '#ffffff',
                       border: '1px solid #e5e7eb',
                       borderRadius: '8px',
                       fontSize: '0.825rem',
                       fontWeight: 600,
-                      color: '#374151',
-                      cursor: 'pointer',
+                      color: apiKey ? '#374151' : '#9ca3af',
+                      cursor: apiKey ? 'pointer' : 'not-allowed',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '6px'
@@ -478,6 +687,55 @@ export const Settings: React.FC = () => {
                     {copiedKey ? <CheckCheck size={14} style={{ color: '#10b981' }} /> : <Copy size={14} />}
                     <span>{copiedKey ? 'Copied' : 'Copy'}</span>
                   </button>
+                  <button
+                    type="button"
+                    onClick={apiKeyExists ? handleRotateKey : handleGenerateKey}
+                    disabled={apiKeyBusy || loading}
+                    style={{
+                      height: '42px',
+                      padding: '0 12px',
+                      background: '#18181b',
+                      border: '1px solid #18181b',
+                      borderRadius: '8px',
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      color: '#ffffff',
+                      cursor: apiKeyBusy || loading ? 'not-allowed' : 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}
+                  >
+                    <RefreshCw size={14} />
+                    <span>{apiKeyBusy ? 'Working…' : apiKeyExists ? 'Rotate' : 'Generate'}</span>
+                  </button>
+                  {apiKeyExists && (
+                    <button
+                      type="button"
+                      onClick={handleRevokeKey}
+                      disabled={apiKeyBusy}
+                      style={{
+                        height: '42px',
+                        padding: '0 12px',
+                        background: '#fef2f2',
+                        border: '1px solid #fecaca',
+                        borderRadius: '8px',
+                        fontSize: '0.825rem',
+                        fontWeight: 600,
+                        color: '#b91c1c',
+                        cursor: apiKeyBusy ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px'
+                      }}
+                    >
+                      <Trash2 size={14} />
+                      <span>Revoke</span>
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '6px', lineHeight: 1.4 }}>
+                  Send it as <code>Authorization: Bearer &lt;key&gt;</code> or the <code>x-api-key</code> header. The key authenticates as the workspace owner.
                 </div>
               </div>
 
@@ -500,7 +758,11 @@ export const Settings: React.FC = () => {
                     color: '#111827',
                     outline: 'none'
                   }}
+                  placeholder="https://your-server.com/hooks/socialflow"
                 />
+                <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '6px', lineHeight: 1.4 }}>
+                  SocialFlow POSTs <code>post.published</code> and <code>post.failed</code> events here, signed with <code>X-SocialFlow-Signature</code>.
+                </div>
               </div>
             </div>
           </div>
@@ -532,7 +794,7 @@ export const Settings: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => alert('Preparing complete workspace JSON archive for download...')}
+              onClick={handleExportWorkspace}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -563,17 +825,12 @@ export const Settings: React.FC = () => {
               </h3>
             </div>
             <p style={{ fontSize: '0.8rem', color: '#6b7280', margin: 0, lineHeight: 1.4 }}>
-              Irreversible actions. Deleting cache or resetting the workspace permanently clears drafts and telemetry.
+              Revoke every refresh token issued to this account. Other browsers will be signed out immediately; this browser signs out too.
             </p>
 
             <button
               type="button"
-              onClick={() => {
-                if (confirm('Clear all draft cache and reload from server?')) {
-                  localStorage.clear();
-                  window.location.reload();
-                }
-              }}
+              onClick={handleSignOutAll}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -589,8 +846,8 @@ export const Settings: React.FC = () => {
                 cursor: 'pointer'
               }}
             >
-              <Trash2 size={13} />
-              <span>Clear Cached Workspace Data</span>
+              <LogOut size={13} />
+              <span>Sign Out All Devices</span>
             </button>
           </div>
 

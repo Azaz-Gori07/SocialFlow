@@ -1,8 +1,26 @@
 import mongoose, { Schema, model, Document, Model } from 'mongoose';
 
+export interface IWorkspaceSettings {
+  timezone: string;
+  dateFormat: string;
+  autoShortenUrls: boolean;
+  autoHashtags: boolean;
+  crossPostWarning: boolean;
+  webhookUrl?: string;
+}
+
 export interface IWorkspace extends Document {
   name: string;
   ownerId: string;
+  settings?: IWorkspaceSettings;
+  /** SHA-256 of the workspace API key — the key itself is never stored in plain text. */
+  apiKeyHash?: string;
+  /** First characters of the key so the UI can identify it without revealing it. */
+  apiKeyPrefix?: string;
+  /** Reversible copy (AES-256-GCM) shown only to the workspace owner. */
+  apiKeyEncrypted?: string;
+  apiKeyCreatedAt?: Date;
+  apiKeyLastUsedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -15,6 +33,27 @@ export interface IWorkspaceMember extends Document {
   updatedAt: Date;
 }
 
+export const DEFAULT_WORKSPACE_SETTINGS: IWorkspaceSettings = {
+  timezone: 'Asia/Kolkata (IST, UTC+05:30)',
+  dateFormat: 'MMM D, YYYY',
+  autoShortenUrls: true,
+  autoHashtags: true,
+  crossPostWarning: true,
+  webhookUrl: ''
+};
+
+const WorkspaceSettingsSchema = new Schema<IWorkspaceSettings>(
+  {
+    timezone: { type: String, default: DEFAULT_WORKSPACE_SETTINGS.timezone },
+    dateFormat: { type: String, default: DEFAULT_WORKSPACE_SETTINGS.dateFormat },
+    autoShortenUrls: { type: Boolean, default: true },
+    autoHashtags: { type: Boolean, default: true },
+    crossPostWarning: { type: Boolean, default: true },
+    webhookUrl: { type: String, default: '' }
+  },
+  { _id: false }
+);
+
 const WorkspaceSchema = new Schema<IWorkspace>(
   {
     name: {
@@ -26,7 +65,20 @@ const WorkspaceSchema = new Schema<IWorkspace>(
       type: String,
       required: true,
       index: true
-    }
+    },
+    settings: {
+      type: WorkspaceSettingsSchema,
+      default: () => ({ ...DEFAULT_WORKSPACE_SETTINGS })
+    },
+    apiKeyHash: {
+      type: String,
+      index: true,
+      sparse: true
+    },
+    apiKeyPrefix: { type: String },
+    apiKeyEncrypted: { type: String },
+    apiKeyCreatedAt: { type: Date },
+    apiKeyLastUsedAt: { type: Date }
   },
   {
     timestamps: true

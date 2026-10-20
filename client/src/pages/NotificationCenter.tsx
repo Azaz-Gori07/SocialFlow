@@ -50,6 +50,27 @@ function formatTimestamp(ts: string): string {
 }
 
 export const NotificationCenter: React.FC = () => {
+
+  const handleEnableBrowserNotifications = async () => {
+    if (!('Notification' in window)) {
+      alert('This browser does not support desktop notifications.');
+      return;
+    }
+
+    try {
+      const permission = await Notification.requestPermission();
+      if (permission === 'granted') {
+        // This is a real OS-level notification, not a toast pretending to be one.
+        new Notification('SocialFlow notifications enabled', {
+          body: 'You will be notified about post publishing and comment activity.'
+        });
+      } else {
+        alert(`Notification permission was "${permission}". Enable it in your browser site settings to receive alerts.`);
+      }
+    } catch (error: any) {
+      alert(error?.message || 'Could not request notification permission.');
+    }
+  };
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'posts' | 'comments' | 'workspace' | 'system'>('all');
@@ -433,7 +454,7 @@ export const NotificationCenter: React.FC = () => {
 
             <button
               type="button"
-              onClick={() => alert('Browser notifications enabled for your workspace.')}
+              onClick={handleEnableBrowserNotifications}
               style={{
                 display: 'flex',
                 alignItems: 'center',

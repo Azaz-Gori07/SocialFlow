@@ -3,26 +3,48 @@ import jwt from 'jsonwebtoken';
 import { AppError } from '../errors/appError';
 import { env } from '../config/env.config';
 import mongoose from 'mongoose';
+import { resolveApiKey } from './apiKeyAuth';
 
 export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
   };
+  /** Set when the request authenticated with a workspace API key. */
+  apiKeyWorkspaceId?: string;
 }
 
-export function authenticate(
+export async function authenticate(
   req: AuthenticatedRequest,
   res: Response,
   next: NextFunction
 ) {
-  const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return next(AppError.unauthorized('Access token required'));
-  }
-
-  const token = authHeader.split(' ')[1];
   try {
+    const authHeader = req.headers.authorization;
+    const rawHeaderKey = req.headers['x-api-key'];
+    const headerApiKey = Array.isArray(rawHeaderKey) ? rawHeaderKey[0] : rawHeaderKey;
+    const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
+    // Two credential types share the Authorization header. A workspace API key
+    // acts as its owner, so headless clients get the same API surface as the
+    // dashboard without a 15-minute JWT dance.
+    const apiKey = headerApiKey || (bearerToken?.startsWith('sf_live_') ? bearerToken : null);
+    if (apiKey) {
+      const identity = await resolveApiKey(apiKey);
+      if (!identity) {
+        return next(AppError.unauthorized('Invalid workspace API key'));
+      }
+
+      req.user = { id: identity.userId, email: identity.email };
+      req.apiKeyWorkspaceId = identity.workspaceId;
+      return next();
+    }
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return next(AppError.unauthorized('Access token required'));
+    }
+
+    const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, env.JWT_SECRET) as { id: string; email: string };
     req.user = decoded;
     next();

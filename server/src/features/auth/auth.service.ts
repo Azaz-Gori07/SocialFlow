@@ -236,6 +236,15 @@ export class AuthService {
     );
   }
 
+  async logoutAll(userId: string) {
+    this.requireDb();
+    const result = await db.refreshTokens.updateMany(
+      { userId, revokedAt: { $exists: false } },
+      { $set: { revokedAt: new Date(), revokedByLogout: true } }
+    );
+    return { revoked: (result as any)?.modifiedCount ?? 0 };
+  }
+
   /**
    * Issue a one-time, short-lived code that can be exchanged for tokens.
    * Used by the OAuth callback so tokens never appear in the redirect URL.
@@ -347,6 +356,54 @@ export class AuthService {
       lastLogin: user.lastLogin,
       createdAt: user.createdAt
     };
+  }
+
+  async updateProfile(userId: string, input: { fullName?: string; avatarUrl?: string }) {
+    this.requireDb();
+
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw AppError.notFound('User not found');
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (input.fullName !== undefined) patch.fullName = input.fullName.trim();
+    if (input.avatarUrl !== undefined) patch.avatarUrl = input.avatarUrl;
+
+    await this.userRepository.update(userId, patch as any);
+    return this.getProfile(userId);
+  }
+
+  async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    this.requireDb();
+
+    const user = await this.userRepository.findById(userId);
+    if (!user) {
+      throw AppError.notFound('User not found');
+    }
+    if (!user.passwordHash) {
+      throw AppError.badRequest('This account uses a social sign-in and has no password to change');
+    }
+    if (currentPassword === newPassword) {
+      throw AppError.badRequest('New password must be different from the current password');
+    }
+
+    const isMatch = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!isMatch) {
+      throw AppError.badRequest('Current password is incorrect');
+    }
+
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.userRepository.update(userId, { passwordHash });
+
+    // A password change invalidates every other session. Mint a fresh pair for
+    // the caller so the tab that performed the change stays signed in.
+    await db.refreshTokens.updateMany(
+      { userId: user._id.toString(), revokedAt: { $exists: false } },
+      { $set: { revokedAt: new Date(), revokedByLogout: true } }
+    );
+
+    return this.generateTokens({ id: user._id.toString(), email: user.email });
   }
 
   async handleOAuthCallback(provider: string, code: string, state: string | undefined, zenuxsOAuthService: any) {

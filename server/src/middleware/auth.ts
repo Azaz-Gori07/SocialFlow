@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { resolveApiKey } from '../shared/middleware/apiKeyAuth';
 
 // Secrets must be provided via environment variables; no defaults allowed for security
 if (!process.env.JWT_SECRET) {
@@ -36,8 +37,28 @@ export function verifyRefreshToken(token: string): { id: string; email: string }
   }
 }
 
-export function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
+export async function authMiddleware(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
+  const rawHeaderKey = req.headers['x-api-key'];
+  const headerApiKey = Array.isArray(rawHeaderKey) ? rawHeaderKey[0] : rawHeaderKey;
+  const bearerToken = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  const apiKey = headerApiKey || (bearerToken?.startsWith('sf_live_') ? bearerToken : null);
+
+  if (apiKey) {
+    try {
+      const identity = await resolveApiKey(apiKey);
+      if (!identity) {
+        return res.status(401).json({ message: 'Invalid workspace API key' });
+      }
+      req.user = { id: identity.userId, email: identity.email };
+      (req as any).apiKeyWorkspaceId = identity.workspaceId;
+      return next();
+    } catch (error) {
+      console.error('API key authentication error:', error);
+      return res.status(401).json({ message: 'Invalid workspace API key' });
+    }
+  }
+
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     console.warn(`🔐 Unauthorized access attempt to ${req.path} - missing token`);
     return res.status(401).json({ message: 'Authorization token required' });

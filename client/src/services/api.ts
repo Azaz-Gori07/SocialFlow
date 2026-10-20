@@ -119,7 +119,15 @@ export const api = {
         skipAuth: true
       });
     },
-    me: () => request<any>('/auth/me')
+    me: () => request<any>('/auth/me'),
+    updateProfile: (fullName: string) =>
+      request<any>('/auth/me', { method: 'PATCH', body: JSON.stringify({ fullName }) }),
+    changePassword: (currentPassword: string, newPassword: string) =>
+      request<any>('/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ currentPassword, newPassword })
+      }),
+    logoutAll: () => request<any>('/auth/logout-all', { method: 'POST' })
   },
   
   social: {
@@ -167,10 +175,16 @@ export const api = {
     connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`, { method: 'POST' })
   },
   
+  search: {
+    query: (q: string) => request<any>(`/search?q=${encodeURIComponent(q)}`)
+  },
+
   dashboard: {
     getOverview: () => request<any>('/dashboard/overview'),
     getGrowth: () => request<any[]>('/dashboard/growth'),
-    getPlatforms: () => request<any[]>('/dashboard/platforms')
+    getPlatforms: () => request<any[]>('/dashboard/platforms'),
+    getPlatformGrowth: (platform: string) =>
+      request<any[]>(`/dashboard/platform-growth?platform=${encodeURIComponent(platform)}`)
   },
   
   posts: {
@@ -208,7 +222,16 @@ export const api = {
     invite: (workspaceId: string, email: string, role: string) => request<any>('/workspace/invite', { method: 'POST', body: JSON.stringify({ workspaceId, email, role }) }),
     updateRole: (workspaceId: string, memberUserId: string, role: string) => request<any>('/workspace/role', { method: 'PUT', body: JSON.stringify({ workspaceId, memberUserId, role }) }),
     removeMember: (workspaceId: string, memberUserId: string) => request<any>(`/workspace/${workspaceId}/member`, { method: 'DELETE', body: JSON.stringify({ memberUserId }) }),
-    members: (workspaceId: string) => request<any[]>(`/workspace/${workspaceId}/members`)
+    members: (workspaceId: string) => request<any[]>(`/workspace/${workspaceId}/members`),
+    getSettings: (workspaceId: string) => request<any>(`/workspace/${workspaceId}/settings`),
+    updateSettings: (workspaceId: string, settings: any) =>
+      request<any>(`/workspace/${workspaceId}/settings`, { method: 'PUT', body: JSON.stringify(settings) }),
+    update: (workspaceId: string, patch: any) =>
+      request<any>(`/workspace/${workspaceId}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+    exportData: (workspaceId: string) => request<any>(`/workspace/${workspaceId}/export`),
+    getApiKey: (workspaceId: string) => request<any>(`/workspace/${workspaceId}/api-key`),
+    createApiKey: (workspaceId: string) => request<any>(`/workspace/${workspaceId}/api-key`, { method: 'POST' }),
+    revokeApiKey: (workspaceId: string) => request<any>(`/workspace/${workspaceId}/api-key`, { method: 'DELETE' })
   },
   
   ai: {

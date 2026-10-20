@@ -42,3 +42,20 @@ export type RefreshInput = z.infer<typeof refreshSchema>;
 export type ExchangeCodeInput = z.infer<typeof exchangeCodeSchema>;
 export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
 export type ResetPasswordInput = z.infer<typeof resetPasswordSchema>;
+
+export const updateProfileSchema = z
+  .object({
+    fullName: z.string().trim().min(2, 'Name must be at least 2 characters long').max(80).optional(),
+    avatarUrl: z.string().url('Avatar must be a valid URL').optional()
+  })
+  .refine((value) => value.fullName !== undefined || value.avatarUrl !== undefined, {
+    message: 'Provide at least one profile field to update'
+  });
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(8, 'Password must be at least 8 characters long')
+});
+
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;
+export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;

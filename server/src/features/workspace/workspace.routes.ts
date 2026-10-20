@@ -5,7 +5,7 @@ import { WorkspaceRepository } from './workspace.repository';
 import { UserRepository } from '../user/user.repository';
 import { validate } from '../../shared/middleware/validate.middleware';
 import { authenticate, requireRole } from '../../shared/middleware/rbac.middleware';
-import { createWorkspaceSchema, inviteMemberSchema, updateRoleSchema } from './workspace.validation';
+import { createWorkspaceSchema, inviteMemberSchema, updateRoleSchema, updateWorkspaceSchema, updateSettingsSchema } from './workspace.validation';
 import { db } from '../../database/db';
 
 const router = Router();
@@ -67,6 +67,58 @@ router.put(
   validate({ body: updateRoleSchema }),
   requireRole(['owner']) as any,
   workspaceController.updateRole as any
+);
+
+// Workspace settings, API key, and data export
+router.patch(
+  '/:workspaceId',
+  authenticate as any,
+  validate({ body: updateWorkspaceSchema }),
+  requireRole(['owner', 'admin']) as any,
+  workspaceController.updateWorkspace as any
+);
+
+router.get(
+  '/:workspaceId/settings',
+  authenticate as any,
+  requireRole(['owner', 'admin', 'editor', 'viewer']) as any,
+  workspaceController.getSettings as any
+);
+
+router.put(
+  '/:workspaceId/settings',
+  authenticate as any,
+  validate({ body: updateSettingsSchema }),
+  requireRole(['owner', 'admin']) as any,
+  workspaceController.updateSettings as any
+);
+
+router.get(
+  '/:workspaceId/api-key',
+  authenticate as any,
+  requireRole(['owner', 'admin']) as any,
+  workspaceController.getApiKey as any
+);
+
+router.post(
+  '/:workspaceId/api-key',
+  authenticate as any,
+  requireRole(['owner', 'admin']) as any,
+  workspaceController.createApiKey as any
+);
+
+router.delete(
+  '/:workspaceId/api-key',
+  authenticate as any,
+  requireRole(['owner', 'admin']) as any,
+  workspaceController.revokeApiKey as any
+);
+
+router.get(
+  '/:workspaceId/export',
+  authenticate as any,
+  requireRole(['owner', 'admin', 'editor', 'viewer']) as any,
+  workspaceController.exportWorkspace as any
 );
 
 export default router;

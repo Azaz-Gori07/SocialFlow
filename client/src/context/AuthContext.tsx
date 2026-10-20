@@ -15,6 +15,7 @@ interface AuthContextType {
   logout: () => Promise<void>;
   switchWorkspace: (workspaceId: string) => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -228,6 +229,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const refreshUser = async () => {
+    const fresh = await api.auth.me();
+    setUser(fresh);
+    localStorage.setItem('user', JSON.stringify(fresh));
+  };
+
   return (
     <AuthContext.Provider value={{
       user,
@@ -241,7 +248,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       verifyOtp,
       logout,
       switchWorkspace,
-      refreshWorkspaces
+      refreshWorkspaces,
+      refreshUser
     }}>
       {children}
     </AuthContext.Provider>

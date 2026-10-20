@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Routes, Route, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { api } from './services/api';
 import { Sidebar } from './components/Sidebar';
 import { BootScreen } from './components/BootScreen';
 import { GenericSkeleton } from './components/Skeleton';
@@ -105,11 +106,51 @@ const AppContent: React.FC = () => {
       }
       if (e.key === 'Escape') {
         setIsCommandOpen(false);
+        setSearchQuery('');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
+
+  const [contentResults, setContentResults] = useState<{
+    drafts: any[];
+    accounts: any[];
+    comments: any[];
+    notifications: any[];
+  } | null>(null);
+  const [searchingContent, setSearchingContent] = useState(false);
+
+  // Real content search: the header promised posts/drafts/accounts but the
+  // palette only filtered a hardcoded navigation list. Debounced so typing
+  // doesn't fire a query per keystroke.
+  useEffect(() => {
+    const term = searchQuery.trim();
+    if (!isCommandOpen || term.length < 2) {
+      setContentResults(null);
+      setSearchingContent(false);
+      return;
+    }
+
+    setSearchingContent(true);
+    const timer = setTimeout(async () => {
+      try {
+        const result = await api.search.query(term);
+        setContentResults({
+          drafts: result?.drafts || [],
+          accounts: result?.accounts || [],
+          comments: result?.comments || [],
+          notifications: result?.notifications || []
+        });
+      } catch {
+        setContentResults(null);
+      } finally {
+        setSearchingContent(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, isCommandOpen]);
 
   // Boot curtain overlays the real view (already rendered underneath) and
   // wipes up once auth hydrates — it never gates rendering on the network.
@@ -133,6 +174,15 @@ const AppContent: React.FC = () => {
     item.label.toLowerCase().includes(searchQuery.toLowerCase()) ||
     item.category.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  const contentSections = [
+    { key: 'drafts', title: 'Drafts', icon: FileText, target: 'drafts', badge: 'Drafts', items: contentResults?.drafts || [] },
+    { key: 'accounts', title: 'Connected Accounts', icon: Link2, target: 'connected-accounts', badge: 'Accounts', items: contentResults?.accounts || [] },
+    { key: 'comments', title: 'Comments', icon: MessageSquare, target: 'comments', badge: 'Comments', items: contentResults?.comments || [] },
+    { key: 'notifications', title: 'Notifications', icon: Bell, target: 'notifications', badge: 'Alerts', items: contentResults?.notifications || [] }
+  ];
+  const contentResultCount = contentSections.reduce((total, section) => total + section.items.length, 0);
+  const hasAnyResults = filteredCommands.length > 0 || contentResultCount > 0;
 
   // Render Page Content based on selected sidebar tab
   const renderActivePage = () => {
@@ -236,7 +286,7 @@ const AppContent: React.FC = () => {
             <input
               type="text"
               readOnly
-              placeholder="Search posts, drafts, accounts, or anything..."
+              placeholder="Search drafts, accounts, comments, or jump to a page..."
               style={{
                 width: '100%',
                 height: '38px',
@@ -383,7 +433,7 @@ const AppContent: React.FC = () => {
               <Search size={18} style={{ color: 'var(--primary)' }} />
               <input
                 type="text"
-                placeholder="Type a command or jump to page..."
+                placeholder="Type a command or search content..."
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
                 autoFocus
@@ -411,52 +461,119 @@ const AppContent: React.FC = () => {
               </button>
             </div>
 
-            {/* Command Results List */}
-            <div style={{ maxHeight: '320px', overflowY: 'auto', padding: '8px' }}>
-              {filteredCommands.length === 0 ? (
+            {/* Command & Content Results List */}
+            <div style={{ maxHeight: '360px', overflowY: 'auto', padding: '8px' }}>
+              {!hasAnyResults && !searchingContent && (
                 <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: '0.85rem' }}>
-                  No matching commands found.
+                  No matching commands or content found.
                 </div>
-              ) : (
-                filteredCommands.map(item => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setCurrentTab(item.id);
-                        setIsCommandOpen(false);
-                        setSearchQuery('');
-                      }}
-                      style={{
-                        width: '100%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '10px 14px',
-                        background: 'transparent',
-                        border: 'none',
-                        borderRadius: '6px',
-                        color: '#f8fafc',
-                        cursor: 'pointer',
-                        textAlign: 'left',
-                        fontSize: '0.875rem',
-                        transition: 'background 0.15s'
-                      }}
-                      onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')}
-                      onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
-                    >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        <Icon size={16} style={{ color: 'var(--primary)' }} />
-                        <span>{item.label}</span>
-                      </div>
-                      <span style={{ fontSize: '0.68rem', padding: '2px 6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', color: '#94a3b8' }}>
-                        {item.category}
-                      </span>
-                    </button>
-                  );
-                })
               )}
+
+              {filteredCommands.map(item => {
+                const Icon = item.icon;
+                return (
+                  <button
+                    key={item.id}
+                    onClick={() => {
+                      setCurrentTab(item.id);
+                      setIsCommandOpen(false);
+                      setSearchQuery('');
+                    }}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '10px 14px',
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: '6px',
+                      color: '#f8fafc',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      fontSize: '0.875rem',
+                      transition: 'background 0.15s'
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <Icon size={16} style={{ color: 'var(--primary)' }} />
+                      <span>{item.label}</span>
+                    </div>
+                    <span style={{ fontSize: '0.68rem', padding: '2px 6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', color: '#94a3b8' }}>
+                      {item.category}
+                    </span>
+                  </button>
+                );
+              })}
+
+              {searchQuery.trim().length >= 2 && searchingContent && (
+                <div style={{ padding: '12px 14px', color: '#94a3b8', fontSize: '0.8rem' }}>Searching content…</div>
+              )}
+
+              {searchQuery.trim().length >= 2 && !searchingContent &&
+                contentSections
+                  .filter(section => section.items.length > 0)
+                  .map(section => {
+                    const Icon = section.icon;
+                    return (
+                      <div key={section.key}>
+                        <div style={{
+                          padding: '12px 14px 4px',
+                          fontSize: '0.66rem',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.07em',
+                          color: '#64748b',
+                          fontWeight: 700
+                        }}>
+                          {section.title}
+                        </div>
+                        {section.items.map((item: any) => (
+                          <button
+                            key={`${section.key}-${item.id}`}
+                            onClick={() => {
+                              setCurrentTab(section.target);
+                              setIsCommandOpen(false);
+                              setSearchQuery('');
+                            }}
+                            style={{
+                              width: '100%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              gap: '12px',
+                              padding: '9px 14px',
+                              background: 'transparent',
+                              border: 'none',
+                              borderRadius: '6px',
+                              color: '#f8fafc',
+                              cursor: 'pointer',
+                              textAlign: 'left',
+                              transition: 'background 0.15s'
+                            }}
+                            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)')}
+                            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+                              <Icon size={15} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                              <div style={{ minWidth: 0 }}>
+                                <div style={{ fontSize: '0.84rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {item.title}
+                                </div>
+                                <div style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {item.subtitle}
+                                </div>
+                              </div>
+                            </div>
+                            <span style={{ fontSize: '0.66rem', padding: '2px 6px', background: 'rgba(255, 255, 255, 0.05)', borderRadius: '4px', color: '#94a3b8', flexShrink: 0 }}>
+                              {section.badge}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    );
+                  })}
             </div>
 
             {/* Command Footer */}
@@ -471,7 +588,7 @@ const AppContent: React.FC = () => {
               color: '#64748b'
             }}>
               <span>Press <kbd style={{ padding: '1px 4px', background: 'rgba(255,255,255,0.08)', borderRadius: '3px' }}>esc</kbd> to close</span>
-              <span>SocialFlow Navigation</span>
+              <span>SocialFlow Search &amp; Navigation</span>
             </div>
           </div>
         </div>

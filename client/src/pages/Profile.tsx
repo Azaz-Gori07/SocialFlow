@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../services/api';
 import { 
   User, 
   Mail, 
@@ -13,7 +14,7 @@ import {
 import { PlatformBadge } from '../components/SocialIcons';
 
 export const Profile: React.FC = () => {
-  const { user, workspace } = useAuth();
+  const { user, workspace, refreshUser } = useAuth();
   const [fullName, setFullName] = useState(user?.fullName || '');
   const [email] = useState(user?.email || '');
   const [currentPassword, setCurrentPassword] = useState('');
@@ -24,17 +25,27 @@ export const Profile: React.FC = () => {
   const [savingPassword, setSavingPassword] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const handleUpdateProfile = (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (fullName.trim().length < 2) {
+      setProfileNotice({ type: 'error', text: 'Name must be at least 2 characters long.' });
+      return;
+    }
     setSavingProfile(true);
-    setTimeout(() => {
-      setSavingProfile(false);
+    setProfileNotice(null);
+    try {
+      await api.auth.updateProfile(fullName.trim());
+      await refreshUser();
       setProfileNotice({ type: 'success', text: 'Profile details updated successfully.' });
       setTimeout(() => setProfileNotice(null), 3000);
-    }, 600);
+    } catch (err: any) {
+      setProfileNotice({ type: 'error', text: err?.message || 'Could not update your profile.' });
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword !== confirmPassword) {
       setPasswordNotice({ type: 'error', text: 'New passwords do not match.' });
@@ -44,16 +55,29 @@ export const Profile: React.FC = () => {
       setPasswordNotice({ type: 'error', text: 'Password must be at least 8 characters.' });
       return;
     }
+    if (!currentPassword) {
+      setPasswordNotice({ type: 'error', text: 'Enter your current password.' });
+      return;
+    }
 
     setSavingPassword(true);
-    setTimeout(() => {
-      setSavingPassword(false);
+    setPasswordNotice(null);
+    try {
+      const tokens = await api.auth.changePassword(currentPassword, newPassword);
+      // The server revokes every old refresh token and mints a new pair for
+      // this tab, so persist it or the next refresh would sign the user out.
+      if (tokens?.accessToken) localStorage.setItem('access_token', tokens.accessToken);
+      if (tokens?.refreshToken) localStorage.setItem('refresh_token', tokens.refreshToken);
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setPasswordNotice({ type: 'success', text: 'Security password changed successfully.' });
-      setTimeout(() => setPasswordNotice(null), 3000);
-    }, 800);
+      setPasswordNotice({ type: 'success', text: 'Password changed. Other sessions have been signed out.' });
+      setTimeout(() => setPasswordNotice(null), 4000);
+    } catch (err: any) {
+      setPasswordNotice({ type: 'error', text: err?.message || 'Could not change your password.' });
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   const userInitial = user?.fullName ? user.fullName[0].toUpperCase() : 'A';
