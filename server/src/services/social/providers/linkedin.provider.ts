@@ -24,7 +24,12 @@ const LINKEDIN_SCOPES = ['openid', 'profile', 'email', 'w_member_social'];
 // before the user even reaches consent. discoverAccounts() below already
 // degrades to member-only when org permission is absent — re-add the scope
 // (here and in the token exchange echo) once that product is approved.
-const RESTLI = { 'X-Restli-Protocol-Version': '2.0.0' };
+const RESTLI = {
+  'X-Restli-Protocol-Version': '2.0.0',
+  // LinkedIn requires a versioned API on every REST call. The Posts API
+  // rejects unversioned writes once the legacy default is retired.
+  'LinkedIn-Version': '202601'
+};
 
 export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
   readonly platform = 'linkedin' as const;

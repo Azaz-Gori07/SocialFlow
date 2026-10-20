@@ -169,7 +169,36 @@ export abstract class OAuth2Strategy {
       throw classifyProviderError(this.config.platform, `POST ${url} failed: ${response.status} ${raw.slice(0, 300)}`, response.status, parsed);
     }
 
-    return response.json() as Promise<T>;
+    // Some providers answer a successful create with an empty body. LinkedIn's
+    // Posts API returns 201 + `x-restli-id` (the new post URN) and no JSON; a
+    // blind response.json() threw "Unexpected end of JSON input" *after* the
+    // post had already been created, which marked a live post as failed and
+    // made retries duplicate it. Read text first when the response supports it
+    // (real fetch), and keep json() for minimal test doubles.
+    const restliId = response.headers?.get?.('x-restli-id') ?? undefined;
+    if (typeof (response as any).text === 'function') {
+      const raw = await response.text();
+      if (raw === '') {
+        return (restliId ? { id: restliId } : {}) as T;
+      }
+      try {
+        return JSON.parse(raw) as T;
+      } catch {
+        throw new ProviderError(
+          `${this.config.platform} returned a non-JSON success response`,
+          this.config.platform,
+          response.status,
+          undefined,
+          false
+        );
+      }
+    }
+
+    try {
+      return (await response.json()) as T;
+    } catch {
+      return (restliId ? { id: restliId } : {}) as T;
+    }
   }
 
   protected notImplemented(method: string): never {

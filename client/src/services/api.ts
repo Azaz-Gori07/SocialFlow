@@ -108,7 +108,17 @@ export const api = {
     resetPassword: (userId: string, code: string, newPassword: string) =>
       request<any>('/auth/reset-password', { method: 'POST', body: JSON.stringify({ userId, code, newPassword }), skipAuth: true }),
     exchange: (code: string) => request<any>('/auth/exchange', { method: 'POST', body: JSON.stringify({ code }), skipAuth: true }),
-    logout: () => request<any>('/auth/logout', { method: 'POST', skipAuth: true }),
+    // The server revokes the refresh token, not the 15-minute access token, so
+    // it must receive the token being discarded. Sending an empty body made
+    // logout a client-side illusion: a captured refresh token stayed valid.
+    logout: () => {
+      const refreshToken = typeof localStorage !== 'undefined' ? localStorage.getItem('refresh_token') : null;
+      return request<any>('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify(refreshToken ? { refreshToken } : {}),
+        skipAuth: true
+      });
+    },
     me: () => request<any>('/auth/me')
   },
   

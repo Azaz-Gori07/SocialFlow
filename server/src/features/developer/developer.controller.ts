@@ -80,12 +80,33 @@ export class DeveloperController {
     } catch (error) { next(error); }
   };
 
+  /**
+   * A provider-rejected token is a reconnect prompt, never a generic 500.
+   * Shared by every GitHub read that can be the first call to discover an
+   * expired/revoked token (`/repositories/available`, mirror-on-sync).
+   */
+  private async handleGitHubAuthError(error: unknown, userId?: string): Promise<boolean> {
+    if (error instanceof GitHubApiError && error.status === 401 && userId) {
+      await connectionService.markTokenInvalid(
+        userId,
+        'GitHub rejected the stored token (401). Please reconnect.'
+      );
+      return true;
+    }
+    return false;
+  }
+
   listAvailableRepositories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) return next(AppError.unauthorized());
       const items = await this.developerService.repositoryService.listFromGitHub(req.user.id);
       return ApiResponse.success(res, { items, total: items.length }, 'GitHub repositories retrieved');
-    } catch (error) { next(error); }
+    } catch (error) {
+      if (await this.handleGitHubAuthError(error, req.user?.id)) {
+        return next(AppError.unauthorized('GitHub access token is no longer valid. Reconnect GitHub from Developer settings.'));
+      }
+      next(error);
+    }
   };
 
   syncRepositories = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
@@ -93,7 +114,12 @@ export class DeveloperController {
       if (!req.user) return next(AppError.unauthorized());
       const result = await this.developerService.repositoryService.mirrorFromGitHub(req.user.id);
       return ApiResponse.success(res, result, 'Repositories mirrored from GitHub');
-    } catch (error) { next(error); }
+    } catch (error) {
+      if (await this.handleGitHubAuthError(error, req.user?.id)) {
+        return next(AppError.unauthorized('GitHub access token is no longer valid. Reconnect GitHub from Developer settings.'));
+      }
+      next(error);
+    }
   };
 
   getRepository = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {

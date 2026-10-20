@@ -49,6 +49,9 @@ describe('DeliveryEngine — token refresh and retry', () => {
         refreshToken: 'refresh-1',
       }),
       refreshAccountTokenForDelivery: over.refresh ?? jest.fn().mockResolvedValue('fresh-token'),
+      // handleFailure flags auth-expired accounts through this method; without
+      // it the mock is incomplete and every auth-failure path throws.
+      markAccountAuthExpired: jest.fn().mockResolvedValue(undefined),
     };
     (engine as any).socialService = socialService;
 

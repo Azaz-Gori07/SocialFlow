@@ -152,9 +152,15 @@ export const AIController = {
       // No transcript pipeline exists on the serverless host, so re-purpose from
       // the video's public metadata (oEmbed: title + author). That is real data
       // fetched live from YouTube — never fabricated.
-      const oeRes = await fetch(
-        `https://www.youtube.com/oembed?url=${encodeURIComponent(String(url))}&format=json`
-      );
+      let oeRes: Awaited<ReturnType<typeof fetch>>;
+      try {
+        oeRes = await fetch(
+          `https://www.youtube.com/oembed?url=${encodeURIComponent(String(url))}&format=json`,
+          { signal: AbortSignal.timeout(10_000) }
+        );
+      } catch {
+        return res.status(504).json({ message: 'YouTube metadata request timed out' });
+      }
       if (!oeRes.ok) {
         return res.status(502).json({ message: 'YouTube metadata could not be fetched (video may be private)' });
       }
@@ -203,11 +209,21 @@ Return ONLY valid JSON with one key per platform:
         return res.status(503).json({ message: 'AI provider is not configured on the server' });
       }
 
-      const articleRes = await fetch(String(url), { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SocialFlowBot/1.0)' } });
+      // Hard cap: an unbounded fetch used to hang the whole request (the client
+      // aborted at 120s) and a multi-megabyte page could exhaust the function.
+      let articleRes: Awaited<ReturnType<typeof fetch>>;
+      try {
+        articleRes = await fetch(String(url), {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SocialFlowBot/1.0)' },
+          signal: AbortSignal.timeout(10_000)
+        });
+      } catch {
+        return res.status(504).json({ message: 'The blog could not be fetched in time' });
+      }
       if (!articleRes.ok) {
         return res.status(502).json({ message: `The blog could not be fetched (${articleRes.status})` });
       }
-      const html = await articleRes.text();
+      const html = (await articleRes.text()).slice(0, 2_000_000);
       // Strip script/style/tags, collapse whitespace: plain-text article body.
       const excerpt = html
         .replace(/<script[\s\S]*?<\/script>/gi, ' ')
