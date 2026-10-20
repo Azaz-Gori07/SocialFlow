@@ -13,6 +13,7 @@ import {
   connectionIdSchema,
   selectAccountSchema,
   updateAccountSchema,
+  xSessionConnectSchema,
 } from './social.validation';
 
 const router = Router();
@@ -79,6 +80,36 @@ router.delete(
   authenticate as any,
   validate({ params: accountIdSchema }),
   socialController.disconnect as any
+);
+
+// ── Unofficial X session (twikit bridge) ────────────────────────────────────
+// Only used as a fallback when the official X API reports 402 credits-depleted.
+router.get(
+  '/accounts/:id/x-session',
+  authenticate as any,
+  validate({ params: accountIdSchema }),
+  socialController.getXSession as any
+);
+
+router.post(
+  '/accounts/:id/x-session',
+  authenticate as any,
+  validate({ params: accountIdSchema, body: xSessionConnectSchema }),
+  socialController.connectXSession as any
+);
+
+router.delete(
+  '/accounts/:id/x-session',
+  authenticate as any,
+  validate({ params: accountIdSchema }),
+  socialController.disconnectXSession as any
+);
+
+router.post(
+  '/accounts/:id/x-session/test',
+  authenticate as any,
+  validate({ params: accountIdSchema }),
+  socialController.testXSession as any
 );
 
 export default router;

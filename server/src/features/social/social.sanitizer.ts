@@ -23,6 +23,17 @@ export function toSafeAccount(doc: ISocialAccount | null | undefined) {
     lastValidatedAt: doc.lastValidatedAt ?? null,
     lastSyncedAt: doc.lastSyncedAt ?? null,
     lastError: doc.lastError ?? null,
+    /**
+     * Unofficial X session marker. Only the presence/state is exposed — the
+     * encrypted cookies themselves never leave the server.
+     */
+    xSession: {
+      connected: Boolean(doc.xSessionAuthTokenEncrypted && doc.xSessionCt0Encrypted),
+      method: doc.xSessionMethod ?? null,
+      connectedAt: doc.xSessionConnectedAt ?? null,
+      lastUsedAt: doc.xSessionLastUsedAt ?? null,
+      lastError: doc.xSessionLastError ?? null,
+    },
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
   };

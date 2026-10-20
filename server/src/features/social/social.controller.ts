@@ -1,12 +1,17 @@
 import { Response, NextFunction } from 'express';
 import { SocialService } from './social.service';
+import { XSessionService } from './xSession.service';
+import { XSessionConnectInput } from './social.validation';
 import { ApiResponse } from '../../shared/utils/response.util';
 import { AuthenticatedRequest } from '../../shared/middleware/rbac.middleware';
 import { AppError } from '../../shared/errors/appError';
 import { env } from '../../shared/config/env.config';
 
 export class SocialController {
-  constructor(private socialService: SocialService) {}
+  constructor(
+    private socialService: SocialService,
+    private xSessionService: XSessionService = new XSessionService()
+  ) {}
 
   /**
    * POST /api/social/connect/:platform
@@ -123,6 +128,66 @@ export class SocialController {
       const { id } = req.params;
       await this.socialService.disconnectAccount(id, req.user.id);
       return ApiResponse.success(res, null, 'Social account disconnected successfully');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** GET /api/social/accounts/:id/x-session — unofficial session status. */
+  getXSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const status = await this.xSessionService.statusForAccount(req.user.id, req.params.id);
+      return ApiResponse.success(res, status, 'X session status retrieved');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** POST /api/social/accounts/:id/x-session — connect cookies or sign in via twikit. */
+  connectXSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const input = req.body as XSessionConnectInput;
+      const result =
+        input.mode === 'cookies'
+          ? await this.xSessionService.connectWithCookies(req.user.id, req.params.id, input)
+          : await this.xSessionService.connectWithPassword(req.user.id, req.params.id, input);
+      return ApiResponse.success(res, result, 'X session connected');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** DELETE /api/social/accounts/:id/x-session — remove the stored session. */
+  disconnectXSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      await this.xSessionService.disconnect(req.user.id, req.params.id);
+      return ApiResponse.success(res, null, 'X session removed');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /**
+   * POST /api/social/accounts/:id/x-session/test — publishes one real test
+   * tweet through the bridge so the owner can verify the session end-to-end.
+   * The text is fixed on purpose: arbitrary content must go through the normal
+   * draft/compliance pipeline, not this diagnostic endpoint.
+   */
+  testXSession = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const account = await this.socialService.getAccountForUser(req.params.id, req.user.id);
+      if (!this.xSessionService.hasSession(account)) {
+        throw AppError.badRequest('Connect an X session first');
+      }
+      const result = await this.xSessionService.post(
+        account,
+        `SocialFlow session test — ${new Date().toISOString()}`
+      );
+      return ApiResponse.success(res, result, 'Test tweet published');
     } catch (error) {
       next(error);
     }

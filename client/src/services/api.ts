@@ -144,6 +144,16 @@ export const api = {
       }
       return res;
     },
+    /** Unofficial X session (twikit bridge) — fallback for 402 credits-depleted. */
+    xSession: {
+      get: (id: string) => request<any>(`/social/accounts/${id}/x-session`),
+      connect: (id: string, body: any) =>
+        request<any>(`/social/accounts/${id}/x-session`, { method: 'POST', body: JSON.stringify(body) }),
+      disconnect: (id: string) =>
+        request<any>(`/social/accounts/${id}/x-session`, { method: 'DELETE' }),
+      test: (id: string) =>
+        request<any>(`/social/accounts/${id}/x-session/test`, { method: 'POST' })
+    },
     connectOAuth: (platform: string) => request<{ url: string }>(`/social/connect/${platform}`, { method: 'POST' })
   },
   

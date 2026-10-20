@@ -253,6 +253,17 @@ export class SocialService {
 
   /** Disconnects a social account (ownership checked) and cascades its data. */
   /**
+   * Ownership-checked account fetch (full document) for internal services
+   * that need encrypted fields — never serialized directly to clients.
+   */
+  async getAccountForUser(id: string, userId: string): Promise<ISocialAccount> {
+    const account = await this.socialRepository.findAccountById(id);
+    if (!account) throw AppError.notFound('Social account not found');
+    if (account.userId !== userId) throw AppError.forbidden('Unauthorized access to this social account');
+    return account;
+  }
+
+  /**
    * Sets the default-publishing preference for one account. Convenience for
    * NEW content only — never affects already scheduled posts (their target
    * snapshot is immutable).

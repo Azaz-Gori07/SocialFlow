@@ -41,6 +41,18 @@ export interface ISocialAccount extends Document {
   lastSyncedAt?: string;
   lastError?: string;
   metadata?: Record<string, any>;
+  /**
+   * Unofficial X session (twikit bridge). Used only as a publishing fallback
+   * when the official X API rejects a post with 402 credits-depleted.
+   * Both secrets are encrypted with the same adapter as OAuth tokens and are
+   * never serialized to clients.
+   */
+  xSessionAuthTokenEncrypted?: string;
+  xSessionCt0Encrypted?: string;
+  xSessionMethod?: 'cookies' | 'password';
+  xSessionConnectedAt?: string;
+  xSessionLastUsedAt?: string;
+  xSessionLastError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -83,6 +95,12 @@ const SocialAccountSchema = new Schema<ISocialAccount>(
     lastValidatedAt: { type: String },
     lastSyncedAt: { type: String },
     lastError: { type: String },
+    xSessionAuthTokenEncrypted: { type: String },
+    xSessionCt0Encrypted: { type: String },
+    xSessionMethod: { type: String, enum: ['cookies', 'password'] },
+    xSessionConnectedAt: { type: String },
+    xSessionLastUsedAt: { type: String },
+    xSessionLastError: { type: String },
     metadata: { type: Schema.Types.Mixed, default: {} },
     createdAt: { type: String, default: () => new Date().toISOString() },
     updatedAt: { type: String, default: () => new Date().toISOString() },
@@ -98,6 +116,8 @@ const SocialAccountSchema = new Schema<ISocialAccount>(
         // Tokens never leave the server (guideline §21).
         delete ret.encryptedAccessToken;
         delete ret.encryptedRefreshToken;
+        delete ret.xSessionAuthTokenEncrypted;
+        delete ret.xSessionCt0Encrypted;
         return ret;
       },
     },

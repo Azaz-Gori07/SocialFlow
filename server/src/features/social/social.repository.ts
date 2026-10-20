@@ -43,6 +43,25 @@ export class SocialRepository {
     ).exec();
   }
 
+  /** Removes the unofficial X session entirely (disconnect). */
+  async clearXSession(id: string): Promise<ISocialAccount | null> {
+    return SocialAccountModel.findByIdAndUpdate(
+      id,
+      {
+        $unset: {
+          xSessionAuthTokenEncrypted: 1,
+          xSessionCt0Encrypted: 1,
+          xSessionMethod: 1,
+          xSessionConnectedAt: 1,
+          xSessionLastUsedAt: 1,
+          xSessionLastError: 1,
+        },
+        $set: { updatedAt: new Date().toISOString() },
+      },
+      { new: true }
+    ).exec();
+  }
+
   /** Upsert by the natural key (userId + platform + providerAccountId). */
   async upsertAccount(
     match: { userId: string; platform: string; providerAccountId: string },

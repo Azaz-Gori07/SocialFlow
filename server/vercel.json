@@ -4,9 +4,20 @@
     {
       "src": "api/index.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/x_compat.py",
+      "use": "@vercel/python",
+      "config": {
+        "maxDuration": 60
+      }
     }
   ],
   "routes": [
+    {
+      "src": "/x-compat",
+      "dest": "api/x_compat.py"
+    },
     {
       "src": "/(.*)",
       "dest": "api/index.ts"

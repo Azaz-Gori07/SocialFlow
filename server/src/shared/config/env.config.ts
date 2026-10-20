@@ -57,6 +57,11 @@ const envSchema = z.object({
   // Social providers
   X_CLIENT_ID: z.string().optional(),
   X_CLIENT_SECRET: z.string().optional(),
+  // Unofficial X session bridge (twikit python function at /x-compat).
+  // X_BRIDGE_URL defaults to the same deployment; secret must match the
+  // Python function's X_BRIDGE_SECRET env.
+  X_BRIDGE_URL: z.string().url().optional(),
+  X_BRIDGE_SECRET: z.string().optional(),
   LINKEDIN_CLIENT_ID: z.string().optional(),
   LINKEDIN_CLIENT_SECRET: z.string().optional(),
   FACEBOOK_CLIENT_ID: z.string().optional(),

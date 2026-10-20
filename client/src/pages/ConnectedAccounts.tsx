@@ -9,9 +9,11 @@ import {
   Info,
   Star,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  KeyRound
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
+import { XSessionPanel } from '../components/XSessionPanel';
 
 const OAUTH_PLATFORMS = ['twitter', 'linkedin', 'youtube', 'facebook', 'instagram', 'threads'];
 
@@ -27,6 +29,8 @@ export const ConnectedAccounts: React.FC = () => {
   // Native confirm() gets blocked by browsers ("Never allow"), which made
   // disconnect silently no-op. Two-step in-app confirmation instead.
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  // Which X account has the unofficial-session panel expanded.
+  const [sessionOpenId, setSessionOpenId] = useState<string | null>(null);
 
   /**
    * Toggles publishDefault — convenience preselection for NEW content only.
@@ -45,9 +49,9 @@ export const ConnectedAccounts: React.FC = () => {
     }
   };
 
-  const loadAccounts = async () => {
+  const loadAccounts = async (force = false) => {
     try {
-      const list = await api.social.getAccounts();
+      const list = await api.social.getAccounts(force ? { force: true } : undefined);
       setAccounts(list || []);
     } catch (err) {
       console.error(err);
@@ -425,8 +429,8 @@ export const ConnectedAccounts: React.FC = () => {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
               {accounts.map(act => (
+                <React.Fragment key={act._id || act.id}>
                 <div 
-                  key={act._id || act.id}
                   style={{
                     padding: '12px 16px',
                     background: '#ffffff',
@@ -457,6 +461,34 @@ export const ConnectedAccounts: React.FC = () => {
                   </div>
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+                    {act.platform === 'twitter' && (
+                      <button
+                        type="button"
+                        onClick={() => setSessionOpenId(cur => (cur === (act._id || act.id) ? null : (act._id || act.id)))}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          background: act.xSession?.connected ? '#ecfdf5' : 'none',
+                          border: act.xSession?.connected ? '1px solid #a7f3d0' : 'none',
+                          color: act.xSession?.connected ? '#047857' : '#6b7280',
+                          cursor: 'pointer',
+                          padding: '6px 8px',
+                          borderRadius: '6px',
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap'
+                        }}
+                        title={
+                          act.xSession?.connected
+                            ? 'Unofficial X session connected (fallback for 402 credits-depleted)'
+                            : 'Connect an unofficial X session (no API credits)'
+                        }
+                      >
+                        <KeyRound size={13} />
+                        {act.xSession?.connected ? 'Session ✓' : 'Session'}
+                      </button>
+                    )}
                     {isExpiredAcc(act) && (
                       <button
                         type="button"
@@ -505,6 +537,17 @@ export const ConnectedAccounts: React.FC = () => {
                     </button>
                   </div>
                 </div>
+                {sessionOpenId === (act._id || act.id) && act.platform === 'twitter' && (
+                  <XSessionPanel
+                    account={act}
+                    onChanged={async () => {
+                      api.social.invalidateAccounts();
+                      await loadAccounts(true);
+                    }}
+                    onMessage={setStatusMessage}
+                  />
+                )}
+                </React.Fragment>
               ))}
             </div>
           )}

@@ -6,6 +6,7 @@ import { PostRepository } from '../../features/post/post.repository';
 import { OAuthConnectionRepository } from '../../features/social/oauthConnection.repository';
 import { OAuthTransactionRepository } from '../../features/social/oauthTransaction.repository';
 import { ProviderFactory } from './providers/provider.factory';
+import { XSessionService } from '../../features/social/xSession.service';
 import { ProviderError } from './errors/providerError';
 import { ProviderCapabilities, MediaItem } from './interfaces/socialProvider.interface';
 import { logger } from '../../shared/utils/logger';
@@ -33,6 +34,7 @@ export class DeliveryEngine {
   private postRepository = new PostRepository();
   private socialService: SocialService;
   private complianceService = new ComplianceService();
+  private xSessionService = new XSessionService();
 
   constructor(private socialRepository: SocialRepository) {
     this.socialService = new SocialService(
@@ -67,6 +69,19 @@ export class DeliveryEngine {
       return error.statusCode === 401 || error.code === 'PROVIDER_AUTH_EXPIRED';
     }
     return false;
+  }
+
+  /**
+   * X's pay-per-usage API answers 402 when the developer account is out of
+   * credits. That is the only condition that activates the unofficial session
+   * fallback — every other failure keeps its normal retry/dead-letter path.
+   */
+  private isCreditsDepleted(error: unknown): boolean {
+    if (!(error instanceof ProviderError)) return false;
+    if (error.status === 402) return true;
+    return /credits?[\s_-]*depleted|payment required|usage cap exceeded|usagecapped/i.test(
+      `${error.message} ${error.providerCode || ''}`
+    );
   }
 
   /**
@@ -171,6 +186,18 @@ export class DeliveryEngine {
       );
       complianceRecordId = compliance.recordId;
 
+      // The unofficial session is a *last resort* for one specific condition:
+      // the official X API refuses the post because the account is out of
+      // credits. Everything else keeps the standard provider behavior.
+      const sessionFallbackAvailable =
+        delivery.platform === 'twitter' && this.xSessionService.hasSession(account);
+      const publishViaSession = async () => {
+        logger.info(
+          `[delivery] X API credits depleted — publishing through the connected X session (${account.username})`
+        );
+        return this.xSessionService.post(account, post.content);
+      };
+
       let result;
       try {
         result = await provider.createPost(buildCtx(bundle.accessToken), {
@@ -181,16 +208,38 @@ export class DeliveryEngine {
         // Token lifecycle: an expired/revoked access token must not kill the
         // delivery. Refresh once and retry exactly once; a second failure is a
         // genuine auth problem and is reported (never looped).
-        if (!this.isAuthFailure(firstError)) throw firstError;
+        if (this.isAuthFailure(firstError)) {
+          logger.info(`[delivery] ${delivery.platform} rejected the token, refreshing once before retry`);
+          const refreshed = await this.refreshAccountToken(delivery, post);
+          if (!refreshed) throw firstError;
 
-        logger.info(`[delivery] ${delivery.platform} rejected the token, refreshing once before retry`);
-        const refreshed = await this.refreshAccountToken(delivery, post);
-        if (!refreshed) throw firstError;
-
-        result = await provider.createPost(buildCtx(refreshed), {
-          content: post.content,
-          media: mediaItems
-        });
+          try {
+            result = await provider.createPost(buildCtx(refreshed), {
+              content: post.content,
+              media: mediaItems
+            });
+          } catch (retryError) {
+            if (sessionFallbackAvailable && this.isCreditsDepleted(retryError) && mediaItems.length === 0) {
+              result = await publishViaSession();
+            } else {
+              throw retryError;
+            }
+          }
+        } else if (sessionFallbackAvailable && this.isCreditsDepleted(firstError)) {
+          if (mediaItems.length > 0) {
+            throw new ProviderError(
+              'X API credits are depleted and the unofficial session fallback supports text-only posts. ' +
+                'Remove media from this post or add credits to the X developer account.',
+              'twitter',
+              402,
+              'X_CREDITS_DEPLETED_MEDIA',
+              false
+            );
+          }
+          result = await publishViaSession();
+        } else {
+          throw firstError;
+        }
       }
 
       const url =
