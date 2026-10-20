@@ -34,6 +34,34 @@ SECRET = _raw_secret
 # Keep imports lazy-friendly but still share one module-level client per warm
 # instance: twikit caches X's client-transaction parameters per process.
 from twikit import Client  # noqa: E402
+from xclid import XClIdGen  # noqa: E402
+
+
+class _TransactionAdapter:
+    """
+    twikit 2.3.3 generates the transaction id from the retired responsive-web
+    page and raises "Couldn't get KEY_BYTE indices". This adapter feeds it the
+    signing state computed from X's current x-web bundles instead.
+    """
+
+    # Truthy on purpose: twikit skips its own (broken) init when this is set.
+    home_page_response = True
+
+    def __init__(self, gen: XClIdGen):
+        self._gen = gen
+
+    def generate_transaction_id(self, method: str, path: str, **_kwargs) -> str:
+        return self._gen.calc(method, path)
+
+
+async def _session_client(auth_token: str, ct0: str) -> Client:
+    """Build a twikit client authenticated by browser cookies + current signer."""
+    cookies = {"auth_token": auth_token, "ct0": ct0}
+    client = Client("en-US")
+    client.set_cookies(cookies, clear_cookies=True)
+    gen = await XClIdGen.create(cookies=cookies)
+    client.client_transaction = _TransactionAdapter(gen)  # type: ignore[assignment]
+    return client
 
 
 def _reply(handler, status: int, payload: dict) -> None:  # noqa: ANN001
@@ -55,23 +83,44 @@ async def _settings(client: Client) -> dict:
     return response or {}
 
 
-async def _do_verify(body: dict) -> dict:
-    client = _client()
-    client.set_cookies(
-        {"auth_token": body["auth_token"], "ct0": body["ct0"]}, clear_cookies=True
-    )
+async def _identity(client: Client) -> tuple[str, str]:
+    """Returns (user_id, screen_name) for an authenticated client.
+
+    /1.1/account/settings.json reliably exposes screen_name but not always the
+    numeric id, so fall back to one profile lookup only when needed.
+    """
     settings = await _settings(client)
-    if not settings.get("screen_name"):
-        raise RuntimeError("X did not accept the supplied cookies")
-    return {
-        "ok": True,
-        "user_id": str(settings.get("id_str") or settings.get("id") or ""),
-        "username": settings.get("screen_name"),
-    }
+    screen_name = settings.get("screen_name")
+    if not screen_name:
+        raise RuntimeError("X did not return an authenticated account")
+    user_id = str(settings.get("id_str") or settings.get("id") or "")
+    if not user_id:
+        try:
+            user_id = await client.user_id()
+        except Exception:
+            user_id = ""
+    return user_id, screen_name
+
+
+async def _do_verify(body: dict) -> dict:
+    client = await _session_client(body["auth_token"], body["ct0"])
+    user_id, screen_name = await _identity(client)
+    return {"ok": True, "user_id": user_id, "username": screen_name}
 
 
 async def _do_login(body: dict) -> dict:
     client = _client()
+    # Password login starts without a session. Sign it with the anonymous build
+    # when X still exposes the signing bundle there; otherwise fail early with a
+    # clear pointer to the cookie flow (never hit X with an unsigned login).
+    try:
+        gen = await XClIdGen.create()
+        client.client_transaction = _TransactionAdapter(gen)  # type: ignore[assignment]
+    except Exception as exc:
+        raise RuntimeError(
+            f"X's sign-in flow is not signable from a logged-out page right now ({exc}). "
+            "Use the 'Paste cookies' option instead."
+        ) from exc
     await client.login(
         auth_info_1=body["username"],
         auth_info_2=body.get("email") or None,
@@ -83,13 +132,13 @@ async def _do_login(body: dict) -> dict:
     ct0 = cookies.get("ct0")
     if not auth_token or not ct0:
         raise RuntimeError("login succeeded but the session cookies are incomplete")
-    settings = await _settings(client)
+    user_id, screen_name = await _identity(client)
     return {
         "ok": True,
         "auth_token": auth_token,
         "ct0": ct0,
-        "user_id": str(settings.get("id_str") or settings.get("id") or ""),
-        "username": settings.get("screen_name"),
+        "user_id": user_id,
+        "username": screen_name,
     }
 
 
@@ -99,10 +148,7 @@ async def _do_post(body: dict) -> dict:
         raise RuntimeError("text is required")
     if len(text) > 280:
         raise RuntimeError("text exceeds 280 characters")
-    client = _client()
-    client.set_cookies(
-        {"auth_token": body["auth_token"], "ct0": body["ct0"]}, clear_cookies=True
-    )
+    client = await _session_client(body["auth_token"], body["ct0"])
     tweet = await client.create_tweet(text=text)
     tweet_id = str(getattr(tweet, "id", "") or "")
     if not tweet_id:

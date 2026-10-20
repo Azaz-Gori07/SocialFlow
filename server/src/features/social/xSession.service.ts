@@ -126,7 +126,16 @@ export class XSessionService {
     account: ISocialAccount,
     identity: { user_id?: string; username?: string }
   ): void {
-    if (identity.user_id && account.providerAccountId && identity.user_id !== account.providerAccountId) {
+    const sessionName = (identity.username || '').toLowerCase();
+    const accountName = (account.username || '').toLowerCase();
+    const nameMismatch = Boolean(sessionName && accountName && sessionName !== accountName);
+    const idMismatch = Boolean(
+      identity.user_id && account.providerAccountId && identity.user_id !== account.providerAccountId
+    );
+
+    // The numeric id is authoritative when present; the username only matters
+    // as a fallback when X omits the id.
+    if (idMismatch || (!identity.user_id && nameMismatch)) {
       throw AppError.badRequest(
         `This X session belongs to @${identity.username || identity.user_id}, but the connected account is @${account.username}. ` +
           `Open @${identity.username || identity.user_id} in SocialFlow or paste that account's session instead.`

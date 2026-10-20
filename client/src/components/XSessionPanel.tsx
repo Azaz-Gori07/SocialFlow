@@ -341,7 +341,8 @@ export const XSessionPanel: React.FC<{
               <p style={{ fontSize: '0.7rem', color: '#9a3412', margin: 0, lineHeight: 1.45 }}>
                 <AlertTriangle size={11} style={{ verticalAlign: '-1px', marginRight: '3px' }} />
                 The password is forwarded once to the bridge for X's login and is never stored or
-                logged. If X shows a captcha or asks for more verification, use cookies instead.
+                logged. X's current web build often blocks server-side password sign-in, so if this
+                fails, use the cookie option — it is the reliable path.
               </p>
             </div>
           )}
