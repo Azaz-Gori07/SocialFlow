@@ -66,12 +66,26 @@ export const Settings: React.FC = () => {
       setLoading(true);
       setLoadError(null);
       try {
-        const [settingsResult, keyResult] = await Promise.all([
-          api.workspaces.getSettings(workspace.id),
-          api.workspaces.getApiKey(workspace.id).catch(() => null)
+        // Cold serverless starts can exceed the 45s request budget on the very
+        // first call. Retry the settings once (the second call hits a warm
+        // function) and never let a failed key fetch hide the real settings.
+        const [settingsOutcome, keyOutcome] = await Promise.allSettled([
+          (async () => {
+            try {
+              return await api.workspaces.getSettings(workspace.id);
+            } catch {
+              return await api.workspaces.getSettings(workspace.id);
+            }
+          })(),
+          api.workspaces.getApiKey(workspace.id)
         ]);
         if (cancelled) return;
+        if (settingsOutcome.status === 'rejected') {
+          throw settingsOutcome.reason;
+        }
 
+        const settingsResult = settingsOutcome.value;
+        const keyResult = keyOutcome.status === 'fulfilled' ? keyOutcome.value : null;
         const settings = settingsResult?.settings || {};
         setWorkspaceName(settingsResult?.name || workspace.name || '');
         setTimezone(settings.timezone || DEFAULT_SETTINGS.timezone);

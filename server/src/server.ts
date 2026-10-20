@@ -76,7 +76,8 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  // x-api-key is documented for headless clients; allow it in browser CORS too.
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key']
 }));
 
 // Security Middleware

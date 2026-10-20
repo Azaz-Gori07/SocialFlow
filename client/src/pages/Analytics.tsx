@@ -72,10 +72,6 @@ export const Analytics: React.FC = () => {
     loadData();
   }, []);
 
-  if (loading) {
-    return <GenericSkeleton minHeight={360} />;
-  }
-
   const rangeDays = useMemo(() => {
     switch (timeRange) {
       case 'Last 7 days': return 7;
@@ -233,6 +229,13 @@ export const Analytics: React.FC = () => {
   const getPlatformAccountData = (platformId: string) => {
     return platformsData.find((p: any) => p.platform === platformId);
   };
+
+  // Keep every hook above this return. Returning the skeleton while `loading`
+  // used to skip the later useMemo/useEffect calls, so the first data render
+  // threw React #310 ("rendered more hooks than during the previous render").
+  if (loading) {
+    return <GenericSkeleton minHeight={360} />;
+  }
 
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
