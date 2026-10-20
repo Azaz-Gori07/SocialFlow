@@ -45,6 +45,9 @@ export const Settings: React.FC = () => {
   const [apiKeyBusy, setApiKeyBusy] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookLastDeliveryAt, setWebhookLastDeliveryAt] = useState('');
+  const [webhookLastStatus, setWebhookLastStatus] = useState<number | null>(null);
+  const [webhookLastError, setWebhookLastError] = useState('');
 
   // Save / load feedback state
   const [loading, setLoading] = useState(true);
@@ -77,6 +80,9 @@ export const Settings: React.FC = () => {
         setAutoHashtags(settings.autoHashtags ?? true);
         setCrossPostWarning(settings.crossPostWarning ?? true);
         setWebhookUrl(settings.webhookUrl || '');
+        setWebhookLastDeliveryAt(settings.webhookLastDeliveryAt || '');
+        setWebhookLastStatus(settings.webhookLastStatus ?? null);
+        setWebhookLastError(settings.webhookLastError || '');
 
         if (keyResult) {
           setApiKeyExists(!!keyResult.exists);
@@ -114,7 +120,7 @@ export const Settings: React.FC = () => {
     setLoadError(null);
     setSaved(false);
     try {
-      await api.workspaces.update(workspace.id, {
+      const updated = await api.workspaces.update(workspace.id, {
         name: workspaceName.trim(),
         settings: {
           timezone,
@@ -125,6 +131,10 @@ export const Settings: React.FC = () => {
           webhookUrl: webhookUrl.trim()
         }
       });
+      const nextSettings = updated?.settings || {};
+      setWebhookLastDeliveryAt(nextSettings.webhookLastDeliveryAt || '');
+      setWebhookLastStatus(nextSettings.webhookLastStatus ?? null);
+      setWebhookLastError(nextSettings.webhookLastError || '');
       setSaved(true);
       setActionMessage(null);
       setTimeout(() => setSaved(false), 3000);
@@ -763,6 +773,13 @@ export const Settings: React.FC = () => {
                 <div style={{ fontSize: '0.72rem', color: '#6b7280', marginTop: '6px', lineHeight: 1.4 }}>
                   SocialFlow POSTs <code>post.published</code> and <code>post.failed</code> events here, signed with <code>X-SocialFlow-Signature</code>.
                 </div>
+                {webhookLastDeliveryAt && (
+                  <div style={{ fontSize: '0.72rem', color: webhookLastStatus && webhookLastStatus >= 200 && webhookLastStatus < 300 ? '#059669' : '#b91c1c', marginTop: '4px' }}>
+                    Last delivery: {webhookLastStatus && webhookLastStatus >= 200 && webhookLastStatus < 300 ? 'Delivered' : 'Failed'}
+                    {webhookLastStatus ? ` (HTTP ${webhookLastStatus})` : ''} · {new Date(webhookLastDeliveryAt).toLocaleString()}
+                    {webhookLastError ? ` — ${webhookLastError}` : ''}
+                  </div>
+                )}
               </div>
             </div>
           </div>

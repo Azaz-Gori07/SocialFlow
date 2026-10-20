@@ -263,7 +263,9 @@ export class DraftPublisher {
       await this.draftRepository.archive(draftId);
       await this.recordHistory(draftId, draft.userId, draft.platform, 'success', errors, first?.externalPostId);
       await this.notify(draft.userId, NotificationType.DRAFT_PUBLISHED, `Published to ${draft.platform}`, `Your draft has been successfully published to ${draft.platform}.`);
-      void this.webhooks.dispatch(post.workspaceId, 'post.published', {
+      // Await: on serverless the function may freeze right after the response,
+      // which silently dropped fire-and-forget webhooks.
+      await this.webhooks.dispatch(post.workspaceId, 'post.published', {
         draftId,
         platform: draft.platform,
         externalPostId: first?.externalPostId || null,
@@ -272,14 +274,14 @@ export class DraftPublisher {
       logger.info(`[DraftPublisher] Draft ${draftId} published to ${draft.platform}. Auto-archived.`);
     } else if (allFailed) {
       await this.failDraft(draft, errors.join('; ') || 'Unknown publishing error', 'PUBLISH_FAILED', true);
-      void this.webhooks.dispatch(post.workspaceId, 'post.failed', {
+      await this.webhooks.dispatch(post.workspaceId, 'post.failed', {
         draftId,
         platform: draft.platform,
         error: errors.join('; ') || 'Unknown publishing error'
       });
     } else {
       await this.failDraft(draft, 'No delivery reached the platform', 'NO_DELIVERY', false);
-      void this.webhooks.dispatch(post.workspaceId, 'post.failed', {
+      await this.webhooks.dispatch(post.workspaceId, 'post.failed', {
         draftId,
         platform: draft.platform,
         error: 'No delivery reached the platform'

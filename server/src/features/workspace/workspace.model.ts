@@ -7,6 +7,10 @@ export interface IWorkspaceSettings {
   autoHashtags: boolean;
   crossPostWarning: boolean;
   webhookUrl?: string;
+  /** Server-managed delivery telemetry, never accepted from clients. */
+  webhookLastDeliveryAt?: string;
+  webhookLastStatus?: number;
+  webhookLastError?: string;
 }
 
 export interface IWorkspace extends Document {
@@ -49,7 +53,10 @@ const WorkspaceSettingsSchema = new Schema<IWorkspaceSettings>(
     autoShortenUrls: { type: Boolean, default: true },
     autoHashtags: { type: Boolean, default: true },
     crossPostWarning: { type: Boolean, default: true },
-    webhookUrl: { type: String, default: '' }
+    webhookUrl: { type: String, default: '' },
+    webhookLastDeliveryAt: { type: String },
+    webhookLastStatus: { type: Number },
+    webhookLastError: { type: String }
   },
   { _id: false }
 );

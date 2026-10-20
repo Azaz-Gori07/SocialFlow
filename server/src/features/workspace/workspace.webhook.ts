@@ -47,11 +47,31 @@ export class WorkspaceWebhookService {
         if (!response.ok) {
           logger.warn(`[Webhook] ${event} delivery to workspace ${workspaceId} returned ${response.status}`);
         }
+        await WorkspaceModel.updateOne(
+          { _id: workspaceId },
+          {
+            $set: {
+              'settings.webhookLastDeliveryAt': new Date().toISOString(),
+              'settings.webhookLastStatus': response.status,
+              'settings.webhookLastError': response.ok ? null : `HTTP ${response.status}`
+            }
+          }
+        ).catch(() => undefined);
       } finally {
         clearTimeout(timer);
       }
     } catch (error: any) {
       logger.warn(`[Webhook] ${event} delivery failed for workspace ${workspaceId}: ${error?.message || error}`);
+      await WorkspaceModel.updateOne(
+        { _id: workspaceId },
+        {
+          $set: {
+            'settings.webhookLastDeliveryAt': new Date().toISOString(),
+            'settings.webhookLastStatus': 0,
+            'settings.webhookLastError': String(error?.message || error).slice(0, 500)
+          }
+        }
+      ).catch(() => undefined);
     }
   }
 }
