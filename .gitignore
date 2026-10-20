@@ -80,3 +80,7 @@ problem.md
 
 # Render socket service build artifacts
 socket-server/node_modules/
+
+# Python bytecode (Vercel Python function)
+__pycache__/
+*.pyc
