@@ -82,7 +82,6 @@ def _script_url(k: str, v: str) -> str:
 ASSET_URL_RE = re.compile(r"https://[\w.-]+/x-web/[\w./-]+\.js")
 RESPONSIVE_WEB_URL_RE = re.compile(r"https://[\w.-]+/responsive-web/client-web/[\w./-]+\.js")
 LEGACY_MAIN_RE = re.compile(r"/client-web/main\.([^.\"']+)\.js")
-LOGGED_OUT_ENTRY_RE = re.compile(r"(?:^|/)entry-client-logged-out(?:[-.][^/?#]+)?\.js(?:[?#].*)?$")
 CHALLENGE_SCRIPT_RE = re.compile(r"/cdn-cgi/challenge-platform/(?:scripts|h)/")
 
 
@@ -265,9 +264,19 @@ async def _fetch_text(clt: httpx.AsyncClient, url: str) -> str:
     return rep.text
 
 
+# Module imports inside the x-web bundles (e.g. "./assets/startup-dynamic-*.js").
+ASSET_REF_RE = re.compile(r"""["'](\.{0,2}/?(?:assets/)?[\w.-]+\.js)["']""")
+
+
 async def _find_indices_url(scripts: list[str], clt: httpx.AsyncClient) -> str:
-    """The indices file is dynamically imported from a bundle chunk; scan chunks
-    concurrently and resolve the first reference, then stop."""
+    """The indices file is dynamically imported by a bundle chunk.
+
+    The page HTML only links the entry chunk; the signer lives one level deeper
+    (entry -> assets/startup-dynamic-*.js -> ./sign.o-*.js). Crawl the module
+    graph breadth-first, scanning each level concurrently and stopping at the
+    first reference. This works for both the authenticated and the logged-out
+    x-web build.
+    """
     sem = asyncio.Semaphore(16)
 
     async def fetch(url: str):
@@ -277,19 +286,33 @@ async def _find_indices_url(scripts: list[str], clt: httpx.AsyncClient) -> str:
             except Exception:
                 return url, None
 
-    tasks = [asyncio.create_task(fetch(u)) for u in scripts]
-    try:
-        for fut in asyncio.as_completed(tasks):
-            url, body = await fut
-            if body is None:
-                continue
-            m = INDICES_FILE_RE.search(body)
-            if m:
-                return urljoin(url, m.group(0))
-    finally:
-        for task in tasks:
-            task.cancel()
-        await asyncio.gather(*tasks, return_exceptions=True)
+    seen: set[str] = set()
+    queue = list(dict.fromkeys(scripts))
+
+    for _depth in range(3):
+        batch = [u for u in queue if u not in seen]
+        if not batch:
+            break
+        seen.update(batch)
+
+        tasks = [asyncio.create_task(fetch(u)) for u in batch]
+        next_queue: list[str] = []
+        try:
+            for fut in asyncio.as_completed(tasks):
+                url, body = await fut
+                if not body:
+                    continue
+                m = INDICES_FILE_RE.search(body)
+                if m:
+                    return urljoin(url, m.group(0))
+                for ref in ASSET_REF_RE.findall(body):
+                    next_queue.append(urljoin(url, ref))
+        finally:
+            for task in tasks:
+                task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+
+        queue = next_queue
 
     raise XClIdError("X signing script not found in web bundles")
 
@@ -298,8 +321,6 @@ async def parse_anim_idx(text: str, clt: httpx.AsyncClient) -> list[int]:
     scripts = get_scripts_list(text)
     x_web_scripts = [url for url in scripts if "/x-web/" in url]
     if x_web_scripts:
-        if any(LOGGED_OUT_ENTRY_RE.search(url) for url in x_web_scripts):
-            raise XClIdError("Logged-out X web app (cookies not accepted)")
         scripts = x_web_scripts
 
     direct = [x for x in scripts if INDICES_FILE_RE.search(x)]
