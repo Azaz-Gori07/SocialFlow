@@ -49,3 +49,18 @@ function tokensOverlap(a: string, b: string): number {
   for (const w of ta) if (tb.has(w)) hits++;
   return hits;
 }
+
+/**
+ * Drafts that consume the schedule cap: created inside the window and not
+ * failed. Failed drafts produced no output, so counting them would let a
+ * burst of failed generations starve the schedule for the rest of the
+ * window. Pure — no DB.
+ */
+export function draftsTowardScheduleCap(
+  drafts: { createdAt: Date | string; status: string }[],
+  windowStart: Date
+): number {
+  return drafts.filter(
+    (d) => d.status !== 'failed' && new Date(d.createdAt) >= windowStart
+  ).length;
+}

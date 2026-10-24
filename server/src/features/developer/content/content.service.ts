@@ -26,7 +26,7 @@ import {
 } from './prompts';
 import { WritingTone, StyleInput, analyzeStyle, StyleProfile } from './style-analyzer';
 import { FactCheckResult, PostValidation, factCheckPost, validatePost } from './fact-checker';
-import { shouldSkipOpportunity } from './smart-skip';
+import { shouldSkipOpportunity, draftsTowardScheduleCap } from './smart-skip';
 import { projectHistoryService } from '../repositories/projectHistory.service';
 import { errorTrackerService } from './errorTracker.service';
 import { DraftModel } from '../../draft/draft.model';
@@ -579,7 +579,7 @@ export class ContentService {
 
   private async countRecentDeveloperDrafts(userId: string, windowStart: Date): Promise<number> {
     const drafts = await this.listDeveloperDrafts(userId);
-    return drafts.filter((d) => new Date(d.createdAt) >= windowStart).length;
+    return draftsTowardScheduleCap(drafts, windowStart);
   }
 
   private effectiveMax(settings: AutomationSettings): number {
