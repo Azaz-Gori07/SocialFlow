@@ -141,7 +141,7 @@ export async function handleGitHubWebhook(
   }
 
   for (const repo of repos) {
-    syncAndProcess(repo.userId, repo._id.toString(), event, 'webhook').catch((error: unknown) => {
+    const p = syncAndProcess(repo.userId, repo._id.toString(), event, 'webhook').catch((error: unknown) => {
       // The sync service already recorded the failure in the sync log; log the
       // dispatch error and let the delivery succeed.
       logger.error('[developer] webhook sync failed', {
@@ -150,6 +150,8 @@ export async function handleGitHubWebhook(
         error: error instanceof Error ? error.message : String(error)
       });
     });
+    const waitUntil = (globalThis as any).waitUntil;
+    if (typeof waitUntil === 'function') waitUntil(p);
   }
 
   return { accepted: true, deliveryId, dispatched: repos.length };

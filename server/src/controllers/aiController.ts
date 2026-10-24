@@ -4,6 +4,38 @@ import { AuthenticatedRequest } from '../middleware/auth';
 import { SocialPlatform } from '../types';
 import { AIService } from '../services/ai/ai.service';
 import { AnalyticsService } from '../features/analytics/analytics.service';
+import { AppError } from '../shared/errors/appError';
+
+const BLOCKED_HOSTS = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '169.254.169.254',
+  'metadata.google.internal',
+]);
+
+function assertSafeUrl(rawUrl: string): URL {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw AppError.badRequest('A valid URL is required');
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw AppError.badRequest('Only http(s) URLs are supported');
+  }
+  const host = parsed.hostname.toLowerCase();
+  if (
+    BLOCKED_HOSTS.has(host) ||
+    host.endsWith('.internal') ||
+    host.endsWith('.local') ||
+    host.endsWith('.localhost')
+  ) {
+    throw AppError.badRequest('Refusing to fetch an internal or restricted address');
+  }
+  return parsed;
+}
 
 const GENERATION_PROMPT = (prompt: string) =>
   `You are a social media copywriter. Write a short post for each platform for this announcement: "${prompt}".
@@ -200,7 +232,7 @@ Return ONLY valid JSON with one key per platform:
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
       const { url } = req.body;
-      if (!url || !/^https?:\/\//.test(String(url))) {
+      if (!url || typeof url !== 'string') {
         return res.status(400).json({ message: 'A valid blog URL is required' });
       }
 
@@ -213,11 +245,15 @@ Return ONLY valid JSON with one key per platform:
       // aborted at 120s) and a multi-megabyte page could exhaust the function.
       let articleRes: Awaited<ReturnType<typeof fetch>>;
       try {
-        articleRes = await fetch(String(url), {
+        const safeUrl = assertSafeUrl(url);
+        articleRes = await fetch(safeUrl.toString(), {
           headers: { 'User-Agent': 'Mozilla/5.0 (compatible; SocialFlowBot/1.0)' },
           signal: AbortSignal.timeout(10_000)
         });
-      } catch {
+      } catch (fetchErr: any) {
+        if (fetchErr instanceof AppError) {
+          return res.status(fetchErr.statusCode).json({ message: fetchErr.message });
+        }
         return res.status(504).json({ message: 'The blog could not be fetched in time' });
       }
       if (!articleRes.ok) {

@@ -115,5 +115,36 @@ router.get(
   draftController.history as any
 );
 
+// POST /api/drafts/bulk-approve - Bulk approve compliance
+router.post(
+  '/bulk-approve',
+  authenticate as any,
+  draftController.bulkApproveCompliance as any
+);
+
+// POST /api/drafts/:id/approve-compliance - Manually approve compliance
+router.post(
+  '/:id/approve-compliance',
+  authenticate as any,
+  validate({ params: draftIdSchema }),
+  draftController.approveCompliance as any
+);
+
+// POST /api/drafts/:id/claim - Record copyright claim
+router.post(
+  '/:id/claim',
+  authenticate as any,
+  validate({ params: draftIdSchema }),
+  draftController.recordClaim as any
+);
+
+// POST /api/drafts/:id/schedule - Schedule draft
+router.post(
+  '/:id/schedule',
+  authenticate as any,
+  validate({ params: draftIdSchema }),
+  draftController.schedule as any
+);
+
 export default router;
 export { draftController, draftService, draftRepository };

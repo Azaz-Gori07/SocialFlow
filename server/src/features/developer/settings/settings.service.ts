@@ -18,6 +18,10 @@ export interface AutomationSettings {
   maxPostsPerWeek: string | null;
   defaultTone: string;
   timezone: string;
+  dailyWindowEndHour: number;
+  dailyWindowEndMinute: number;
+  dailyPublishHour: number;
+  dailyPublishMinute: number;
 }
 
 export const SETTINGS_DEFAULTS: AutomationSettings = {
@@ -34,7 +38,11 @@ export const SETTINGS_DEFAULTS: AutomationSettings = {
   schedMaxPosts: 3,
   maxPostsPerWeek: null,
   defaultTone: 'technical',
-  timezone: 'UTC'
+  timezone: 'UTC',
+  dailyWindowEndHour: 17,
+  dailyWindowEndMinute: 30,
+  dailyPublishHour: 18,
+  dailyPublishMinute: 0
 };
 
 const AI_LENGTHS = ['short', 'medium', 'long'];
@@ -110,6 +118,38 @@ export class SettingsService {
     if (typeof patch.defaultTone === 'string') allowed.defaultTone = patch.defaultTone;
     if (typeof patch.timezone === 'string') allowed.timezone = patch.timezone;
 
+    if (patch.dailyWindowEndHour !== undefined && Number.isInteger(patch.dailyWindowEndHour) && patch.dailyWindowEndHour >= 0 && patch.dailyWindowEndHour <= 23) {
+      allowed.dailyWindowEndHour = patch.dailyWindowEndHour;
+    }
+    if (patch.dailyWindowEndMinute !== undefined && Number.isInteger(patch.dailyWindowEndMinute) && patch.dailyWindowEndMinute >= 0 && patch.dailyWindowEndMinute <= 59) {
+      allowed.dailyWindowEndMinute = patch.dailyWindowEndMinute;
+    }
+    if (patch.dailyPublishHour !== undefined && Number.isInteger(patch.dailyPublishHour) && patch.dailyPublishHour >= 0 && patch.dailyPublishHour <= 23) {
+      allowed.dailyPublishHour = patch.dailyPublishHour;
+    }
+    if (patch.dailyPublishMinute !== undefined && Number.isInteger(patch.dailyPublishMinute) && patch.dailyPublishMinute >= 0 && patch.dailyPublishMinute <= 59) {
+      allowed.dailyPublishMinute = patch.dailyPublishMinute;
+    }
+
+    if (
+      allowed.dailyWindowEndHour !== undefined ||
+      allowed.dailyWindowEndMinute !== undefined ||
+      allowed.dailyPublishHour !== undefined ||
+      allowed.dailyPublishMinute !== undefined
+    ) {
+      const effWindowEndH = allowed.dailyWindowEndHour ?? existing?.dailyWindowEndHour ?? SETTINGS_DEFAULTS.dailyWindowEndHour;
+      const effWindowEndM = allowed.dailyWindowEndMinute ?? existing?.dailyWindowEndMinute ?? SETTINGS_DEFAULTS.dailyWindowEndMinute;
+      const effPublishH = allowed.dailyPublishHour ?? existing?.dailyPublishHour ?? SETTINGS_DEFAULTS.dailyPublishHour;
+      const effPublishM = allowed.dailyPublishMinute ?? existing?.dailyPublishMinute ?? SETTINGS_DEFAULTS.dailyPublishMinute;
+
+      const windowEndMinutes = effWindowEndH * 60 + effWindowEndM;
+      const publishMinutes = effPublishH * 60 + effPublishM;
+
+      if (publishMinutes <= windowEndMinutes) {
+        throw AppError.badRequest('dailyPublishHour:dailyPublishMinute must be strictly after dailyWindowEndHour:dailyWindowEndMinute');
+      }
+    }
+
     if (existing) {
       await this.settingsRepository.update(userId, allowed);
     } else {
@@ -157,7 +197,11 @@ function rowToSettings(row: IDeveloperSettings): AutomationSettings {
     schedMaxPosts: row.schedMaxPosts,
     maxPostsPerWeek: row.maxPostsPerWeek ?? null,
     defaultTone: row.defaultTone,
-    timezone: row.timezone
+    timezone: row.timezone,
+    dailyWindowEndHour: row.dailyWindowEndHour ?? SETTINGS_DEFAULTS.dailyWindowEndHour,
+    dailyWindowEndMinute: row.dailyWindowEndMinute ?? SETTINGS_DEFAULTS.dailyWindowEndMinute,
+    dailyPublishHour: row.dailyPublishHour ?? SETTINGS_DEFAULTS.dailyPublishHour,
+    dailyPublishMinute: row.dailyPublishMinute ?? SETTINGS_DEFAULTS.dailyPublishMinute
   };
 }
 

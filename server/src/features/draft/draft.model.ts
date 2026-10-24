@@ -56,6 +56,14 @@ export interface IDraft extends Document {
   evidence?: Record<string, any>;
   /** { variant, factCheck, validation, style, opportunityTitle } */
   aiMetadata?: Record<string, any>;
+  /** Set to true when compliance review has been approved (L9). */
+  complianceApproved?: boolean;
+  complianceStatus?: 'pending' | 'clear' | 'review' | 'blocked' | 'low_risk' | 'claimed';
+  /** Populated when a claim is detected after publish. */
+  claimDetectedAt?: string;
+  claimReason?: string;
+  /** Media fingerprints used for copyright dedup. */
+  mediaHashes?: string[];
 }
 
 const MediaRefSchema = new Schema<IMediaRef>({
@@ -113,7 +121,16 @@ const DraftSchema = new Schema<IDraft>({
   developerRepositoryId: { type: String, index: true },
   developerOpportunityId: { type: String },
   evidence: { type: Schema.Types.Mixed },
-  aiMetadata: { type: Schema.Types.Mixed }
+  aiMetadata: { type: Schema.Types.Mixed },
+  complianceApproved: { type: Boolean, default: undefined },
+  complianceStatus: {
+    type: String,
+    enum: ['pending', 'clear', 'review', 'blocked', 'low_risk', 'claimed'],
+    default: undefined
+  },
+  claimDetectedAt: { type: String },
+  claimReason: { type: String },
+  mediaHashes: { type: [String], default: undefined }
 }, {
   timestamps: true,
   toJSON: {
@@ -135,6 +152,8 @@ DraftSchema.index({ userId: 1, status: 1, createdAt: -1 });
 // Phase 2: Index for scheduler queries — find ready drafts by platform
 DraftSchema.index({ platform: 1, status: 1, createdAt: 1 });
 DraftSchema.index({ status: 1, lastAttemptAt: 1 });
+DraftSchema.index({ userId: 1, complianceStatus: 1 });
+DraftSchema.index({ userId: 1, sourceType: 1, targetAccountIds: 1, createdAt: -1 });
 
 export const DraftModel = (mongoose.models.Draft as Model<IDraft>) || model<IDraft>('Draft', DraftSchema);
 export default DraftModel;

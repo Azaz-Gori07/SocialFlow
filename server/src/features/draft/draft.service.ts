@@ -1,7 +1,7 @@
 import { DraftRepository, PaginatedDraftsResult } from './draft.repository';
 import { DraftPublisher } from './draft.publisher';
 import { AppError } from '../../shared/errors/appError';
-import { IDraft } from './draft.model';
+import DraftModel, { IDraft } from './draft.model';
 import { CreateDraftInput, UpdateDraftInput, PublishDraftInput } from './draft.validation';
 import { resolveTargetAccounts } from '../social/targeting';
 import { logActivity } from '../../shared/utils/activityLog';
@@ -214,6 +214,73 @@ export class DraftService {
 
   async getPublishHistory(id: string, userId: string) {
     return this.draftPublisher.getPublishHistory(id, userId);
+  }
+
+  async approveCompliance(id: string, userId: string): Promise<IDraft> {
+    const draft = await this.draftRepository.findById(id);
+    if (!draft) throw AppError.notFound('Draft not found');
+    if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
+    const updatedDraft = await this.draftRepository.update(id, {
+      complianceApproved: true,
+      complianceStatus: 'clear'
+    } as any);
+    if (!updatedDraft) throw AppError.internal('Failed to approve compliance');
+    return updatedDraft;
+  }
+
+  async updateComplianceState(
+    id: string,
+    userId: string,
+    state: { status: string; reason?: string; claimDetectedAt?: Date }
+  ): Promise<IDraft> {
+    const draft = await this.draftRepository.findById(id);
+    if (!draft) throw AppError.notFound('Draft not found');
+    if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
+    const updateData: Record<string, unknown> = {
+      complianceStatus: state.status,
+    };
+    if (state.reason) updateData.claimReason = state.reason;
+    if (state.claimDetectedAt) updateData.claimDetectedAt = state.claimDetectedAt;
+    if (state.status === 'clear' || state.status === 'low_risk') {
+      updateData.complianceApproved = true;
+    }
+    const updatedDraft = await this.draftRepository.update(id, updateData as any);
+    if (!updatedDraft) throw AppError.internal('Failed to update compliance state');
+    return updatedDraft;
+  }
+
+  async recordClaim(id: string, userId: string, claimReason: string): Promise<IDraft> {
+    return this.updateComplianceState(id, userId, {
+      status: 'claimed',
+      reason: claimReason,
+      claimDetectedAt: new Date()
+    });
+  }
+
+  async bulkApproveCompliance(draftIds: string[], userId: string): Promise<{ approvedCount: number; draftIds: string[] }> {
+    if (!draftIds || draftIds.length === 0) {
+      return { approvedCount: 0, draftIds: [] };
+    }
+    const result = await DraftModel.updateMany(
+      { _id: { $in: draftIds }, userId },
+      { $set: { complianceApproved: true, complianceStatus: 'clear' } }
+    ).exec();
+    return {
+      approvedCount: result.modifiedCount || 0,
+      draftIds
+    };
+  }
+
+  async schedulePublish(id: string, scheduledAt: string, userId: string): Promise<IDraft> {
+    const draft = await this.draftRepository.findById(id);
+    if (!draft) throw AppError.notFound('Draft not found');
+    if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
+    const updatedDraft = await this.draftRepository.update(id, {
+      status: 'ready',
+      scheduledAt: new Date(scheduledAt),
+    } as any);
+    if (!updatedDraft) throw AppError.internal('Failed to schedule draft');
+    return updatedDraft;
   }
 }
 

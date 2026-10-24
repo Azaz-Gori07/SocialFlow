@@ -17,6 +17,10 @@ export type DeveloperSettingsPatch = Partial<{
   maxPostsPerWeek: string | null;
   defaultTone: string;
   timezone: string;
+  dailyWindowEndHour: number;
+  dailyWindowEndMinute: number;
+  dailyPublishHour: number;
+  dailyPublishMinute: number;
 }>;
 
 export class SettingsRepository {

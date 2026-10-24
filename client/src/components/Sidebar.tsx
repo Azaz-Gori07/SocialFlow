@@ -19,7 +19,8 @@ import {
   GitBranch, 
   ChevronRight, 
   User, 
-  Link2 
+  Link2,
+  ShieldAlert 
 } from 'lucide-react';
 import { onNotification, onUnreadCount } from '../services/socket';
 
@@ -107,6 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
         { id: 'analytics', label: 'Analytics', icon: BarChart3 },
         { id: 'notifications', label: 'Notifications', icon: Bell, badge: unreadCount },
         { id: 'workspaces', label: 'Workspaces', icon: Users },
+        { id: 'compliance', label: 'Compliance', icon: ShieldAlert },
         ...(developerEnabled ? [{ id: 'developer', label: 'Developer', icon: GitBranch }] : []),
       ]
     },

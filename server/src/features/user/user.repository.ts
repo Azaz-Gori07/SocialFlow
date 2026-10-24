@@ -12,6 +12,10 @@ export class UserRepository {
     return UserModel.findById(id).exec();
   }
 
+  async findByIds(ids: string[]): Promise<IUser[]> {
+    return UserModel.find({ _id: { $in: ids } }).exec();
+  }
+
   async findByOAuthProvider(provider: AuthProvider, oauthProviderId: string): Promise<IUser | null> {
     return UserModel.findOne({ provider, oauthProviderId }).exec();
   }

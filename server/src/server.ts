@@ -22,6 +22,7 @@ import draftRouter from './features/draft/draft.routes';
 import webhookRouter from './features/webhooks/metaWebhook.routes';
 import developerRouter from './features/developer/developer.routes';
 import githubWebhookRouter from './features/developer/github/github.webhook.routes';
+import complianceRouter from './features/compliance/compliance.routes';
 import { startDeveloperScheduler } from './features/developer/jobs/developer.scheduler';
 import { DashboardController } from './controllers/dashboardController';
 import { AIController } from './controllers/aiController';
@@ -81,15 +82,17 @@ app.use(cors({
 }));
 
 // Security Middleware
-// Security Middleware
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'development' ? 10000 : 100,
+  max: process.env.NODE_ENV === 'development' ? 10000 : 2000,
   // GitHub delivers webhooks from shared outbound IPs, so a burst from many
   // repositories exhausts this budget and GitHub disables the hook. The route
   // is HMAC-authenticated and answers 2xx quickly, so it is not a brute-force
   // surface. originalUrl, not path: the mount strips the /api prefix from path.
-  skip: (req) => req.originalUrl.startsWith('/api/webhooks/github'),
+  skip: (req) =>
+    req.originalUrl.startsWith('/api/webhooks/github') ||
+    req.originalUrl.startsWith('/api/webhooks/meta') ||
+    req.originalUrl.startsWith('/api/cron/sweep'),
   message: { message: 'Too many requests, please try again later.' }
 });
 app.use('/api/', apiLimiter as unknown as RequestHandler);
@@ -120,7 +123,6 @@ app.use('/api/webhooks/meta', express.raw({ type: '*/*' }), (req: any, _res: any
 });
 
 app.use(express.json());
-app.use('/api/webhooks/meta', express.json({ type: '*/*' }));
 
 // Serverless scheduler sweep: there is no setInterval on Vercel, so due
 // scheduled posts / ready drafts are processed opportunistically — fired on
@@ -203,7 +205,12 @@ app.use(async (req, res, next) => {
 
 // Explicit scheduler tick for external warmups/crons. Idempotent: posts are
 // claimed atomically so overlapping sweeps can never double-publish.
-app.post('/api/cron/sweep', async (_req, res) => {
+app.post('/api/cron/sweep', async (req, res) => {
+  // Auth guard: CRON_SECRET required in production. Prevents unauthenticated
+  // abuse of a heavy sweep endpoint (S3).
+  if (process.env.NODE_ENV === 'production' && req.headers['x-cron-secret'] !== env.CRON_SECRET) {
+    return res.status(401).json({ success: false, message: 'Unauthorized' });
+  }
   await runSweepOnce();
   res.json({ success: true, swept: true, at: new Date().toISOString() });
 });
@@ -215,10 +222,13 @@ app.use(zenuxsCallbackRouter);
 // API Swagger Documentation Interface
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
-// Simple test endpoint for rate‑limit verification (returns 200)
-app.get('/api/test/limit', (req, res) => {
-  res.status(200).json({ message: 'ok' });
-});
+// Simple test endpoint for rate‑limit verification (returns 200).
+// Non-production only: keeps test/debug surface out of prod (S4).
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/test/limit', (_req, res) => {
+    res.status(200).json({ message: 'ok' });
+  });
+}
 
 // Route Mounts
 app.use('/api/auth', authRouter);
@@ -229,6 +239,7 @@ app.use('/api/posts', postRouter);
 app.use('/api/comments', commentRouter);
 app.use('/api/notifications', notificationRouter);
 app.use('/api/drafts', draftRouter);
+app.use('/api/compliance', complianceRouter);
 
 // Webhooks (no auth middleware - verified via signature/challenge)
 app.use('/api/webhooks', webhookRouter);
@@ -265,18 +276,21 @@ app.get('/health', (req, res) => {
   });
 });
 
-// CORS debug diagnostics endpoint (no DB dependencies)
-app.get('/cors-debug', (req, res) => {
-  res.json({
-    NODE_ENV: process.env.NODE_ENV,
-    VERCEL: process.env.VERCEL,
-    CORS_ORIGIN: process.env.CORS_ORIGIN,
-    ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
-    LOCAL_ORIGINS,
-    envOrigins,
-    staticOrigins
+// CORS debug diagnostics endpoint (no DB dependencies).
+// Non-production only: it echoes CORS_ORIGIN/ALLOWED_ORIGINS config (S4).
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/cors-debug', (_req, res) => {
+    res.json({
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL: process.env.VERCEL,
+      CORS_ORIGIN: process.env.CORS_ORIGIN,
+      ALLOWED_ORIGINS: process.env.ALLOWED_ORIGINS,
+      LOCAL_ORIGINS,
+      envOrigins,
+      staticOrigins
+    });
   });
-});
+}
 
 // Centralized Error Interceptor (MUST be registered last)
 app.use(errorMiddleware as any);

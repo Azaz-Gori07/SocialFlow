@@ -154,11 +154,21 @@ export const api = {
       accountsCache = null;
       return res;
     },
-    updateAccount: async (id: string, body: { publishDefault: boolean }) => {
+    updateAccount: async (id: string, body: { publishDefault?: boolean; autoPostEnabled?: boolean }) => {
       const res = await request<any>(`/social/accounts/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
       // Keep the cache coherent without a refetch.
       if (accountsCache) {
         accountsCache.data = accountsCache.data.map(a => (a._id === id ? { ...a, ...body } : a));
+      }
+      return res;
+    },
+    toggleAutoPost: async (id: string, autoPostEnabled: boolean) => {
+      const res = await request<any>(`/social/accounts/${id}/auto-post`, {
+        method: 'POST',
+        body: JSON.stringify({ autoPostEnabled, enabled: autoPostEnabled })
+      });
+      if (accountsCache) {
+        accountsCache.data = accountsCache.data.map(a => (a._id === id ? { ...a, autoPostEnabled } : a));
       }
       return res;
     },
@@ -319,7 +329,22 @@ export const api = {
 
     getAutomationSettings: () => request<any>('/developer/settings/automation'),
     updateAutomationSettings: (body: any) =>
-      request<any>('/developer/settings/automation', { method: 'PATCH', body: JSON.stringify(body) })
+      request<any>('/developer/settings/automation', { method: 'PATCH', body: JSON.stringify(body) }),
+    getErrors: (limit = 20) => request<any>(`/developer/errors?limit=${limit}`),
+    getErrorHints: (repositoryId?: string) =>
+      request<any>(`/developer/errors/hints${repositoryId ? `?repositoryId=${encodeURIComponent(repositoryId)}` : ''}`)
+  },
+
+  compliance: {
+    listChecks: (params?: string) => request<any>(`/compliance/checks${params ? `?${params}` : ''}`),
+    resolveCheck: (id: string, body: { status: string; note?: string }) =>
+      request<any>(`/compliance/checks/${id}/resolve`, { method: 'POST', body: JSON.stringify(body) }),
+    getMetrics: () => request<any>('/compliance/metrics'),
+    getDigest: () => request<any>('/compliance/digest'),
+    listRules: () => request<any>('/compliance/rules'),
+    createRule: (body: any) => request<any>('/compliance/rules', { method: 'POST', body: JSON.stringify(body) }),
+    updateRule: (id: string, body: any) => request<any>(`/compliance/rules/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+    deleteRule: (id: string) => request<any>(`/compliance/rules/${id}`, { method: 'DELETE' })
   },
 
   drafts: {
@@ -333,6 +358,9 @@ export const api = {
     queue: (id: string, body?: any) => request<any>(`/drafts/${id}/queue`, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
     publish: (id: string, body?: any) => request<any>(`/drafts/${id}/publish`, { method: 'POST', body: body ? JSON.stringify(body) : undefined }),
     retry: (id: string) => request<any>(`/drafts/${id}/retry`, { method: 'POST' }),
-    history: (id: string) => request<any>(`/drafts/${id}/history`)
+    history: (id: string) => request<any>(`/drafts/${id}/history`),
+    approveCompliance: (id: string) => request<any>(`/drafts/${id}/approve-compliance`, { method: 'POST' }),
+    recordClaim: (id: string, reason: string) => request<any>(`/drafts/${id}/claim`, { method: 'POST', body: JSON.stringify({ reason }) }),
+    bulkApprove: (draftIds: string[]) => request<any>('/drafts/bulk-approve', { method: 'POST', body: JSON.stringify({ draftIds }) })
   }
 };

@@ -19,7 +19,11 @@ import {
   ExternalLink,
   History,
   ChevronDown,
-  ShieldCheck
+  ShieldCheck,
+  ShieldAlert,
+  Flag,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
 import { AccountTargetPicker } from '../components/AccountTargetPicker';
@@ -62,6 +66,13 @@ interface Draft {
   scheduledAt?: string;
   /** Explicit publish targets (SocialAccount _ids); absent on legacy drafts. */
   targetAccountIds?: string[];
+  /** Compliance gating status */
+  complianceStatus?: 'pending' | 'blocked' | 'approved';
+  /** Copyright claim detection */
+  claimDetectedAt?: string | null;
+  claimReason?: string | null;
+  /** Perceptual hash fingerprints for inline media */
+  mediaHashes?: string[] | null;
 }
 
 const PLATFORMS: { key: DraftPlatform; label: string; color: string }[] = [
@@ -145,6 +156,15 @@ export const DraftLibrary: React.FC = () => {
   const [editTargets, setEditTargets] = useState<string[]>([]);
   const [editTargetsDirty, setEditTargetsDirty] = useState(false);
   const { workspace } = useAuth();
+
+  // Multi-selection & Bulk compliance
+  const [selectedDraftIds, setSelectedDraftIds] = useState<string[]>([]);
+  const [bulkApproving, setBulkApproving] = useState(false);
+
+  // Claim modal state
+  const [claimingDraft, setClaimingDraft] = useState<Draft | null>(null);
+  const [claimReason, setClaimReason] = useState('');
+  const [submittingClaim, setSubmittingClaim] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -346,6 +366,89 @@ export const DraftLibrary: React.FC = () => {
     }
   };
 
+  const handleApproveCompliance = async (draftId: string) => {
+    try {
+      await api.drafts.approveCompliance(draftId);
+      setMessage({ type: 'success', text: 'Draft compliance approved.' });
+      fetchDrafts();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to approve compliance' });
+    }
+  };
+
+  const handleBulkApprove = async () => {
+    if (selectedDraftIds.length === 0) return;
+    setBulkApproving(true);
+    try {
+      const res = await api.drafts.bulkApprove(selectedDraftIds);
+      setMessage({ type: 'success', text: `Approved compliance for ${res.modifiedCount || selectedDraftIds.length} drafts.` });
+      setSelectedDraftIds([]);
+      fetchDrafts();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Bulk approval failed' });
+    } finally {
+      setBulkApproving(false);
+    }
+  };
+
+  const handleRecordClaim = async () => {
+    if (!claimingDraft || !claimReason.trim()) return;
+    setSubmittingClaim(true);
+    try {
+      await api.drafts.recordClaim(claimingDraft._id, claimReason.trim());
+      setMessage({ type: 'success', text: 'Copyright claim recorded and draft marked blocked.' });
+      setClaimingDraft(null);
+      setClaimReason('');
+      fetchDrafts();
+    } catch (err: any) {
+      setMessage({ type: 'error', text: err.message || 'Failed to record copyright claim' });
+    } finally {
+      setSubmittingClaim(false);
+    }
+  };
+
+  const toggleSelectDraft = (id: string) => {
+    setSelectedDraftIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedDraftIds.length === drafts.length) {
+      setSelectedDraftIds([]);
+    } else {
+      setSelectedDraftIds(drafts.map(d => d._id));
+    }
+  };
+
+  const getComplianceBadge = (status?: 'pending' | 'blocked' | 'approved') => {
+    if (!status) return null;
+    const styles = {
+      approved: { bg: 'rgba(16, 185, 129, 0.12)', color: '#059669', label: 'Compliance Approved', border: '#a7f3d0' },
+      blocked: { bg: 'rgba(239, 68, 68, 0.12)', color: '#dc2626', label: 'Compliance Blocked', border: '#fecaca' },
+      pending: { bg: 'rgba(245, 158, 11, 0.12)', color: '#d97706', label: 'Compliance Pending', border: '#fde68a' }
+    };
+    const s = styles[status] || styles.pending;
+    return (
+      <span style={{
+        background: s.bg,
+        color: s.color,
+        border: `1px solid ${s.border}`,
+        padding: '2px 8px',
+        borderRadius: '99px',
+        fontSize: '0.7rem',
+        fontWeight: 600,
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '4px'
+      }}>
+        {status === 'approved' && <ShieldCheck size={11} />}
+        {status === 'blocked' && <ShieldAlert size={11} />}
+        {s.label}
+      </span>
+    );
+  };
+
   const getStatusBadge = (status: DraftStatus) => {
     const styles: Record<DraftStatus, { bg: string; color: string; label: string }> = {
       draft: { bg: 'rgba(59, 130, 246, 0.15)', color: '#3b82f6', label: 'Draft' },
@@ -482,6 +585,74 @@ export const DraftLibrary: React.FC = () => {
         })}
 
         <div style={{ flexGrow: 1 }} />
+
+        {/* Bulk Action Controls */}
+        {selectedDraftIds.length > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.8rem', color: '#4b5563', fontWeight: 600 }}>
+              {selectedDraftIds.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={handleBulkApprove}
+              disabled={bulkApproving}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                padding: '7px 14px',
+                background: '#059669',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer'
+              }}
+            >
+              {bulkApproving ? <RotateCcw size={13} className="animate-spin" /> : <ShieldCheck size={14} />}
+              <span>Bulk Approve</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedDraftIds([])}
+              style={{
+                padding: '7px 12px',
+                background: '#f3f4f6',
+                border: '1px solid #e5e7eb',
+                borderRadius: '8px',
+                fontSize: '0.8rem',
+                color: '#4b5563',
+                cursor: 'pointer'
+              }}
+            >
+              Clear
+            </button>
+          </div>
+        )}
+
+        {drafts.length > 0 && (
+          <button
+            type="button"
+            onClick={toggleSelectAll}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '7px 12px',
+              background: '#ffffff',
+              border: '1px solid #e5e7eb',
+              borderRadius: '8px',
+              fontSize: '0.8rem',
+              color: '#374151',
+              cursor: 'pointer'
+            }}
+            title={selectedDraftIds.length === drafts.length ? 'Deselect all' : 'Select all'}
+          >
+            {selectedDraftIds.length === drafts.length ? <CheckSquare size={14} /> : <Square size={14} />}
+            <span>{selectedDraftIds.length === drafts.length ? 'Deselect All' : 'Select All'}</span>
+          </button>
+        )}
 
         {/* Status Dropdown on the right */}
         <div style={{ position: 'relative' }}>
@@ -667,13 +838,28 @@ export const DraftLibrary: React.FC = () => {
             {drafts.map(draft => (
               <div key={draft._id} style={{
                 padding: '18px 22px',
-                background: '#fafaf9',
-                border: '1px solid #e5e7eb',
+                background: selectedDraftIds.includes(draft._id) ? '#f0fdf4' : '#fafaf9',
+                border: selectedDraftIds.includes(draft._id) ? '1px solid #86efac' : '1px solid #e5e7eb',
                 borderRadius: '12px',
                 display: 'flex',
                 alignItems: 'flex-start',
                 gap: '16px'
               }}>
+                <button
+                  type="button"
+                  onClick={() => toggleSelectDraft(draft._id)}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    color: selectedDraftIds.includes(draft._id) ? '#059669' : '#9ca3af',
+                    cursor: 'pointer',
+                    padding: '8px 2px 0 0'
+                  }}
+                  title={selectedDraftIds.includes(draft._id) ? 'Deselect' : 'Select'}
+                >
+                  {selectedDraftIds.includes(draft._id) ? <CheckSquare size={18} /> : <Square size={18} />}
+                </button>
+
                 <PlatformBadge platform={draft.platform} size={36} iconSize={18} />
 
                 <div style={{ flexGrow: 1, minWidth: 0 }}>
@@ -682,12 +868,31 @@ export const DraftLibrary: React.FC = () => {
                       {draft.contentType}
                     </span>
                     {getStatusBadge(draft.status)}
+                    {getComplianceBadge(draft.complianceStatus)}
                     {draft.retryCount > 0 && (
                       <span style={{ fontSize: '0.72rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <AlertCircle size={11} /> Retry #{draft.retryCount}
                       </span>
                     )}
                   </div>
+
+                  {draft.claimDetectedAt && (
+                    <div style={{
+                      padding: '6px 10px',
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '6px',
+                      color: '#b91c1c',
+                      fontSize: '0.75rem',
+                      marginBottom: '8px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px'
+                    }}>
+                      <ShieldAlert size={14} />
+                      <span><strong>Copyright Claim Detected:</strong> {draft.claimReason || 'Blocked by copyright protection.'}</span>
+                    </div>
+                  )}
 
                   {draft.caption && (
                     <p style={{ fontSize: '0.875rem', color: '#374151', marginBottom: '8px', lineHeight: 1.5, maxHeight: '2.8em', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -786,6 +991,26 @@ export const DraftLibrary: React.FC = () => {
                   <button onClick={() => openHistoryModal(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem' }} title="Publish History">
                     <History size={14} />
                   </button>
+                  {draft.complianceStatus !== 'approved' && (
+                    <button
+                      onClick={() => handleApproveCompliance(draft._id)}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#059669' }}
+                      title="Approve Compliance"
+                    >
+                      <ShieldCheck size={14} />
+                    </button>
+                  )}
+                  {!draft.claimDetectedAt && (
+                    <button
+                      onClick={() => { setClaimingDraft(draft); setClaimReason(''); }}
+                      className="btn btn-secondary"
+                      style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#dc2626' }}
+                      title="Record Copyright Claim"
+                    >
+                      <Flag size={14} />
+                    </button>
+                  )}
                   <button onClick={() => handleDelete(draft)} className="btn btn-secondary" style={{ padding: '6px 10px', fontSize: '0.75rem', color: '#ef4444' }} title="Delete Draft">
                     <Trash2 size={14} />
                   </button>
@@ -947,6 +1172,57 @@ export const DraftLibrary: React.FC = () => {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {claimingDraft && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div className="glass-card animate-fade-in responsive-modal" style={{ maxWidth: '480px', width: '90%', padding: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Flag size={18} style={{ color: '#dc2626' }} />
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 600, margin: 0 }}>Record Copyright Claim</h3>
+              </div>
+              <button onClick={() => { setClaimingDraft(null); setClaimReason(''); }} className="btn btn-secondary" style={{ padding: '6px', border: 'none' }}>
+                <X size={16} />
+              </button>
+            </div>
+            <p style={{ fontSize: '0.825rem', color: '#6b7280', marginBottom: '16px' }}>
+              Recording a claim will mark this draft as <strong>Blocked</strong>, log the timestamp, and prevent automated or manual publishing until cleared.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+              <div>
+                <label className="form-label" style={{ fontSize: '0.8rem', fontWeight: 600 }}>Reason / Claim Details *</label>
+                <textarea
+                  className="form-input"
+                  style={{ minHeight: '80px', resize: 'vertical' }}
+                  placeholder="e.g. DMCA notice received or matched copyrighted media"
+                  value={claimReason}
+                  onChange={e => setClaimReason(e.target.value)}
+                />
+              </div>
+              <div style={{ display: 'flex', gap: '10px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => { setClaimingDraft(null); setClaimReason(''); }}
+                  className="btn btn-secondary"
+                  style={{ flexGrow: 1 }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleRecordClaim}
+                  disabled={!claimReason.trim() || submittingClaim}
+                  className="btn btn-primary"
+                  style={{ flexGrow: 1, background: '#dc2626', borderColor: '#dc2626' }}
+                >
+                  {submittingClaim ? <RotateCcw size={14} className="animate-spin" /> : <ShieldAlert size={14} />}
+                  <span>Confirm Claim</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

@@ -8,6 +8,7 @@ export enum NotificationType {
   SUBSCRIPTION_UPDATE = 'subscription_update',
   ANALYTICS_ALERT = 'analytics_alert',
   INSIGHT = 'insight',
+  COMPLIANCE_ALERT = 'compliance_alert',
 }
 
 export interface Notification {

@@ -13,6 +13,8 @@ import { NotificationService } from '../notification/notification.service';
 import { NotificationType } from '../notification/notification.types';
 import { logger } from '../../shared/utils/logger';
 import { WorkspaceWebhookService } from '../workspace/workspace.webhook';
+import { ProjectPostHistoryModel } from '../developer/history/projectHistory.model';
+import { getLocalDayKey } from '../../shared/utils/time';
 
 /**
  * Publishing flow (guideline §18/§19/§20):
@@ -184,6 +186,7 @@ export class DraftPublisher {
       draftId: draftIdStr,
       // Immutable target snapshot travels with the post (absent for legacy drafts).
       ...(draft.targetAccountIds !== undefined ? { targetAccountIds: draft.targetAccountIds } : {}),
+      complianceApproved: draft.complianceApproved === true,
       deliveries: accounts.map(acc => ({
         socialAccountId: acc._id.toString(),
         platform,
@@ -262,6 +265,28 @@ export class DraftPublisher {
       });
       await this.draftRepository.archive(draftId);
       await this.recordHistory(draftId, draft.userId, draft.platform, 'success', errors, first?.externalPostId);
+      
+      // Record to ProjectPostHistoryModel
+      try {
+        const dayKey = getLocalDayKey(new Date());
+        for (const d of deliveries.filter(x => x.status === 'published')) {
+          await ProjectPostHistoryModel.create({
+            userId: draft.userId,
+            draftId,
+            accountId: d.socialAccountId,
+            platform: draft.platform,
+            repositoryId: (draft as any).developerRepositoryId,
+            externalPostId: d.externalPostId || first?.externalPostId,
+            content: draft.caption,
+            postedAt: new Date(),
+            status: 'published',
+            dayKey,
+          });
+        }
+      } catch (postHistErr) {
+        logger.warn('[DraftPublisher] failed to record project post history', { error: String(postHistErr) });
+      }
+
       await this.notify(draft.userId, NotificationType.DRAFT_PUBLISHED, `Published to ${draft.platform}`, `Your draft has been successfully published to ${draft.platform}.`);
       // Await: on serverless the function may freeze right after the response,
       // which silently dropped fire-and-forget webhooks.

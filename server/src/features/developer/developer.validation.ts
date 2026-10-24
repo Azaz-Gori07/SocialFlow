@@ -116,11 +116,31 @@ export const settingsPatchSchema = z
     schedMaxPosts: z.number().int().min(1).optional(),
     maxPostsPerWeek: z.string().nullable().optional(),
     defaultTone: toneEnum.optional(),
-    timezone: z.string().min(1).max(64).optional()
+    timezone: z.string().min(1).max(64).optional(),
+    dailyWindowEndHour: z.number().int().min(0).max(23).optional(),
+    dailyWindowEndMinute: z.number().int().min(0).max(59).optional(),
+    dailyPublishHour: z.number().int().min(0).max(23).optional(),
+    dailyPublishMinute: z.number().int().min(0).max(59).optional()
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: 'Provide at least one setting to update'
-  });
+  })
+  .refine(
+    (data) => {
+      if (
+        data.dailyWindowEndHour !== undefined &&
+        data.dailyPublishHour !== undefined
+      ) {
+        const endMinutes = data.dailyWindowEndHour * 60 + (data.dailyWindowEndMinute ?? 30);
+        const pubMinutes = data.dailyPublishHour * 60 + (data.dailyPublishMinute ?? 0);
+        return pubMinutes > endMinutes;
+      }
+      return true;
+    },
+    {
+      message: 'dailyPublishHour:dailyPublishMinute must be strictly after dailyWindowEndHour:dailyWindowEndMinute'
+    }
+  );
 
 /** Manual generation trigger. */
 export const contentGenerateSchema = z.object({

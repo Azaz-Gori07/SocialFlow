@@ -6,6 +6,10 @@ import DeveloperPullRequestModel from '../pullRequests/pullRequest.model';
 import DeveloperIssueModel from '../issues/issue.model';
 import DeveloperReleaseModel from '../releases/release.model';
 import DeveloperSyncLogModel from '../sync/syncLog.model';
+import DeveloperActivityModel from '../activities/activity.model';
+import DeveloperMemoryModel from '../memory/memory.model';
+import DeveloperMemoryHistoryModel from '../memory/memoryHistory.model';
+import DeveloperOpportunityModel from '../opportunities/opportunity.model';
 
 type Query = Record<string, unknown>;
 
@@ -92,12 +96,8 @@ export class RepositoryRepository {
   }
 
   /**
-   * Delete the mirror row and the raw sync data it owns.
-   *
-   * Deliberately leaves activities, memory, and opportunities alone: those are
-   * user-facing intelligence derived from the code, and a re-added repository
-   * should not silently erase what the user already saw. Re-syncing an
-   * existing repository never reaches this path.
+   * Delete the mirror row and all associated synced and derived data (L8).
+   * Matches the user expectation expressed in the UI.
    */
   async remove(repositoryId: string): Promise<void> {
     await Promise.all([
@@ -107,6 +107,10 @@ export class RepositoryRepository {
       DeveloperIssueModel.deleteMany({ repositoryId } as Query).exec(),
       DeveloperReleaseModel.deleteMany({ repositoryId } as Query).exec(),
       DeveloperSyncLogModel.deleteMany({ repositoryId } as Query).exec(),
+      DeveloperActivityModel.deleteMany({ repositoryId } as Query).exec(),
+      DeveloperMemoryModel.deleteMany({ repositoryId } as Query).exec(),
+      DeveloperMemoryHistoryModel.deleteMany({ repositoryId } as Query).exec(),
+      DeveloperOpportunityModel.deleteMany({ repositoryId } as Query).exec(),
       DeveloperRepositoryModel.deleteOne({ _id: repositoryId } as Query).exec()
     ]);
   }

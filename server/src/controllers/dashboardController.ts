@@ -178,42 +178,31 @@ export const DashboardController = {
       const userId = req.user?.id;
       if (!userId) return res.status(401).json({ message: 'Unauthorized' });
 
-      // Analytics rows are cascade-deleted with their account, so a userId
-      // filter equals the old account-scoped filter — one query, no accounts
-      // roundtrip needed.
-      const analyticsRecords = await db.analytics.find({ userId }).sort({ date: 1 });
-
-      // Group analytics by date
-      const dataByDate: Record<string, {
-        date: string;
-        followers: number;
-        reach: number;
-        impressions: number;
-        engagement: number;
-        clicks: number;
-      }> = {};
-
-      for (const rec of analyticsRecords) {
-        if (!dataByDate[rec.date]) {
-          dataByDate[rec.date] = {
-            date: rec.date,
-            followers: 0,
-            reach: 0,
-            impressions: 0,
-            engagement: 0,
-            clicks: 0
-          };
+      const growthTimeline = await db.analytics.aggregate([
+        { $match: { userId } },
+        {
+          $group: {
+            _id: '$date',
+            followers: { $sum: '$followers' },
+            reach: { $sum: '$reach' },
+            impressions: { $sum: '$impressions' },
+            engagement: { $sum: '$engagement' },
+            clicks: { $sum: '$clicks' }
+          }
+        },
+        { $sort: { _id: 1 } },
+        {
+          $project: {
+            _id: 0,
+            date: '$_id',
+            followers: 1,
+            reach: 1,
+            impressions: 1,
+            engagement: 1,
+            clicks: 1
+          }
         }
-
-        dataByDate[rec.date].followers += rec.followers;
-        dataByDate[rec.date].reach += rec.reach;
-        dataByDate[rec.date].impressions += rec.impressions;
-        dataByDate[rec.date].engagement += rec.engagement;
-        dataByDate[rec.date].clicks += rec.clicks;
-      }
-
-      // Sort dates chronologically
-      const growthTimeline = Object.values(dataByDate).sort((a, b) => a.date.localeCompare(b.date));
+      ]);
 
       return res.json(growthTimeline);
     } catch (error) {

@@ -66,12 +66,27 @@ router.post(
   socialController.refresh as any
 );
 
-// PATCH /api/social/accounts/:id — account preferences (publishDefault)
+// PATCH /api/social/accounts/:id — account preferences (publishDefault, autoPostEnabled)
 router.patch(
   '/accounts/:id',
   authenticate as any,
   validate({ params: accountIdSchema, body: updateAccountSchema }),
   socialController.updateAccount as any
+);
+
+// POST or PATCH /api/social/accounts/:id/auto-post — toggle auto-post
+router.post(
+  '/accounts/:id/auto-post',
+  authenticate as any,
+  validate({ params: accountIdSchema }),
+  socialController.toggleAutoPost as any
+);
+
+router.patch(
+  '/accounts/:id/auto-post',
+  authenticate as any,
+  validate({ params: accountIdSchema }),
+  socialController.toggleAutoPost as any
 );
 
 // DELETE /api/social/accounts/:id — disconnect

@@ -16,10 +16,19 @@ const router = Router();
 
 const authLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? 100 : 5,
+  max: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? 100 : 30,
   message: { message: 'Too many auth requests, please try again later.' }
 });
 const authLimiterHandler = authLimiter as unknown as RequestHandler;
+
+// Separate bucket for refresh: multi-tab users/sessions refreshing tokens
+// should not be starved by login rate-limits (S9).
+const refreshLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test' ? 100 : 60,
+  message: { message: 'Too many session refreshes, please try again later.' }
+});
+const refreshLimiterHandler = refreshLimiter as unknown as RequestHandler;
 
 const userRepository = new UserRepository();
 const workspaceRepository = new WorkspaceRepository();
@@ -39,7 +48,7 @@ router.post('/verify-otp', authLimiterHandler, validate({ body: verifyOtpSchema 
 router.post('/login', authLimiterHandler, validate({ body: loginSchema }), authController.login as any);
 router.post('/forgot-password', authLimiterHandler, validate({ body: forgotPasswordSchema }), authController.forgotPassword as any);
 router.post('/reset-password', authLimiterHandler, validate({ body: resetPasswordSchema }), authController.resetPassword as any);
-router.post('/refresh', authLimiterHandler, validate({ body: refreshSchema }), authController.refresh as any);
+router.post('/refresh', refreshLimiterHandler, validate({ body: refreshSchema }), authController.refresh as any);
 
 // One-time code exchange (issued by the OAuth callback redirect)
 router.post('/exchange', authLimiterHandler, validate({ body: exchangeCodeSchema }), authController.exchange as any);

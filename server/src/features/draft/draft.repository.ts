@@ -34,6 +34,7 @@ export class DraftRepository {
       offset: number;
       platform?: string;
       status?: string;
+      sourceType?: string;
     }
   ): Promise<PaginatedDraftsResult> {
     const query: DraftQuery = { userId };
@@ -42,6 +43,9 @@ export class DraftRepository {
     }
     if (options.status) {
       query.status = options.status;
+    }
+    if (options.sourceType) {
+      query.sourceType = options.sourceType;
     }
 
     const [items, total] = await Promise.all([
@@ -61,15 +65,23 @@ export class DraftRepository {
     };
   }
 
-  // Phase 2: Find ready drafts for a specific platform (used by per-platform schedulers)
+  // Phase 2: Find ready drafts for a specific platform (used by per-platform schedulers).
+  // Only drafts with no future scheduledAt are considered ready now (L2) —
+  // otherwise a draft queued for tomorrow is picked up by the next poll.
   async findReadyByPlatform(platform: string, limit = 10): Promise<IDraft[]> {
+    const nowIso = new Date().toISOString();
     return DraftModel.find({
       platform,
-      status: 'ready'
-    } as DraftQuery)
+      status: 'ready',
+      $or: [
+        { scheduledAt: { $exists: false } },
+        { scheduledAt: null },
+        { scheduledAt: { $lte: nowIso } }
+      ]
+    } as Record<string, unknown>)
       .sort({ createdAt: 1 })
       .limit(limit)
-      .exec();
+      .exec() as unknown as Promise<IDraft[]>;
   }
 
   // Phase 2: Find failed drafts eligible for retry

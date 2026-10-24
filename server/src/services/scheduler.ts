@@ -76,7 +76,10 @@ async function settlePost(post: IPost): Promise<void> {
 
   const previousStatus = fresh.status;
   const derived = postRepository.deriveStatus(fresh.deliveries);
-  const wasTerminal = previousStatus === 'published' || previousStatus === 'partial_failure' || previousStatus === 'failed';
+  // Only `published` is terminal. `partial_failure` and `failed` must remain
+  // re-settleable: processRetries can flip failing deliveries to published,
+  // and the post should then settle to its new derived status (L1).
+  const wasTerminal = previousStatus === 'published';
 
   if (wasTerminal) return;
 
@@ -93,14 +96,22 @@ async function settlePost(post: IPost): Promise<void> {
 
   const ok = derived === 'published' || derived === 'partial_failure';
   const failedDeliveries = fresh.deliveries.filter(d => d.status === 'failed');
+  const previouslyFailed = previousStatus === 'failed';
+  const isRecovery = ok && previouslyFailed;
 
   await db.activityLogs.create({
     userId: fresh.userId,
-    action: ok ? 'POST_PUBLISHED_AUTOMATIC' : 'POST_PUBLISH_FAILED',
+    // Log recovery separately so a post that flipped from failed → published
+    // shows up as a retry success, not the original failure (L1).
+    action: isRecovery ? 'POST_PUBLISH_RECOVERED' : ok ? 'POST_PUBLISHED_AUTOMATIC' : 'POST_PUBLISH_FAILED',
     details: ok
       ? `Published scheduled post to [${fresh.platforms.join(', ')}]`
       : `Post failed: ${failedDeliveries.map(d => d.lastError).filter(Boolean).join('; ')}`
   });
+
+  if (isRecovery) {
+    return; // Already notified about the earlier failure; don't double-notify.
+  }
 
   await notificationService.create({
     userId: fresh.userId,

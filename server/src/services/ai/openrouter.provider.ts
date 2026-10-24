@@ -18,16 +18,15 @@ export class OpenRouterProvider {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
-    const body = {
+    const body: Record<string, any> = {
       model: this.config.model,
       messages: [{ role: 'user', content: request.prompt }],
       ...request.options,
-      // GLM (z.ai) emits a reasoning section that eats the token budget before
-      // any post text appears; disable it for the short-form post pipeline.
-      // If you point OPENROUTER_BASE_URL at providers that reject `thinking`,
-      // move this into request.options instead.
-      thinking: { type: 'disabled' },
     };
+
+    if (this.config.disableThinking) {
+      body.thinking = { type: 'disabled' };
+    }
 
     const init: RequestInit & Record<string, any> = {
       method: 'POST',

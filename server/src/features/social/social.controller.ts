@@ -107,16 +107,42 @@ export class SocialController {
   };
 
   /** DELETE /api/social/accounts/:id */
-  /** PATCH /api/social/accounts/:id — account preferences (publishDefault). */
+  /** PATCH /api/social/accounts/:id — account preferences (publishDefault, autoPostEnabled). */
   updateAccount = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) return next(AppError.unauthorized());
-      const account = await this.socialService.setPublishDefault(
+      let account;
+      if (req.body.publishDefault !== undefined) {
+        account = await this.socialService.setPublishDefault(
+          req.params.id,
+          req.user.id,
+          req.body.publishDefault
+        );
+      }
+      if (req.body.autoPostEnabled !== undefined) {
+        account = await this.socialService.setAutoPost(
+          req.params.id,
+          req.user.id,
+          req.body.autoPostEnabled
+        );
+      }
+      return ApiResponse.success(res, account, 'Account preference updated');
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  /** POST /api/social/accounts/:id/auto-post — toggle auto-post */
+  toggleAutoPost = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const enabled = req.body.enabled ?? req.body.autoPostEnabled;
+      const account = await this.socialService.setAutoPost(
         req.params.id,
         req.user.id,
-        req.body.publishDefault
+        Boolean(enabled)
       );
-      return ApiResponse.success(res, account, 'Account preference updated');
+      return ApiResponse.success(res, account, 'Auto-post setting updated');
     } catch (error) {
       next(error);
     }

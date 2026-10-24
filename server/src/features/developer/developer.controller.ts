@@ -9,6 +9,7 @@ import { AuthenticatedRequest } from '../../shared/middleware/rbac.middleware';
 import { AppError } from '../../shared/errors/appError';
 import { DeveloperMemoryCategory } from './memory/memory.model';
 import { DeveloperOpportunityStatus } from './opportunities/opportunity.model';
+import { errorTrackerService } from './content/errorTracker.service';
 
 const connectionService = new ConnectionService(new ConnectionRepository());
 
@@ -378,6 +379,25 @@ export class DeveloperController {
         req.body ?? {}
       );
       return ApiResponse.success(res, settings, 'Automation settings updated');
+    } catch (error) { next(error); }
+  };
+
+  /* ------------------------------- AI Errors -------------------------------- */
+
+  listErrors = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const limit = Number(req.query.limit) || 20;
+      const errors = await errorTrackerService.getRecentErrors(req.user.id, limit);
+      return ApiResponse.success(res, errors, 'AI error events retrieved');
+    } catch (error) { next(error); }
+  };
+
+  getErrorHints = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const hints = await errorTrackerService.getAvoidanceHints(req.user.id, req.query.repositoryId as string);
+      return ApiResponse.success(res, hints, 'AI avoidance hints retrieved');
     } catch (error) { next(error); }
   };
 }

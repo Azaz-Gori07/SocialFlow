@@ -28,6 +28,10 @@ export interface IDeveloperSettings extends Document {
   maxPostsPerWeek?: string | null;
   defaultTone: string;
   timezone: string;
+  dailyWindowEndHour: number;
+  dailyWindowEndMinute: number;
+  dailyPublishHour: number;
+  dailyPublishMinute: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -60,7 +64,11 @@ const DeveloperSettingsSchema = new Schema<IDeveloperSettings>(
       enum: ['technical', 'casual', 'storytelling', 'founder', 'learning', 'short_form'],
       default: 'technical'
     },
-    timezone: { type: String, default: 'UTC' }
+    timezone: { type: String, default: 'UTC' },
+    dailyWindowEndHour: { type: Number, default: 17, min: 0, max: 23 },
+    dailyWindowEndMinute: { type: Number, default: 30, min: 0, max: 59 },
+    dailyPublishHour: { type: Number, default: 18, min: 0, max: 23 },
+    dailyPublishMinute: { type: Number, default: 0, min: 0, max: 59 }
   },
   {
     timestamps: true,

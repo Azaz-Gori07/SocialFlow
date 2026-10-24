@@ -31,6 +31,8 @@ export interface ISocialAccount extends Document {
    * already scheduled posts (their target snapshot is immutable).
    */
   publishDefault?: boolean;
+  /** When true, AI auto-post may target this account (1 post/day cap applies). */
+  autoPostEnabled?: boolean;
   /** OAuthConnection._id when the token is user-level. */
   connectionId?: string;
   /** Account-scoped token (e.g. Meta page token). Encrypted at rest, never serialized. */
@@ -89,6 +91,7 @@ const SocialAccountSchema = new Schema<ISocialAccount>(
     },
     connectionId: { type: String },
     publishDefault: { type: Boolean, default: false },
+    autoPostEnabled: { type: Boolean, default: false },
     encryptedAccessToken: { type: String },
     encryptedRefreshToken: { type: String },
     accessTokenExpiresAt: { type: String },
@@ -128,6 +131,7 @@ const SocialAccountSchema = new Schema<ISocialAccount>(
 SocialAccountSchema.index({ userId: 1, platform: 1, providerAccountId: 1 }, { unique: true });
 SocialAccountSchema.index({ workspaceId: 1, platform: 1 });
 SocialAccountSchema.index({ connectionId: 1 });
+SocialAccountSchema.index({ userId: 1, autoPostEnabled: 1 });
 
 export const SocialAccountModel =
   (mongoose.models.SocialAccount as Model<ISocialAccount>) ||

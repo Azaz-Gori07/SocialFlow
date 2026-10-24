@@ -62,6 +62,7 @@ const envSchema = z.object({
   // Python function's X_BRIDGE_SECRET env.
   X_BRIDGE_URL: z.string().url().optional(),
   X_BRIDGE_SECRET: z.string().optional(),
+  CRON_SECRET: z.string().optional(),
   LINKEDIN_CLIENT_ID: z.string().optional(),
   LINKEDIN_CLIENT_SECRET: z.string().optional(),
   FACEBOOK_CLIENT_ID: z.string().optional(),
@@ -74,6 +75,7 @@ const envSchema = z.object({
   INSTAGRAM_CLIENT_SECRET: z.string().optional(),
   META_WEBHOOK_VERIFY_TOKEN: z.string().optional(),
   META_WEBHOOK_SECRET: z.string().optional(),
+  WORKSPACE_WEBHOOK_SECRET: z.string().optional(),
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
   YOUTUBE_CLIENT_ID: z.string().optional(),

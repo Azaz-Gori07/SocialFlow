@@ -25,6 +25,7 @@ interface Account {
   status: string;
   connectionStatus: string;
   publishDefault?: boolean;
+  autoPostEnabled?: boolean;
 }
 
 export interface AccountTargetPickerProps {

@@ -28,6 +28,8 @@ export interface IComplianceCheck extends Document {
   contentHash: string;
   /** SHA-256 of the media URLs only, so the same caption on new media re-analyses. */
   mediaHash?: string;
+  /** Array of perceptual/URL fingerprints for every image in the post. */
+  mediaHashes?: string[];
   platform: string;
   /** Incremented whenever the checker rules change; old rows keep their meaning. */
   policyVersion: string;
@@ -60,6 +62,7 @@ const ComplianceCheckSchema = new Schema<IComplianceCheck>(
     workspaceId: { type: String, index: true },
     contentHash: { type: String, required: true },
     mediaHash: { type: String },
+    mediaHashes: { type: [String], default: [] },
     platform: { type: String, required: true },
     policyVersion: { type: String, required: true },
     status: {
@@ -102,6 +105,7 @@ const ComplianceCheckSchema = new Schema<IComplianceCheck>(
 ComplianceCheckSchema.index({ userId: 1, contentHash: 1, platform: 1, policyVersion: 1 });
 ComplianceCheckSchema.index({ contentHash: 1, policyVersion: 1, status: 1 });
 ComplianceCheckSchema.index({ mediaHash: 1, policyVersion: 1 });
+ComplianceCheckSchema.index({ mediaHashes: 1, policyVersion: 1, status: 1 });
 ComplianceCheckSchema.index({ status: 1, createdAt: -1 });
 
 const ComplianceCheckModel =

@@ -107,6 +107,46 @@ export class DraftController {
       return ApiResponse.success(res, history, 'Publish history retrieved');
     } catch (error) { next(error); }
   };
+
+  approveCompliance = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { id } = req.params;
+      const draft = await this.draftService.approveCompliance(id, req.user.id);
+      return ApiResponse.success(res, draft, 'Compliance approved');
+    } catch (error) { next(error); }
+  };
+
+  recordClaim = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { id } = req.params;
+      const { reason } = req.body || {};
+      const draft = await this.draftService.recordClaim(id, req.user.id, reason || 'Copyright claim detected');
+      return ApiResponse.success(res, draft, 'Claim recorded');
+    } catch (error) { next(error); }
+  };
+
+  bulkApproveCompliance = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { draftIds } = req.body;
+      if (!Array.isArray(draftIds)) return next(AppError.badRequest('draftIds must be an array'));
+      const result = await this.draftService.bulkApproveCompliance(draftIds, req.user.id);
+      return ApiResponse.success(res, result, 'Drafts compliance approved in bulk');
+    } catch (error) { next(error); }
+  };
+
+  schedule = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const { id } = req.params;
+      const { scheduledAt } = req.body;
+      if (!scheduledAt) return next(AppError.badRequest('scheduledAt is required'));
+      const draft = await this.draftService.schedulePublish(id, scheduledAt, req.user.id);
+      return ApiResponse.success(res, draft, 'Draft scheduled successfully');
+    } catch (error) { next(error); }
+  };
 }
 
 export default DraftController;

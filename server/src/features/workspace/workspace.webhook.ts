@@ -11,10 +11,12 @@ import { logger } from '../../shared/utils/logger';
  * never delay or fail a publish.
  */
 export class WorkspaceWebhookService {
-  private signingSecret = crypto
-    .createHash('sha256')
-    .update(`socialflow-webhook:${env.JWT_SECRET}`)
-    .digest('hex');
+  private signingSecret =
+    env.WORKSPACE_WEBHOOK_SECRET ||
+    crypto
+      .createHash('sha256')
+      .update(`socialflow-webhook:${env.JWT_SECRET}`)
+      .digest('hex');
 
   async dispatch(workspaceId: string | undefined, event: string, data: Record<string, unknown>): Promise<void> {
     if (!workspaceId) return;

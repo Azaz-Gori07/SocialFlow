@@ -12,16 +12,19 @@ export class AIService {
   private fallbackConfig: ProviderConfig | null = null;
 
   constructor() {
+    const disableThinking = process.env.OPENROUTER_DISABLE_THINKING === 'true';
     if (env.OPENROUTER_API_KEY && env.OPENROUTER_API_KEY_MODEL) {
       this.primaryConfig = {
         apiKey: env.OPENROUTER_API_KEY,
         model: env.OPENROUTER_API_KEY_MODEL,
+        disableThinking,
       };
     }
     if (env.OPENROUTER_API_KEY_2 && env.OPENROUTER_API_KEY_2_MODEL) {
       this.fallbackConfig = {
         apiKey: env.OPENROUTER_API_KEY_2,
         model: env.OPENROUTER_API_KEY_2_MODEL,
+        disableThinking,
       };
     }
   }
@@ -35,10 +38,13 @@ export class AIService {
    * provider response body.
    */
   async execute(request: AIRequest): Promise<AIResponse> {
+    let lastError: Error | null = null;
+
     if (this.primaryConfig) {
       try {
         return await this.callWithRetry(new OpenRouterProvider(this.primaryConfig), request, 2);
-      } catch (e) {
+      } catch (e: any) {
+        lastError = e instanceof Error ? e : new Error(String(e));
         // fall through to fallback
       }
     }
@@ -46,9 +52,14 @@ export class AIService {
     if (this.fallbackConfig) {
       try {
         return await this.callWithRetry(new OpenRouterProvider(this.fallbackConfig), request, 1);
-      } catch (e) {
+      } catch (e: any) {
+        lastError = e instanceof Error ? e : new Error(String(e));
         // fall through to error
       }
+    }
+
+    if (lastError) {
+      throw new Error(`AI provider call failed: ${lastError.message}`);
     }
 
     throw new Error('No AI provider configured. Set OPENROUTER_API_KEY (and OPENROUTER_API_KEY_MODEL) to enable AI features.');

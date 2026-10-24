@@ -52,6 +52,8 @@ export interface IPost extends Document {
    * actually AI-generated); absent on legacy posts.
    */
   source?: 'manual' | 'ai' | 'csv' | 'ai_autoschedule';
+  /** Set to true when compliance review has been approved (L9). */
+  complianceApproved?: boolean;
   publishedAt?: string;
   failedReason?: string;
   lastAttemptAt?: string;
@@ -113,6 +115,7 @@ const PostSchema = new Schema<IPost>(
     // posts stay absent rather than looking explicitly untargeted.
     targetAccountIds: { type: [String], default: undefined },
     source: { type: String, enum: ['manual', 'ai', 'csv', 'ai_autoschedule'] },
+    complianceApproved: { type: Boolean, default: undefined },
     scheduledAt: { type: String },
     publishedAt: { type: String },
     failedReason: { type: String },

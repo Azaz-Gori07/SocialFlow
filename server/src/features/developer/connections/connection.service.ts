@@ -70,10 +70,15 @@ export class ConnectionService {
   async markTokenInvalid(userId: string, reason: string): Promise<void> {
     const connection = await this.connectionRepository.findByUser(userId);
     if (!connection) return;
-    const meta = (connection.metadata || {}) as Record<string, any>;
     await DeveloperConnectionModel.updateOne(
       { _id: connection._id },
-      { $set: { metadata: { ...meta, tokenInvalid: true, tokenInvalidReason: reason, tokenInvalidAt: new Date().toISOString() } } }
+      {
+        $set: {
+          'metadata.tokenInvalid': true,
+          'metadata.tokenInvalidReason': reason,
+          'metadata.tokenInvalidAt': new Date().toISOString()
+        }
+      }
     );
   }
 

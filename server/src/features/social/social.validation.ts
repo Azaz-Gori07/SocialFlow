@@ -30,7 +30,13 @@ export const selectAccountSchema = z.object({
 });
 
 export const updateAccountSchema = z.object({
-  publishDefault: z.boolean(),
+  publishDefault: z.boolean().optional(),
+  autoPostEnabled: z.boolean().optional(),
+});
+
+export const toggleAutoPostSchema = z.object({
+  enabled: z.boolean().optional(),
+  autoPostEnabled: z.boolean().optional(),
 });
 
 const blankToUndefined = (value: unknown) =>

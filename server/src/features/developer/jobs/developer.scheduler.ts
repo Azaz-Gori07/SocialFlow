@@ -2,6 +2,7 @@ import { env } from '../../../shared/config/env.config';
 import { logger } from '../../../shared/utils/logger';
 import DeveloperRepositoryModel, { IDeveloperRepository } from '../repositories/repository.model';
 import { syncAndProcess } from './syncOrchestrator';
+import { dailyContentService } from '../developer.routes';
 
 type Query = Record<string, unknown>;
 
@@ -33,8 +34,9 @@ async function claimRepository(repositoryId: string, staleClaimCutoff: Date): Pr
   ).exec();
   if (claimed) return claimed;
 
+  // Reclaim stale claims: crashed/hung runs leave syncStatus='syncing' past the cutoff (L4).
   return DeveloperRepositoryModel.findOneAndUpdate(
-    { _id: repositoryId, lastSyncedAt: { $ne: null }, updatedAt: { $lt: staleClaimCutoff }, syncStatus: { $ne: 'syncing' } } as Query,
+    { _id: repositoryId, lastSyncedAt: { $ne: null }, updatedAt: { $lt: staleClaimCutoff }, syncStatus: 'syncing' } as Query,
     { $set: { syncStatus: 'syncing' } },
     { returnDocument: 'after' }
   ).exec();
@@ -87,6 +89,15 @@ export async function runDeveloperSchedulerTick(): Promise<void> {
             error: error instanceof Error ? error.message : String(error)
           });
         }
+      }
+
+      // 5:30pm daily aggregation pass
+      try {
+        await dailyContentService.processAllDueDailyWindows();
+      } catch (err) {
+        logger.error('[developer] daily window processing failed in scheduler', {
+          error: err instanceof Error ? err.message : String(err)
+        });
       }
     } finally {
       running = false;

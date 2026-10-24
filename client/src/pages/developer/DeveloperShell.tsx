@@ -6,9 +6,10 @@ import { Activities } from './Activities';
 import { Opportunities } from './Opportunities';
 import { Memory } from './Memory';
 import { DeveloperSettings } from './Settings';
+import { DeveloperErrors } from './DeveloperErrors';
 import { GitBranch } from 'lucide-react';
 
-type TabId = 'dashboard' | 'repositories' | 'activities' | 'opportunities' | 'memory' | 'settings';
+type TabId = 'dashboard' | 'repositories' | 'activities' | 'opportunities' | 'memory' | 'errors' | 'settings';
 
 const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'dashboard', label: 'Dashboard' },
@@ -16,6 +17,7 @@ const TABS: Array<{ id: TabId; label: string }> = [
   { id: 'activities', label: 'Activities' },
   { id: 'opportunities', label: 'Opportunities' },
   { id: 'memory', label: 'Memory' },
+  { id: 'errors', label: 'Errors & Hints' },
   { id: 'settings', label: 'Settings' }
 ];
 
@@ -189,6 +191,7 @@ export const DeveloperShell: React.FC = () => {
       {activeTab === 'activities' && <Activities />}
       {activeTab === 'opportunities' && <Opportunities />}
       {activeTab === 'memory' && <Memory />}
+      {activeTab === 'errors' && <DeveloperErrors />}
       {activeTab === 'settings' && <DeveloperSettings />}
     </div>
   );

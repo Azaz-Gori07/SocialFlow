@@ -1,4 +1,4 @@
-import { Server as HttpServer } from 'http';
+import http, { Server as HttpServer } from 'http';
 import https from 'https';
 import { Server, Socket } from 'socket.io';
 import jwt from 'jsonwebtoken';
@@ -139,10 +139,12 @@ async function emitToUser(userId: string, event: string, payload: unknown): Prom
 function postBridge(body: unknown): Promise<void> {
   const url = new URL(`${SOCKET_INTERNAL_URL!.replace(/\/$/, '')}/internal/emit`);
   const data = JSON.stringify(body);
+  const transport = url.protocol === 'http:' ? http : https;
   return new Promise((resolve, reject) => {
-    const req = https.request(
+    const req = transport.request(
       {
         hostname: url.hostname,
+        port: url.port || (url.protocol === 'http:' ? 80 : 443),
         path: url.pathname,
         method: 'POST',
         family: 4,

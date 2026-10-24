@@ -26,6 +26,7 @@ const DeveloperGitHubCallback = React.lazy(() => import('./pages/developer/Devel
 const DeveloperShell = React.lazy(() => import('./pages/developer/DeveloperShell').then(m => ({ default: m.DeveloperShell })));
 const DraftLibrary = React.lazy(() => import('./pages/DraftLibrary').then(m => ({ default: m.DraftLibrary })));
 const Profile = React.lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })));
+const ComplianceAdmin = React.lazy(() => import('./pages/ComplianceAdmin').then(m => ({ default: m.ComplianceAdmin })));
 import { 
   Menu, 
   Layers, 
@@ -58,7 +59,8 @@ const VALID_TABS = [
   'developer',
   'profile',
   'settings',
-  'connected-accounts'
+  'connected-accounts',
+  'compliance'
 ];
 
 const COMMAND_ITEMS = [
@@ -211,6 +213,8 @@ const AppContent: React.FC = () => {
         return <Profile />;
       case 'connected-accounts':
         return <ConnectedAccounts />;
+      case 'compliance':
+        return <ComplianceAdmin />;
       case 'settings':
         return <Settings />;
       default:

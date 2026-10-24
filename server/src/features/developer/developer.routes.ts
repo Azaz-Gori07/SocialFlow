@@ -16,6 +16,7 @@ import { PipelineService } from './intelligence/pipeline.service';
 import { SettingsRepository } from './settings/settings.repository';
 import { SettingsService } from './settings/settings.service';
 import { ContentService } from './content/content.service';
+import { DailyContentService } from './jobs/dailyContent.service';
 import { validate } from '../../shared/middleware/validate.middleware';
 import { authenticate } from '../../shared/middleware/rbac.middleware';
 import { env } from '../../shared/config/env.config';
@@ -61,6 +62,7 @@ const contentService = new ContentService(
   memoryRepository,
   settingsRepository
 );
+const dailyContentService = new DailyContentService(opportunityRepository, contentService);
 const developerService = new DeveloperService(
   connectionService,
   repositoryService,
@@ -291,6 +293,20 @@ router.patch(
   developerController.updateAutomationSettings as any
 );
 
+// GET /api/developer/errors - AI error events history
+router.get(
+  '/errors',
+  authenticate as any,
+  developerController.listErrors as any
+);
+
+// GET /api/developer/errors/hints - AI avoidance hints
+router.get(
+  '/errors/hints',
+  authenticate as any,
+  developerController.getErrorHints as any
+);
+
 export {
   developerController,
   developerService,
@@ -302,6 +318,7 @@ export {
   opportunityService,
   pipelineService,
   settingsService,
-  contentService
+  contentService,
+  dailyContentService
 };
 export default router;

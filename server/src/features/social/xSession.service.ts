@@ -47,13 +47,17 @@ interface BridgePostResult {
 const BRIDGE_TIMEOUT_MS = 55_000;
 
 export class XSessionService {
+  private _warned = false;
+
   constructor(private socialRepository: SocialRepository = new SocialRepository()) {}
 
   /** Shared secret between the Node API and the Python function. */
   private bridgeSecret(): string {
     if (env.X_BRIDGE_SECRET) return env.X_BRIDGE_SECRET;
-    // Zero-config default: both runtimes already share JWT_SECRET, so derive a
-    // separate key from it instead of requiring another env var in production.
+    if (!this._warned) {
+      logger.warn('[x-session] X_BRIDGE_SECRET is not set; deriving from JWT_SECRET. Set X_BRIDGE_SECRET in production.');
+      this._warned = true;
+    }
     return crypto
       .createHash('sha256')
       .update(`socialflow-x-bridge:${env.JWT_SECRET}`)

@@ -15,4 +15,5 @@ export interface AIResponse {
 export interface ProviderConfig {
   apiKey: string;
   model: string;
+  disableThinking?: boolean;
 }

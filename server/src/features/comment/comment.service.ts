@@ -15,6 +15,7 @@ import { ProviderError } from '../../services/social/errors/providerError';
 import { ProviderCapabilities } from '../../services/social/interfaces/socialProvider.interface';
 import mongoose from 'mongoose';
 import { env } from '../../shared/config/env.config';
+import { logger } from '../../shared/utils/logger';
 
 export class CommentService {
   private socialService: SocialService;
@@ -90,32 +91,51 @@ export class CommentService {
           }
         };
 
-        let cursor: string | undefined;
-        let page = 0;
-        do {
-          const result = await provider.listComments(ctx, { cursor, limit: 50 });
-          for (const c of result.items) {
-            await this.commentRepository.upsertComment({
-              workspaceId,
-              platform: account.platform,
-              accountId: account._id.toString(),
-              externalAccountId: account.providerAccountId,
-              externalPostId: c.parentExternalCommentId ? '' : (c as any).externalPostId || '',
-              externalCommentId: c.externalCommentId,
-              postTitle: undefined,
-              author: {
-                username: c.author.username,
-                displayName: c.author.displayName,
-                avatarUrl: c.author.avatarUrl
-              },
-              message: c.message,
-              status: 'unresolved'
-            });
-            syncedComments += 1;
+        // If provider supports listPosts, enumerate recent posts to feed their
+        // externalPostId into listComments (providers require externalPostId) (L5).
+        const postIds: (string | undefined)[] = [];
+        if (provider.listPosts) {
+          try {
+            const recentPosts = await provider.listPosts(ctx, { limit: 10 });
+            for (const p of recentPosts.items) {
+              if (p.externalPostId) postIds.push(p.externalPostId);
+            }
+          } catch (err: any) {
+            logger.warn(`Could not list posts for ${account.platform}/${account.username}: ${err.message}`);
           }
-          cursor = result.nextCursor;
-          page += 1;
-        } while (cursor && page < 5); // bound: max 5 pages per account per sync
+        }
+        if (postIds.length === 0) {
+          postIds.push(undefined);
+        }
+
+        for (const externalPostId of postIds) {
+          let cursor: string | undefined;
+          let page = 0;
+          do {
+            const result = await provider.listComments(ctx, { externalPostId, cursor, limit: 50 });
+            for (const c of result.items) {
+              await this.commentRepository.upsertComment({
+                workspaceId,
+                platform: account.platform,
+                accountId: account._id.toString(),
+                externalAccountId: account.providerAccountId,
+                externalPostId: c.parentExternalCommentId ? '' : (c as any).externalPostId || externalPostId || '',
+                externalCommentId: c.externalCommentId,
+                postTitle: undefined,
+                author: {
+                  username: c.author.username,
+                  displayName: c.author.displayName,
+                  avatarUrl: c.author.avatarUrl
+                },
+                message: c.message,
+                status: 'unresolved'
+              });
+              syncedComments += 1;
+            }
+            cursor = result.nextCursor;
+            page += 1;
+          } while (cursor && page < 5); // bound: max 5 pages per account per sync
+        }
 
         await this.socialRepository.updateAccount(account._id.toString(), {
           lastSyncedAt: new Date().toISOString()

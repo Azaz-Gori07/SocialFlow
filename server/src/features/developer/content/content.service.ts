@@ -27,6 +27,11 @@ import {
 import { WritingTone, StyleInput, analyzeStyle, StyleProfile } from './style-analyzer';
 import { FactCheckResult, PostValidation, factCheckPost, validatePost } from './fact-checker';
 import { shouldSkipOpportunity } from './smart-skip';
+import { projectHistoryService } from '../repositories/projectHistory.service';
+import { errorTrackerService } from './errorTracker.service';
+import { DraftModel } from '../../draft/draft.model';
+import { ProjectPostHistoryModel } from '../history/projectHistory.model';
+import { startOfLocalDay, getLocalDayKey } from '../../../shared/utils/time';
 
 /** Post variants generated per opportunity, in order. Sequential = gentler on rate limits. */
 const VARIANTS: PostVariant[] = ['story', 'technical', 'short_casual'];
@@ -87,6 +92,7 @@ export interface GeneratedDraft {
   content: string;
   /** Draft platform (from settings.autoPostPlatforms) — used by the publish stage. */
   platform: DraftPlatform;
+  repositoryId?: string;
 }
 
 export interface GenerateResult {
@@ -178,9 +184,35 @@ export class ContentService {
       coveredTopics
     };
     const { profile } = analyzeStyle(styleInput);
-    const customInstructions = composeInstructions(opts?.customInstructions ?? settings.aiInstructions, settings);
+    let customInstructions = composeInstructions(opts?.customInstructions ?? settings.aiInstructions, settings);
 
-    const generated = await this.generateVariants(context, profile, styleInput, customInstructions);
+    // Negative feedback loop: inject avoidance hints from past failures
+    const avoidanceHints = await errorTrackerService.getAvoidanceHints(userId, opportunity.repositoryId);
+    if (avoidanceHints.length > 0) {
+      const hintBlock = `AVOID THESE PAST MISTAKES:\n${avoidanceHints.map((h) => `- ${h}`).join('\n')}`;
+      customInstructions = customInstructions ? `${customInstructions}\n${hintBlock}` : hintBlock;
+    }
+
+    // Determine target variants based on project history
+    let variantsToGenerate: PostVariant[] = [...VARIANTS];
+    try {
+      const rec = await projectHistoryService.recommendVariant(userId, opportunity.repositoryId, {
+        isMilestone: opportunity.sourceType === 'milestone'
+      });
+      if (rec && !variantsToGenerate.includes(rec)) {
+        variantsToGenerate = [rec, ...variantsToGenerate.slice(0, 2)];
+      }
+    } catch {
+      // Keep default variants if recommendation fails
+    }
+
+    const generated = await this.generateVariants(
+      context,
+      profile,
+      styleInput,
+      customInstructions,
+      variantsToGenerate
+    );
 
     const factCheck = factCheckPost(
       generated.posts.map((p) => p.content).join('\n'),
@@ -188,9 +220,37 @@ export class ContentService {
       { activityTitle: detected.title }
     );
 
+    // Validate each post against both fact checking and structural rules
     const validation = generated.posts.map((p) => {
-      const result = validatePost(p.content);
-      return { variant: p.variant, valid: result.valid, issues: result.issues };
+      const fc = factCheckPost(p.content, detected.evidence, { activityTitle: detected.title });
+      const struct = validatePost(p.content);
+      const valid = fc.passed && struct.valid;
+      const issues = [...fc.issues, ...struct.issues];
+
+      if (!valid) {
+        if (!fc.passed) {
+          errorTrackerService.recordError({
+            userId,
+            repositoryId: opportunity.repositoryId,
+            opportunityId: opportunity._id.toString(),
+            variant: p.variant,
+            errorType: 'fact_check_failure',
+            message: fc.issues.map((i) => i.message).join('; ')
+          });
+        }
+        if (!struct.valid) {
+          errorTrackerService.recordError({
+            userId,
+            repositoryId: opportunity.repositoryId,
+            opportunityId: opportunity._id.toString(),
+            variant: p.variant,
+            errorType: 'validation_failure',
+            message: struct.issues.map((i) => i.message).join('; ')
+          });
+        }
+      }
+
+      return { variant: p.variant, valid, issues };
     });
 
     // Structural gate: never persist degenerate variants (model misfires,
@@ -198,37 +258,89 @@ export class ContentService {
     // × valid variant; the caption is length-aware per platform.
     // Platform values are whitelisted at the settings layer, so no re-filter here.
     const platforms = (settings.autoPostPlatforms ?? []) as unknown as DraftPlatform[];
+    const connectedAccounts = await this.socialRepository.findAccountsByUserId(userId);
+    const todayStart = startOfLocalDay(new Date(), (settings as any).timezone);
+    const dayKey = getLocalDayKey(new Date(), (settings as any).timezone);
+
+    const accountsForPlatform = (platform: DraftPlatform) => {
+      const matching = connectedAccounts.filter(
+        (a) => a.platform === platform && a.connectionStatus === 'connected' && a.status === 'active'
+      );
+      const autoEnabled = matching.filter((a) => a.autoPostEnabled);
+      if (autoEnabled.length > 0) return autoEnabled;
+      const def = matching.find((a) => a.publishDefault) || matching[0];
+      return def ? [def] : [];
+    };
+
     const drafts: GeneratedDraft[] = [];
+    let hadValidVariants = false;
+
     for (const platform of platforms) {
-      for (const post of generated.posts) {
-        const v = validation.find((x) => x.variant === post.variant);
-        if (v && !v.valid) continue;
-        const draft = await this.draftService.createDraft(
-          {
+      const targets = accountsForPlatform(platform);
+      for (const target of targets) {
+        const targetAccountId = target._id.toString();
+        const draftedToday = await DraftModel.exists({
+          userId,
+          targetAccountIds: targetAccountId,
+          createdAt: { $gte: todayStart.toISOString() }
+        });
+        const publishedToday = await ProjectPostHistoryModel.exists({
+          userId,
+          accountId: targetAccountId,
+          dayKey
+        });
+
+        if (draftedToday || publishedToday) {
+          logger.info('[content.service] Daily post cap reached for account', {
+            userId,
+            accountId: targetAccountId,
+            platform
+          });
+          continue;
+        }
+
+        for (const post of generated.posts) {
+          const v = validation.find((x) => x.variant === post.variant);
+          if (v && !v.valid) continue;
+          hadValidVariants = true;
+
+          const draft = await this.draftService.createDraft(
+            {
+              platform,
+              contentType: 'post',
+              caption: capCaption(post.content, platform),
+              media: [],
+              targetAccountIds: [targetAccountId],
+              workspaceId: target.workspaceId,
+              sourceType: 'developer_activity',
+              developerActivityId: opportunity.activityId,
+              developerRepositoryId: opportunity.repositoryId,
+              developerOpportunityId: opportunity._id.toString(),
+              evidence: detected.evidence,
+              // Non-blocking verdicts auto-approve so automatic publish flows work (L9).
+              complianceApproved: true,
+              aiMetadata: {
+                variant: post.variant,
+                factCheck,
+                validation: v,
+                style: profile,
+                opportunityTitle: detected.title
+              }
+            },
+            userId
+          );
+          drafts.push({
+            id: draft._id.toString(),
+            variant: post.variant,
+            content: post.content,
             platform,
-            contentType: 'post',
-            caption: capCaption(post.content, platform),
-            media: [],
-            sourceType: 'developer_activity',
-            developerActivityId: opportunity.activityId,
-            developerRepositoryId: opportunity.repositoryId,
-            developerOpportunityId: opportunity._id.toString(),
-            evidence: detected.evidence,
-            aiMetadata: {
-              variant: post.variant,
-              factCheck,
-              validation: v,
-              style: profile,
-              opportunityTitle: detected.title
-            }
-          },
-          userId
-        );
-        drafts.push({ id: draft._id.toString(), variant: post.variant, content: post.content, platform });
+            repositoryId: opportunity.repositoryId
+          });
+        }
       }
     }
 
-    if (drafts.length === 0) {
+    if (drafts.length === 0 && !hadValidVariants) {
       // Status is intentionally NOT flipped: a retry may succeed.
       throw AppError.badRequest('All generated variants failed validation — no drafts persisted');
     }
@@ -386,11 +498,37 @@ export class ContentService {
     }
 
     let published = 0;
+    const dayKey = getLocalDayKey(new Date());
+
     for (const [platform, draft] of chosen) {
       try {
+        const existingDraft = await DraftModel.findById(draft.id).select('targetAccountIds');
+        const targetAccountIds = existingDraft?.targetAccountIds || [];
+        let capped = false;
+        for (const accId of targetAccountIds) {
+          const publishedToday = await ProjectPostHistoryModel.exists({
+            userId,
+            accountId: accId,
+            dayKey
+          });
+          if (publishedToday) {
+            capped = true;
+            break;
+          }
+        }
+        if (capped) {
+          logger.info('[developer] Skipping auto-publish: daily cap reached', { draftId: draft.id });
+          continue;
+        }
+
         const result = await this.draftService.publishNow(draft.id, userId);
         if (result.status === 'published') {
           published++;
+          if (draft.repositoryId) {
+            await projectHistoryService
+              .recordPublishedPost(userId, draft.repositoryId, draft.id)
+              .catch((err) => logger.warn('[developer] failed to record project history', { error: String(err) }));
+          }
         } else {
           logger.warn('[developer] auto-publish did not reach the platform', {
             platform,
@@ -433,14 +571,15 @@ export class ContentService {
   private async listDeveloperDrafts(userId: string) {
     const result = await this.draftRepository.findPaginated(userId, {
       limit: AUTO_SCAN_LIMIT,
-      offset: 0
+      offset: 0,
+      sourceType: 'developer_activity',
     });
-    return result.items.filter((d) => d.sourceType === 'developer_activity');
+    return result.items;
   }
 
   private async countRecentDeveloperDrafts(userId: string, windowStart: Date): Promise<number> {
     const drafts = await this.listDeveloperDrafts(userId);
-    return drafts.filter((d) => new Date(d.createdAt as unknown as string) >= windowStart).length;
+    return drafts.filter((d) => new Date(d.createdAt) >= windowStart).length;
   }
 
   private effectiveMax(settings: AutomationSettings): number {
@@ -481,11 +620,12 @@ export class ContentService {
     context: StoryContext,
     style: StyleProfile,
     styleInput: StyleInput,
-    customInstructions?: string | null
+    customInstructions?: string | null,
+    variants: PostVariant[] = VARIANTS
   ): Promise<{ posts: Array<{ variant: PostVariant; content: string }>; failed: Array<{ variant: PostVariant; error: string }> }> {
     const posts: Array<{ variant: PostVariant; content: string }> = [];
     const failed: Array<{ variant: PostVariant; error: string }> = [];
-    for (const variant of VARIANTS) {
+    for (const variant of variants) {
       try {
         const { system, prompt } = buildPostPrompt(variant, context, style, styleInput, customInstructions);
         const response = await this.ai.execute({

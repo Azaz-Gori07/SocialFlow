@@ -80,6 +80,12 @@ export function scoreImportance(activity: ScoredActivity): ImportanceScore {
   if (/breaking|BREAKING/i.test(msg)) { score += 15; reasons.push('Breaking change detected'); }
   if (/major|redesign|rewrite|architecture/i.test(msg)) { score += 10; reasons.push('Significant refactoring indicated'); }
   if (/v\d+\.\d+|release|version/i.test(msg)) { score += 8; reasons.push('Version/release related'); }
+  if (/(?:fix|bug|patch|resolve|closes|closed)\b/i.test(msg)) {
+    if (totalChanges >= 50) {
+      score += 8;
+      reasons.push('Significant bug fix/patch');
+    }
+  }
 
   // Cap score
   score = Math.min(100, score);
@@ -92,8 +98,11 @@ export function scoreImportance(activity: ScoredActivity): ImportanceScore {
   else if (score >= 10) level = 'LOW';
   else level = 'TRIVIAL';
 
-  // LinkedIn-worthy: MILESTONE or HIGH with reasons
-  const linkedInWorthy = (level === 'MILESTONE' || (level === 'HIGH' && reasons.length >= 3));
+  // LinkedIn-worthy: MILESTONE or HIGH with reasons or substantial diff
+  const linkedInWorthy = (
+    level === 'MILESTONE' ||
+    (level === 'HIGH' && (reasons.length >= 2 || totalChanges >= 150 || activity.commitCount >= 3))
+  );
 
   return { level, score, reasons, linkedInWorthy };
 }

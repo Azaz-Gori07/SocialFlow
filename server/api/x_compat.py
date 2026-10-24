@@ -21,6 +21,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import hmac
 import json
 import math
 import os
@@ -538,7 +539,7 @@ MAX_SECONDS = 45
 
 class handler(BaseHTTPRequestHandler):  # noqa: N801 - Vercel entrypoint contract
     def do_POST(self) -> None:  # noqa: N802
-        if not SECRET or self.headers.get("x-bridge-secret") != SECRET:
+        if not SECRET or not hmac.compare_digest(self.headers.get("x-bridge-secret") or "", SECRET):
             return _reply(self, 401, {"ok": False, "error": "unauthorized"})
 
         try:

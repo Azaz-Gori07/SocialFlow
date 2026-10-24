@@ -1,4 +1,7 @@
 import ComplianceCheckModel, { IComplianceCheck } from './compliance.model';
+import PostModel from '../post/post.model';
+import CustomRuleModel, { ICustomRule } from './customRule.model';
+import { imageHashService } from './imageHash.service';
 import {
   ComplianceInput,
   ComplianceResult,
@@ -9,6 +12,36 @@ import {
 } from './compliance-checker';
 import { AppError } from '../../shared/errors/appError';
 import { logger } from '../../shared/utils/logger';
+
+function getTermFrequency(text: string): Map<string, number> {
+  const words = (text || '').toLowerCase().match(/\b\w{3,}\b/g) || [];
+  const tf = new Map<string, number>();
+  for (const w of words) {
+    tf.set(w, (tf.get(w) || 0) + 1);
+  }
+  return tf;
+}
+
+export function computeCosineSimilarity(text1: string, text2: string): number {
+  const tf1 = getTermFrequency(text1);
+  const tf2 = getTermFrequency(text2);
+  if (tf1.size === 0 || tf2.size === 0) return 0;
+
+  let dotProduct = 0;
+  for (const [term, count1] of tf1) {
+    const count2 = tf2.get(term) || 0;
+    dotProduct += count1 * count2;
+  }
+
+  let mag1 = 0;
+  for (const count of tf1.values()) mag1 += count * count;
+  let mag2 = 0;
+  for (const count of tf2.values()) mag2 += count * count;
+
+  const magnitude = Math.sqrt(mag1) * Math.sqrt(mag2);
+  if (magnitude === 0) return 0;
+  return dotProduct / magnitude;
+}
 
 /**
  * Compliance memory (§17, §35): an identical content+media item analysed under
@@ -52,8 +85,93 @@ export class ComplianceService {
     input: ComplianceInput,
     meta?: { workspaceId?: string; rightsDeclaration?: ComplianceInput['rightsDeclaration']; sourceUrl?: string }
   ): Promise<ComplianceResult & { reused: boolean; recordId: string }> {
+    const computedMediaHashes = await imageHashService.computeMediaHashes(input.media || [], userId);
     const blockedMediaHashes = await this.blockedMediaHashes(userId, input.media);
     const result = checkContent({ ...input, blockedMediaHashes });
+
+    // Check media against perceptual / fingerprint blocked hashes
+    for (const h of computedMediaHashes) {
+      if (imageHashService.isBlockedMatch(h, blockedMediaHashes)) {
+        result.findings.push({
+          code: 'MEDIA_COPYRIGHT_VIOLATION',
+          severity: 'error',
+          message: 'Media matches a blocked copyright or duplicate image signature.',
+          evidence: h
+        });
+        result.status = 'blocked';
+        break;
+      }
+    }
+
+    // Check similarity against previously published posts
+    try {
+      const recentPosts = await PostModel.find({
+        userId,
+        content: { $exists: true, $ne: '' }
+      } as any)
+        .select('content')
+        .sort({ createdAt: -1 })
+        .limit(20)
+        .lean()
+        .exec();
+
+      for (const p of recentPosts) {
+        if (!p.content || p.content === input.content) continue;
+        const sim = computeCosineSimilarity(input.content, p.content);
+        if (sim >= 0.85) {
+          result.findings.push({
+            code: 'HIGH_SIMILARITY_DUPLICATE',
+            severity: 'warning',
+            message: `Content is ${Math.round(sim * 100)}% similar to an existing post. Consider revising for originality.`,
+            evidence: `similarity=${sim.toFixed(2)}`
+          });
+          if (result.status === 'clear' || result.status === 'low_risk') {
+            result.status = 'review_required';
+          }
+          break;
+        }
+      }
+    } catch (err) {
+      logger.warn('[compliance] similarity check non-fatal error', {
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
+
+    // Check custom rules
+    try {
+      const customRules = await CustomRuleModel.find({ userId, enabled: true }).lean().exec();
+      for (const rule of customRules) {
+        if (rule.platform && rule.platform !== 'all' && rule.platform !== input.platform) {
+          continue;
+        }
+        let matched = false;
+        if (rule.isRegex) {
+          try {
+            const re = new RegExp(rule.pattern, 'i');
+            matched = re.test(input.content || '');
+          } catch {}
+        } else {
+          matched = (input.content || '').toLowerCase().includes(rule.pattern.toLowerCase());
+        }
+
+        if (matched) {
+          result.findings.push({
+            code: `CUSTOM_RULE_${rule._id}`,
+            severity: rule.severity,
+            message: `Custom rule "${rule.name}" triggered: matched pattern "${rule.pattern}"`
+          });
+          if (rule.action === 'block') {
+            result.status = 'blocked';
+          } else if (rule.action === 'review' && result.status !== 'blocked') {
+            result.status = 'review_required';
+          }
+        }
+      }
+    } catch (err) {
+      logger.warn('[compliance] custom rules evaluation error', {
+        error: err instanceof Error ? err.message : String(err)
+      });
+    }
 
     const reusable = await this.findReusable(userId, result.contentHash, input.platform, result.mediaHash);
     if (reusable) {
@@ -69,6 +187,7 @@ export class ComplianceService {
       workspaceId: meta?.workspaceId,
       contentHash: result.contentHash,
       mediaHash: result.mediaHash,
+      mediaHashes: computedMediaHashes,
       platform: input.platform,
       policyVersion: result.policyVersion,
       status: result.status,
@@ -92,11 +211,21 @@ export class ComplianceService {
       userId,
       policyVersion: POLICY_VERSION,
       status: { $in: ['blocked', 'confirmed_violation'] },
-      mediaHash: { $exists: true, $ne: null }
+      $or: [
+        { mediaHash: { $exists: true, $ne: null } },
+        { mediaHashes: { $exists: true, $not: { $size: 0 } } }
+      ]
     } as any)
-      .select('mediaHash')
+      .select('mediaHash mediaHashes')
       .exec();
-    return rows.map((r) => r.mediaHash).filter((h): h is string => !!h);
+    const hashes: string[] = [];
+    for (const r of rows) {
+      if (r.mediaHash) hashes.push(r.mediaHash);
+      if (r.mediaHashes && Array.isArray(r.mediaHashes)) {
+        hashes.push(...r.mediaHashes);
+      }
+    }
+    return hashes;
   }
 
   /**
@@ -172,6 +301,135 @@ export class ComplianceService {
       } as any,
       { new: true }
     ).exec();
+  }
+
+  async listChecks(
+    userId: string,
+    opts?: { status?: string; limit?: number; offset?: number }
+  ): Promise<{ items: IComplianceCheck[]; total: number }> {
+    const query: Record<string, unknown> = { userId };
+    if (opts?.status) {
+      query.status = opts.status;
+    }
+    const limit = opts?.limit ?? 50;
+    const offset = opts?.offset ?? 0;
+
+    const [items, total] = await Promise.all([
+      ComplianceCheckModel.find(query as any)
+        .sort({ createdAt: -1 })
+        .skip(offset)
+        .limit(limit)
+        .exec(),
+      ComplianceCheckModel.countDocuments(query as any)
+    ]);
+    return { items, total };
+  }
+
+  async resolveCheck(
+    id: string,
+    userId: string,
+    resolution: { status: string; note?: string }
+  ): Promise<IComplianceCheck | null> {
+    const existing = await ComplianceCheckModel.findOne({ _id: id, userId } as any).exec();
+    if (!existing) throw AppError.notFound('Compliance check not found');
+
+    const findings = [...existing.findings];
+    if (resolution.note) {
+      findings.push({
+        code: 'ADMIN_RESOLUTION',
+        severity: 'info' as any,
+        message: resolution.note
+      });
+    }
+
+    return ComplianceCheckModel.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          status: resolution.status,
+          findings,
+          resolvedAt: new Date(),
+          resolvedBy: userId
+        }
+      } as any,
+      { new: true }
+    ).exec();
+  }
+
+  async getMetrics(userId: string): Promise<{
+    totalChecks: number;
+    clearCount: number;
+    reviewCount: number;
+    blockedCount: number;
+    claimedCount: number;
+    averageRiskScore: number;
+    topFindings: Array<{ code: string; count: number }>;
+  }> {
+    const checks = await ComplianceCheckModel.find({ userId } as any)
+      .select('status riskScore findings')
+      .lean()
+      .exec();
+
+    let totalChecks = checks.length;
+    let clearCount = 0;
+    let reviewCount = 0;
+    let blockedCount = 0;
+    let claimedCount = 0;
+    let totalRisk = 0;
+    const codeCounts = new Map<string, number>();
+
+    for (const c of checks) {
+      totalRisk += c.riskScore || 0;
+      if (c.status === 'clear' || c.status === 'low_risk') clearCount++;
+      else if (c.status === 'review_required') reviewCount++;
+      else if (c.status === 'blocked' || c.status === 'confirmed_violation') blockedCount++;
+      else if (c.status === 'claimed_after_publish') claimedCount++;
+
+      for (const f of c.findings || []) {
+        if (f.code) {
+          codeCounts.set(f.code, (codeCounts.get(f.code) || 0) + 1);
+        }
+      }
+    }
+
+    const topFindings = Array.from(codeCounts.entries())
+      .map(([code, count]) => ({ code, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    return {
+      totalChecks,
+      clearCount,
+      reviewCount,
+      blockedCount,
+      claimedCount,
+      averageRiskScore: totalChecks > 0 ? Number((totalRisk / totalChecks).toFixed(2)) : 0,
+      topFindings
+    };
+  }
+
+  /* -------------------------- Custom Rules CRUD --------------------------- */
+
+  async listRules(userId: string): Promise<ICustomRule[]> {
+    return CustomRuleModel.find({ userId }).sort({ createdAt: -1 }).exec();
+  }
+
+  async createRule(userId: string, data: Partial<ICustomRule>): Promise<ICustomRule> {
+    return CustomRuleModel.create({
+      ...data,
+      userId
+    });
+  }
+
+  async updateRule(id: string, userId: string, data: Partial<ICustomRule>): Promise<ICustomRule | null> {
+    const existing = await CustomRuleModel.findOne({ _id: id, userId }).exec();
+    if (!existing) throw AppError.notFound('Custom rule not found');
+    return CustomRuleModel.findByIdAndUpdate(id, { $set: data }, { new: true }).exec();
+  }
+
+  async deleteRule(id: string, userId: string): Promise<boolean> {
+    const result = await CustomRuleModel.deleteOne({ _id: id, userId }).exec();
+    return result.deletedCount > 0;
   }
 }
 export default ComplianceService;

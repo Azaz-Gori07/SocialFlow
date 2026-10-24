@@ -10,7 +10,8 @@ import {
   Star,
   AlertTriangle,
   RefreshCw,
-  KeyRound
+  KeyRound,
+  Zap
 } from 'lucide-react';
 import { PlatformBadge } from '../components/SocialIcons';
 import { XSessionPanel } from '../components/XSessionPanel';
@@ -46,6 +47,18 @@ export const ConnectedAccounts: React.FC = () => {
       setStatusMessage(`❌ ${err.message || 'Failed to update default preference'}`);
     } finally {
       setSavingDefaultId(null);
+    }
+  };
+
+  /**
+   * Toggles auto-post for an account (1 post/day cap).
+   */
+  const handleToggleAutoPost = async (acc: any) => {
+    try {
+      await api.social.toggleAutoPost(acc._id, !acc.autoPostEnabled);
+      setAccounts(prev => prev.map(a => a._id === acc._id ? { ...a, autoPostEnabled: !a.autoPostEnabled } : a));
+    } catch (err: any) {
+      setStatusMessage(`❌ ${err.message || 'Failed to update auto-post setting'}`);
     }
   };
 
@@ -313,25 +326,45 @@ export const ConnectedAccounts: React.FC = () => {
                                 </span>
                               </span>
                             </div>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleDefault(acc)}
-                              disabled={savingDefaultId === acc._id}
-                              title="Default: preselected for new content. Never affects already scheduled posts."
-                              style={{
-                                display: 'flex', alignItems: 'center', gap: '4px',
-                                fontSize: '0.68rem', fontWeight: 700,
-                                padding: '4px 8px', borderRadius: '9999px',
-                                border: acc.publishDefault ? '1px solid #fde68a' : '1px solid #e5e7eb',
-                                background: acc.publishDefault ? '#fef3c7' : '#ffffff',
-                                color: acc.publishDefault ? '#b45309' : '#6b7280',
-                                cursor: savingDefaultId === acc._id ? 'wait' : 'pointer',
-                                flexShrink: 0
-                              }}
-                            >
-                              <Star size={11} fill={acc.publishDefault ? '#f59e0b' : 'none'} color={acc.publishDefault ? '#f59e0b' : '#9ca3af'} />
-                              {acc.publishDefault ? 'Default' : 'Set default'}
-                            </button>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleAutoPost(acc)}
+                                title="Auto-post: enable for daily automated background posting (max 1 post/day per account)."
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '4px',
+                                  fontSize: '0.68rem', fontWeight: 700,
+                                  padding: '4px 8px', borderRadius: '9999px',
+                                  border: acc.autoPostEnabled ? '1px solid #93c5fd' : '1px solid #e5e7eb',
+                                  background: acc.autoPostEnabled ? '#eff6ff' : '#ffffff',
+                                  color: acc.autoPostEnabled ? '#1d4ed8' : '#6b7280',
+                                  cursor: 'pointer',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <Zap size={11} fill={acc.autoPostEnabled ? '#3b82f6' : 'none'} color={acc.autoPostEnabled ? '#3b82f6' : '#9ca3af'} />
+                                {acc.autoPostEnabled ? 'Auto-Post' : 'Enable Auto-Post'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleToggleDefault(acc)}
+                                disabled={savingDefaultId === acc._id}
+                                title="Default: preselected for new content. Never affects already scheduled posts."
+                                style={{
+                                  display: 'flex', alignItems: 'center', gap: '4px',
+                                  fontSize: '0.68rem', fontWeight: 700,
+                                  padding: '4px 8px', borderRadius: '9999px',
+                                  border: acc.publishDefault ? '1px solid #fde68a' : '1px solid #e5e7eb',
+                                  background: acc.publishDefault ? '#fef3c7' : '#ffffff',
+                                  color: acc.publishDefault ? '#b45309' : '#6b7280',
+                                  cursor: savingDefaultId === acc._id ? 'wait' : 'pointer',
+                                  flexShrink: 0
+                                }}
+                              >
+                                <Star size={11} fill={acc.publishDefault ? '#f59e0b' : 'none'} color={acc.publishDefault ? '#f59e0b' : '#9ca3af'} />
+                                {acc.publishDefault ? 'Default' : 'Set default'}
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>

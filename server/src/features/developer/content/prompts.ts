@@ -9,7 +9,14 @@
 import { FactCheckEvidence } from './fact-checker';
 import { StyleProfile, serializeStyleGuide, serializeLearningContext, StyleInput } from './style-analyzer';
 
-export type PostVariant = 'story' | 'technical' | 'short_casual';
+export type PostVariant =
+  | 'story'
+  | 'technical'
+  | 'short_casual'
+  | 'first_post'
+  | 'returning'
+  | 'day_summary'
+  | 'single_milestone';
 
 export interface StoryContext {
   projectName: string;
@@ -55,7 +62,6 @@ export function buildStoryContext(opts: {
 export function serializeStoryContext(ctx: StoryContext): string {
   const lines: string[] = [];
   lines.push(`Project: ${ctx.projectName}`);
-  if (ctx.projectDescription) lines.push(`Description: ${ctx.projectDescription}`);
   if (ctx.techStack.length) lines.push(`Tech stack: ${ctx.techStack.join(', ')}`);
   if (ctx.journey.length) lines.push(`Project journey: ${ctx.journey.join(' → ')}`);
   lines.push(`Work: ${ctx.activityTitle}`);
@@ -91,14 +97,20 @@ export interface PostGenRequest {
    * Never overrides evidence requirements or safety rules.
    */
   customInstructions?: string | null;
+  platform?: string;
 }
 
+const VARIANT_INSTRUCTIONS: Record<PostVariant, string> = {
+  story: 'Write a story-focused post: a clear hook, what the problem was, why it mattered, what you tried, the fix, and what you learned. Narrative arc preferred.',
+  technical: 'Write a technical post: describe the problem, the technical approach, the concrete change (files/areas), and the result. Depth over narrative.',
+  short_casual: 'Write a short, casual post: brief hook, 1-2 sentences of context, the fix, and a takeaway. Keep it under ~200 words.',
+  first_post: 'Write an introductory post for this project: hook the reader on why this project exists, what core problem it solves, and highlight the latest work as a milestone. Welcoming and inspiring tone.',
+  returning: 'Write an update announcing a return to this project after a pause: acknowledge restarting progress, describe the fresh energy/focus, and detail what was just built.',
+  day_summary: "Write a daily digest of today's engineering accomplishments: summarize the key changes across commits/PRs, highlight the biggest win, and share next steps.",
+  single_milestone: 'Write a milestone celebration post: clearly announce the significant achievement (major feature, release, or key fix), the engineering challenge overcome, and the impact.'
+};
+
 export function buildLinkedInPostPrompt(req: PostGenRequest): { system: string; prompt: string } {
-  const variantInstructions: Record<PostVariant, string> = {
-    story: 'Write a story-focused post: a clear hook, what the problem was, why it mattered, what you tried, the fix, and what you learned. Narrative arc preferred.',
-    technical: 'Write a technical post: describe the problem, the technical approach, the concrete change (files/areas), and the result. Depth over narrative.',
-    short_casual: 'Write a short, casual post: brief hook, 1-2 sentences of context, the fix, and a takeaway. Keep it under ~200 words.'
-  };
   const system =
     'You write authentic LinkedIn posts for developers based ONLY on the provided project evidence.\n' +
     'RULES:\n' +
@@ -114,27 +126,102 @@ export function buildLinkedInPostPrompt(req: PostGenRequest): { system: string; 
     'Follow this style guide:\n' + req.styleGuide;
 
   const prompt =
-    `${variantInstructions[req.variant]}\n\n` +
+    `${VARIANT_INSTRUCTIONS[req.variant]}\n\n` +
     `=== PROJECT CONTEXT (verified evidence only) ===\n${req.storyContext}\n\n` +
     'Write the LinkedIn post now. Output only the post body.';
 
   return { system, prompt };
 }
 
-/** Build the full system+prompt pair for one variant. */
+export function buildTwitterPostPrompt(req: PostGenRequest): { system: string; prompt: string } {
+  const system =
+    'You write authentic X/Twitter posts for developers based ONLY on verified project evidence.\n' +
+    'RULES:\n' +
+    '- CRITICAL: The post MUST be strictly UNDER 280 characters total. Keep it concise, punchy, and complete.\n' +
+    '- Never invent facts, metrics, or claims outside the evidence.\n' +
+    '- First-person developer voice, authentic and direct.\n' +
+    '- At most 1-2 relevant hashtags.\n' +
+    (req.customInstructions?.trim()
+      ? 'USER CONTENT PREFERENCES:\n' + req.customInstructions.trim() + '\n'
+      : '');
+
+  const prompt =
+    `${VARIANT_INSTRUCTIONS[req.variant]}\n` +
+    'CRITICAL CONSTRAINT: Output must be under 280 characters.\n\n' +
+    `=== PROJECT CONTEXT ===\n${req.storyContext}\n\n` +
+    'Write the tweet now. Output only the tweet text.';
+
+  return { system, prompt };
+}
+
+export function buildThreadsPostPrompt(req: PostGenRequest): { system: string; prompt: string } {
+  const system =
+    'You write engaging Meta Threads posts for developers based ONLY on verified project evidence.\n' +
+    'RULES:\n' +
+    '- CRITICAL: Keep under 500 characters total.\n' +
+    '- Authentic developer conversational voice, clean bullet points or short paragraphs.\n' +
+    '- Never invent unverified metrics or claims.\n' +
+    (req.customInstructions?.trim()
+      ? 'USER CONTENT PREFERENCES:\n' + req.customInstructions.trim() + '\n'
+      : '');
+
+  const prompt =
+    `${VARIANT_INSTRUCTIONS[req.variant]}\n` +
+    'CRITICAL CONSTRAINT: Output must be under 500 characters.\n\n' +
+    `=== PROJECT CONTEXT ===\n${req.storyContext}\n\n` +
+    'Write the Threads post now. Output only the post body.';
+
+  return { system, prompt };
+}
+
+export function buildInstagramPostPrompt(req: PostGenRequest): { system: string; prompt: string } {
+  const system =
+    'You write engaging Instagram captions for developer projects based ONLY on verified project evidence.\n' +
+    'RULES:\n' +
+    '- Strong opening hook in the first line.\n' +
+    '- Clean line breaks between short paragraphs for readability.\n' +
+    '- 3-5 relevant developer/project hashtags at the end.\n' +
+    '- Never invent unverified metrics.\n' +
+    (req.customInstructions?.trim()
+      ? 'USER CONTENT PREFERENCES:\n' + req.customInstructions.trim() + '\n'
+      : '');
+
+  const prompt =
+    `${VARIANT_INSTRUCTIONS[req.variant]}\n\n` +
+    `=== PROJECT CONTEXT ===\n${req.storyContext}\n\n` +
+    'Write the Instagram caption now. Output only the caption.';
+
+  return { system, prompt };
+}
+
+/** Build the full system+prompt pair for one variant and optional platform target. */
 export function buildPostPrompt(
   variant: PostVariant,
   context: StoryContext,
   style: StyleProfile,
   styleInput?: StyleInput,
-  customInstructions?: string | null
+  customInstructions?: string | null,
+  platform?: string
 ): { system: string; prompt: string } {
-  return buildLinkedInPostPrompt({
+  const req: PostGenRequest = {
     variant,
     storyContext: serializeStoryContext(context),
     styleGuide: serializeStyleGuide(style) + '\n' + (styleInput ? serializeLearningContext(styleInput) : ''),
-    customInstructions
-  });
+    customInstructions,
+    platform
+  };
+
+  const p = (platform || '').toLowerCase();
+  if (p === 'twitter' || p === 'x') {
+    return buildTwitterPostPrompt(req);
+  }
+  if (p === 'threads') {
+    return buildThreadsPostPrompt(req);
+  }
+  if (p === 'instagram') {
+    return buildInstagramPostPrompt(req);
+  }
+  return buildLinkedInPostPrompt(req);
 }
 
 /**

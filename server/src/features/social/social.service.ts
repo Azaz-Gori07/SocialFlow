@@ -282,6 +282,20 @@ export class SocialService {
     return toSafeAccount(updated);
   }
 
+  async setAutoPost(
+    id: string,
+    userId: string,
+    autoPostEnabled: boolean
+  ): Promise<ReturnType<typeof toSafeAccount>> {
+    const account = await this.socialRepository.findAccountById(id);
+    if (!account) throw AppError.notFound('Social account not found');
+    if (account.userId !== userId) throw AppError.forbidden('Unauthorized access to this social account');
+
+    const updated = await this.socialRepository.updateAccount(id, { autoPostEnabled });
+    if (!updated) throw AppError.internal('Failed to update social account');
+    return toSafeAccount(updated);
+  }
+
   async disconnectAccount(id: string, userId: string): Promise<void> {
     const account = await this.socialRepository.findAccountById(id);
     if (!account) throw AppError.notFound('Social account not found');

@@ -27,6 +27,7 @@ export const createDraftSchema = z.object({
   // Account-level targeting — validated server-side (ownership, workspace,
   // platform, connection). Absent on legacy clients → historical fan-out.
   targetAccountIds: z.array(z.string()).optional(),
+  complianceApproved: z.boolean().optional(),
   workspaceId: z.string().optional()
 });
 
@@ -42,6 +43,7 @@ export const updateDraftSchema = z.object({
   media: z.array(mediaRefSchema).optional(),
   status: draftStatusEnum.optional(),
   targetAccountIds: z.array(z.string()).optional(),
+  complianceApproved: z.boolean().optional(),
   workspaceId: z.string().optional()
 });
 

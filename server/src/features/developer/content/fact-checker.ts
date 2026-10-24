@@ -135,11 +135,13 @@ export interface PostValidation {
   issues: ValidationIssue[];
 }
 
-export function validatePost(post: string): PostValidation {
+export function validatePost(post: string, platform?: string): PostValidation {
   const issues: ValidationIssue[] = [];
   const words = post.trim().split(/\s+/).filter(Boolean).length;
+  const isShortPlatform = platform === 'twitter' || platform === 'x' || platform === 'threads';
+  const minWords = isShortPlatform ? 5 : 30;
 
-  if (words < 30) issues.push({ severity: 'error', message: 'Post too short (<30 words).' });
+  if (words < minWords) issues.push({ severity: 'error', message: `Post too short (<${minWords} words).` });
   if (words > 1300) issues.push({ severity: 'warning', message: 'Post very long (>1300 words) — LinkedIn truncates at ~1300.' });
 
   const hashtags = post.match(/#\w+/g) ?? [];

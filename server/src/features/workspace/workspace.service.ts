@@ -179,11 +179,15 @@ export class WorkspaceService {
     }
 
     const members = await this.workspaceRepository.listMembers(workspaceId);
-    
-    // Enrich member list with profiles from userRepository
+    if (members.length === 0) return [];
+
+    // One batch query instead of one roundtrip per member (N+1).
+    const users = await this.userRepository.findByIds(members.map((m) => m.userId));
+    const byId = new Map(users.map((u) => [u._id.toString(), u]));
+
     const enrichedList = [];
     for (const member of members) {
-      const user = await this.userRepository.findById(member.userId);
+      const user = byId.get(member.userId);
       if (user) {
         enrichedList.push({
           userId: user._id.toString(),

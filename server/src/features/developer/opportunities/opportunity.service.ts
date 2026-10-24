@@ -49,7 +49,8 @@ export function isWorthyActivity(activity: IDeveloperActivity): boolean {
   return !!activity.linkedInWorthy
     || !!activity.isMilestone
     || activity.importance === 'HIGH'
-    || activity.importance === 'MILESTONE';
+    || activity.importance === 'MILESTONE'
+    || (activity.importanceScore ?? 0) >= 45;
 }
 
 export class OpportunityService {

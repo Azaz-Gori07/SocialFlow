@@ -17,6 +17,10 @@ interface AutomationSettings {
   schedMaxPosts: number;
   defaultTone: string;
   timezone: string;
+  dailyWindowEndHour?: number;
+  dailyWindowEndMinute?: number;
+  dailyPublishHour?: number;
+  dailyPublishMinute?: number;
 }
 
 const AI_LENGTHS = [
@@ -96,6 +100,12 @@ export const DeveloperSettings: React.FC = () => {
       setError('Minimum posts cannot be greater than maximum posts.');
       return;
     }
+    const windowEndMinutes = (Number(form.dailyWindowEndHour ?? 17) * 60) + Number(form.dailyWindowEndMinute ?? 30);
+    const publishMinutes = (Number(form.dailyPublishHour ?? 18) * 60) + Number(form.dailyPublishMinute ?? 0);
+    if (publishMinutes <= windowEndMinutes) {
+      setError('Daily publish time must be strictly after the window cut-off time.');
+      return;
+    }
     setSaving(true);
     setError('');
     try {
@@ -112,7 +122,11 @@ export const DeveloperSettings: React.FC = () => {
         schedMinPosts: Number(form.schedMinPosts),
         schedMaxPosts: Number(form.schedMaxPosts),
         defaultTone: form.defaultTone,
-        timezone: form.timezone
+        timezone: form.timezone,
+        dailyWindowEndHour: Number(form.dailyWindowEndHour ?? 17),
+        dailyWindowEndMinute: Number(form.dailyWindowEndMinute ?? 30),
+        dailyPublishHour: Number(form.dailyPublishHour ?? 18),
+        dailyPublishMinute: Number(form.dailyPublishMinute ?? 0)
       });
       setForm(updated);
       setSaved(true);
@@ -477,6 +491,98 @@ export const DeveloperSettings: React.FC = () => {
               onChange={e => setForm(f => (f ? { ...f, schedMaxPosts: Number(e.target.value) } : f))}
               style={{ height: '40px' }}
             />
+          </div>
+        </div>
+
+        {/* Daily Schedule Window */}
+        <div style={{
+          borderTop: '1px solid #f3f4f6',
+          paddingTop: '16px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '12px'
+        }}>
+          <div>
+            <h4 style={{ fontSize: '0.875rem', fontWeight: 600, color: '#111827', margin: '0 0 4px 0' }}>
+              Daily Publishing Window & Timing
+            </h4>
+            <p style={{ fontSize: '0.75rem', color: '#6b7280', margin: 0 }}>
+              Specify the daily cut-off time for code activity collection and the target delivery time when auto-publishing runs.
+            </p>
+          </div>
+
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, 1fr)',
+            gap: '16px'
+          }} className="responsive-grid-2-col">
+            <div style={{ background: '#f9fafb', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+                Activity Window Cut-off (Local Time)
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="dev-window-hour" style={{ display: 'block', fontSize: '0.7rem', color: '#6b7280', marginBottom: '2px' }}>Hour (0-23)</label>
+                  <input
+                    id="dev-window-hour"
+                    type="number"
+                    min={0}
+                    max={23}
+                    className="form-input"
+                    value={form.dailyWindowEndHour ?? 17}
+                    onChange={e => setForm(f => (f ? { ...f, dailyWindowEndHour: Number(e.target.value) } : f))}
+                    style={{ height: '36px' }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="dev-window-min" style={{ display: 'block', fontSize: '0.7rem', color: '#6b7280', marginBottom: '2px' }}>Minute (0-59)</label>
+                  <input
+                    id="dev-window-min"
+                    type="number"
+                    min={0}
+                    max={59}
+                    className="form-input"
+                    value={form.dailyWindowEndMinute ?? 30}
+                    onChange={e => setForm(f => (f ? { ...f, dailyWindowEndMinute: Number(e.target.value) } : f))}
+                    style={{ height: '36px' }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background: '#f9fafb', padding: '12px 14px', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
+              <span style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#374151', marginBottom: '8px' }}>
+                Scheduled Publish Time (Must be after cut-off)
+              </span>
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="dev-publish-hour" style={{ display: 'block', fontSize: '0.7rem', color: '#6b7280', marginBottom: '2px' }}>Hour (0-23)</label>
+                  <input
+                    id="dev-publish-hour"
+                    type="number"
+                    min={0}
+                    max={23}
+                    className="form-input"
+                    value={form.dailyPublishHour ?? 18}
+                    onChange={e => setForm(f => (f ? { ...f, dailyPublishHour: Number(e.target.value) } : f))}
+                    style={{ height: '36px' }}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label htmlFor="dev-publish-min" style={{ display: 'block', fontSize: '0.7rem', color: '#6b7280', marginBottom: '2px' }}>Minute (0-59)</label>
+                  <input
+                    id="dev-publish-min"
+                    type="number"
+                    min={0}
+                    max={59}
+                    className="form-input"
+                    value={form.dailyPublishMinute ?? 0}
+                    onChange={e => setForm(f => (f ? { ...f, dailyPublishMinute: Number(e.target.value) } : f))}
+                    style={{ height: '36px' }}
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

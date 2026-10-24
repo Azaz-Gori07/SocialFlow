@@ -210,6 +210,34 @@ export const Scheduler: React.FC = () => {
     if (selectedChannel !== 'all' && !post.platforms.includes(selectedChannel)) {
       return false;
     }
+    if (selectedTimeFilter && post.scheduledAt) {
+      const scheduled = new Date(post.scheduledAt).getTime();
+      const now = Date.now();
+      if (selectedTimeFilter === 'upcoming' && scheduled < now) {
+        return false;
+      }
+      if (selectedTimeFilter === 'today') {
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        if (scheduled < startOfDay.getTime() || scheduled > endOfDay.getTime()) {
+          return false;
+        }
+      }
+      if (selectedTimeFilter === 'this week') {
+        const endOfWeek = now + 7 * 24 * 60 * 60 * 1000;
+        if (scheduled < now || scheduled > endOfWeek) {
+          return false;
+        }
+      }
+      if (selectedTimeFilter === 'this month') {
+        const endOfMonth = now + 30 * 24 * 60 * 60 * 1000;
+        if (scheduled < now || scheduled > endOfMonth) {
+          return false;
+        }
+      }
+    }
     return true;
   });
 

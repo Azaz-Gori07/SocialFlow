@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import jwt from 'jsonwebtoken';
 import { env } from '../../../shared/config/env.config';
 import { AppError } from '../../../shared/errors/appError';
@@ -6,11 +7,16 @@ import { GitHubUser, getUser } from './github.client';
 /**
  * GitHub OAuth (read:user repo). The `state` parameter is a short-lived signed
  * JWT bound to the user, so a stolen callback link cannot be replayed to bind
- * someone else's GitHub account.
+ * someone else's GitHub account. Uses an isolated signing key so stolen access
+ * tokens cannot be reused as state tokens (S8).
  */
 const GITHUB_AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const STATE_TTL_SECONDS = 600;
+const STATE_SECRET = crypto
+  .createHash('sha256')
+  .update(`socialflow-github-oauth-state:${env.JWT_SECRET}`)
+  .digest('hex');
 /** Same ceiling as the API client: a hung token exchange must not hang the callback. */
 const FETCH_TIMEOUT_MS = 15_000;
 
@@ -23,7 +29,7 @@ function requireCredentials(): { clientId: string; clientSecret: string } {
 
 export function getAuthUrl(userId: string): string {
   const { clientId } = requireCredentials();
-  const state = jwt.sign({ userId, provider: 'github' }, env.JWT_SECRET, {
+  const state = jwt.sign({ userId, provider: 'github' }, STATE_SECRET, {
     expiresIn: STATE_TTL_SECONDS
   });
   const params = new URLSearchParams({
@@ -42,7 +48,7 @@ export function getAuthUrl(userId: string): string {
 /** Verify the state JWT and return the user it was issued for. */
 export function verifyState(state: string): string {
   try {
-    const claims = jwt.verify(state, env.JWT_SECRET) as { userId?: string; provider?: string };
+    const claims = jwt.verify(state, STATE_SECRET) as { userId?: string; provider?: string };
     if (claims.provider !== 'github' || !claims.userId) {
       throw AppError.badRequest('Invalid OAuth state');
     }
