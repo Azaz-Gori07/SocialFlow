@@ -120,7 +120,9 @@ export const DeveloperDashboard: React.FC<DeveloperDashboardProps> = ({ refreshK
     try {
       const res = await api.developer.getGithubAuthUrl();
       if (!res?.url) throw new Error('No authorization URL was returned.');
-      window.open(res.url, 'developer-github-oauth', 'width=680,height=760');
+      // Same-tab navigation: window.open() after the await is silently dropped
+      // by popup blockers because the user gesture has already expired.
+      window.location.href = res.url;
     } catch (err) {
       console.error(err);
       setError(err instanceof Error ? err.message : 'Could not start the GitHub connection.');

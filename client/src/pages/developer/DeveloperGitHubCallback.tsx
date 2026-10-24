@@ -42,11 +42,14 @@ export const DeveloperGitHubCallback: React.FC = () => {
       try {
         const res = await api.developer.completeGithubAuth(code, state);
         if (cancelled) return;
-        setMessage(`Connected as ${res?.login || 'GitHub account'}. You can close this window.`);
+        setMessage(`Connected as ${res?.login || 'GitHub account'}.`);
         // Same-origin only: the opener is our own SPA, never a third party.
         if (window.opener) {
           window.opener.postMessage({ type: 'developer:github-connected' }, window.location.origin);
           window.setTimeout(() => window.close(), 1200);
+        } else {
+          // Same-tab flow: return to the developer dashboard.
+          window.setTimeout(() => { window.location.href = '/developer'; }, 1200);
         }
       } catch (err) {
         if (!cancelled) setMessage(err instanceof Error ? err.message : 'GitHub connection failed.');
