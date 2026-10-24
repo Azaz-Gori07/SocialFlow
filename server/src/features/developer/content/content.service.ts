@@ -654,7 +654,10 @@ export class ContentService {
       }
     });
     if (posts.length === 0) {
-      throw AppError.providerError('AI generation failed for every variant');
+      // Carry the per-variant reasons so API consumers see WHY generation
+      // failed instead of a bare "failed for every variant".
+      const detail = failed.map((f) => `${f.variant}: ${f.error}`).join('; ').slice(0, 400);
+      throw AppError.providerError(`AI generation failed for every variant (${detail})`);
     }
     return { posts, failed };
   }
