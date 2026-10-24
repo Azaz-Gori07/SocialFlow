@@ -5,6 +5,8 @@ export interface AIRequest {
   prompt: string;
   /** Optional additional parameters */
   options?: Record<string, any>;
+  /** Per-call abort budget in ms; defaults to the provider's 30s. */
+  timeoutMs?: number;
 }
 
 export interface AIResponse {

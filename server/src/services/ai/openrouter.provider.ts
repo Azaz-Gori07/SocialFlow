@@ -14,9 +14,10 @@ export class OpenRouterProvider {
     this.config = config;
   }
 
-  async call(request: AIRequest, timeoutMs: number = 30000): Promise<AIResponse> {
+  async call(request: AIRequest, timeoutMs?: number): Promise<AIResponse> {
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
+    const budget = timeoutMs ?? request.timeoutMs ?? 30000;
+    const timeout = setTimeout(() => controller.abort(), budget);
 
     const body: Record<string, any> = {
       model: this.config.model,
