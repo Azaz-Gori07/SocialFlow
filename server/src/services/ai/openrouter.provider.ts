@@ -41,6 +41,14 @@ export class OpenRouterProvider {
     try {
       const res = await fetch(this.endpoint, init);
       const data = await res.json();
+      // Surface provider HTTP errors (401 bad key, 402 out of credits, 429
+      // rate limit, ...) — otherwise they masquerade downstream as
+      // "unexpected response shape" and the real cause is lost.
+      if (!res.ok) {
+        const message = (data as { error?: { message?: string } })?.error?.message
+          || JSON.stringify(data).slice(0, 200);
+        throw new Error(`AI provider HTTP ${res.status}: ${message}`);
+      }
       return { data };
     } finally {
       clearTimeout(timeout);
