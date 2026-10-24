@@ -623,10 +623,12 @@ export class ContentService {
     customInstructions?: string | null,
     variants: PostVariant[] = VARIANTS
   ): Promise<{ posts: Array<{ variant: PostVariant; content: string }>; failed: Array<{ variant: PostVariant; error: string }> }> {
-    const posts: Array<{ variant: PostVariant; content: string }> = [];
-    const failed: Array<{ variant: PostVariant; error: string }> = [];
-    for (const variant of variants) {
-      try {
+    // Parallel, not sequential: three LLM round-trips in a row exceed the
+    // 60s serverless function ceiling on entry-level plans; one round-trip
+    // of concurrent calls fits with headroom. Per-variant failures are
+    // still captured individually via allSettled.
+    const settled = await Promise.allSettled(
+      variants.map(async (variant) => {
         const { system, prompt } = buildPostPrompt(variant, context, style, styleInput, customInstructions);
         const response = await this.ai.execute({
           prompt: flattenPrompt(system, prompt),
@@ -634,13 +636,20 @@ export class ContentService {
           // than a long one — review trims, cutoff corrupts.
           options: { temperature: 0.7, max_tokens: 2000 }
         });
-        posts.push({ variant, content: trimPost(AIService.extractText(response.data)) });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        logger.error('[developer] post variant generation failed', { variant, error: message });
-        failed.push({ variant, error: message });
+        return { variant, content: trimPost(AIService.extractText(response.data)) };
+      })
+    );
+    const posts: Array<{ variant: PostVariant; content: string }> = [];
+    const failed: Array<{ variant: PostVariant; error: string }> = [];
+    settled.forEach((result, i) => {
+      if (result.status === 'fulfilled') {
+        posts.push(result.value);
+      } else {
+        const message = result.reason instanceof Error ? result.reason.message : String(result.reason);
+        logger.error('[developer] post variant generation failed', { variant: variants[i], error: message });
+        failed.push({ variant: variants[i], error: message });
       }
-    }
+    });
     if (posts.length === 0) {
       throw AppError.providerError('AI generation failed for every variant');
     }
