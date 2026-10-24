@@ -30,6 +30,7 @@ import { shouldSkipOpportunity, draftsTowardScheduleCap } from './smart-skip';
 import { projectHistoryService } from '../repositories/projectHistory.service';
 import { errorTrackerService } from './errorTracker.service';
 import { DraftModel } from '../../draft/draft.model';
+import { WorkspaceModel } from '../../workspace/workspace.model';
 import { ProjectPostHistoryModel } from '../history/projectHistory.model';
 import { startOfLocalDay, getLocalDayKey } from '../../../shared/utils/time';
 
@@ -259,8 +260,16 @@ export class ContentService {
     // Platform values are whitelisted at the settings layer, so no re-filter here.
     const platforms = (settings.autoPostPlatforms ?? []) as unknown as DraftPlatform[];
     const connectedAccounts = await this.socialRepository.findAccountsByUserId(userId);
-    const todayStart = startOfLocalDay(new Date(), (settings as any).timezone);
-    const dayKey = getLocalDayKey(new Date(), (settings as any).timezone);
+    const todayStart = startOfLocalDay(new Date(), (settings.timezone as string) || 'UTC');
+    const dayKey = getLocalDayKey(new Date(), (settings.timezone as string) || 'UTC');
+    // Target validation requires a draft workspaceId. Legacy social accounts
+    // predate workspace scoping and carry none, so fall back to the user's
+    // own workspace for the drafts created here.
+    const userWorkspace = await WorkspaceModel.findOne({ ownerId: userId }).select('_id').lean();
+    if (!userWorkspace) {
+      throw AppError.badRequest('No workspace found for user; drafts with targets require one.');
+    }
+    const fallbackWorkspaceId = userWorkspace._id.toString();
 
     const accountsForPlatform = (platform: DraftPlatform) => {
       const matching = connectedAccounts.filter(
@@ -311,7 +320,7 @@ export class ContentService {
               caption: capCaption(post.content, platform),
               media: [],
               targetAccountIds: [targetAccountId],
-              workspaceId: target.workspaceId,
+              workspaceId: target.workspaceId ?? fallbackWorkspaceId,
               sourceType: 'developer_activity',
               developerActivityId: opportunity.activityId,
               developerRepositoryId: opportunity.repositoryId,
