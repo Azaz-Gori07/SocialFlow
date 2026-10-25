@@ -251,7 +251,10 @@ export class DraftService {
     const draft = await this.draftRepository.findById(id);
     if (!draft) throw AppError.notFound('Draft not found');
     if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
-    const externalPostId = (draft.platformResponse as { externalPostId?: string } | undefined)?.externalPostId;
+    // platformResponse persists the provider urn as `postId` (schema field);
+    // accept the externalPostId alias for callers that use the older name.
+    const pr = draft.platformResponse as { externalPostId?: string; postId?: string } | undefined;
+    const externalPostId = pr?.externalPostId ?? pr?.postId;
     if (draft.status !== 'published' || !externalPostId) {
       throw AppError.badRequest('Draft is not a published post with a provider post id');
     }
