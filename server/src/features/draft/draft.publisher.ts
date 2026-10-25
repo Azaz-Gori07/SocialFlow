@@ -107,6 +107,16 @@ export class DraftPublisher {
     const { _id: draftId, userId, platform, caption, media } = draft;
     const draftIdStr = draftId.toString();
 
+    if (draft.status === 'ready') {
+      // Atomic claim: the opportunistic sweep races explicit publish calls;
+      // without it both created a Post and delivered twice.
+      const claimed = await this.draftRepository.claimForPublishing(draftIdStr);
+      if (!claimed) {
+        logger.warn(`[DraftPublisher] Draft ${draftId} claimed by another worker. Skipping.`);
+        return draft;
+      }
+      draft = claimed;
+    }
     if (draft.status === 'publishing') {
       logger.warn(`[DraftPublisher] Draft ${draftId} is already publishing. Skipping.`);
       return draft;
@@ -298,7 +308,13 @@ export class DraftPublisher {
       });
       logger.info(`[DraftPublisher] Draft ${draftId} published to ${draft.platform}. Auto-archived.`);
     } else if (allFailed) {
-      await this.failDraft(draft, errors.join('; ') || 'Unknown publishing error', 'PUBLISH_FAILED', true);
+      const failureMessage = errors.join('; ') || 'Unknown publishing error';
+      await this.failDraft(draft, failureMessage, 'PUBLISH_FAILED', true);
+      // A compliance block can never succeed on retry — keep it out of the
+      // auto-retry queue so blocked content isn't re-attempted three times.
+      if (/compliance/i.test(failureMessage)) {
+        await this.draftRepository.update(draftId.toString(), { retryCount: 99 } as any);
+      }
       await this.webhooks.dispatch(post.workspaceId, 'post.failed', {
         draftId,
         platform: draft.platform,

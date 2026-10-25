@@ -164,6 +164,19 @@ export class DraftRepository {
   }
 
   // Phase 2: Mark as failed with error details
+  /**
+   * Atomic ready→publishing claim. Returns null when another worker already
+   * took the draft — closes the check-then-act race between the opportunistic
+   * sweep and an explicit publish call, which double-created Posts.
+   */
+  async claimForPublishing(id: string): Promise<IDraft | null> {
+    return DraftModel.findOneAndUpdate(
+      { _id: id, status: 'ready' } as DraftQuery,
+      { $set: { status: 'publishing' } } as any,
+      { new: true }
+    ).exec();
+  }
+
   async markFailed(
     id: string,
     errorMessage: string
