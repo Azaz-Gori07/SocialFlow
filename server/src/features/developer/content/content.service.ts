@@ -22,11 +22,13 @@ import {
   buildStoryContext,
   buildPostPrompt,
   flattenPrompt,
-  trimPost
+  trimPost,
+  focusStoryEvidence
 } from './prompts';
 import { WritingTone, StyleInput, analyzeStyle, StyleProfile } from './style-analyzer';
 import { FactCheckResult, PostValidation, factCheckPost, validatePost } from './fact-checker';
 import { shouldSkipOpportunity, draftsTowardScheduleCap } from './smart-skip';
+import { semanticReview } from './semantic-review';
 import { projectHistoryService } from '../repositories/projectHistory.service';
 import { errorTrackerService } from './errorTracker.service';
 import { DraftModel } from '../../draft/draft.model';
@@ -163,6 +165,10 @@ export class ContentService {
     if (!this.ai.isConfigured) throw AppError.providerNotConfigured('AI');
 
     const memory = opts?.memoryContext ?? await this.buildMemoryContext(userId, opportunity.repositoryId);
+    const focused = focusStoryEvidence({
+      changes: detected.changes ?? [],
+      commitCount: (detected.evidence as { commitCount?: number }).commitCount ?? (detected.changes ?? []).length
+    });
     const context = buildStoryContext({
       projectName: repository.name ?? repository.fullName,
       // Never feed the free-text repository description: it is user
@@ -173,7 +179,8 @@ export class ContentService {
       journey: memory.journey,
       problem: detected.problem,
       activityTitle: detected.title,
-      changes: detected.changes,
+      focusCommit: focused.focusCommit,
+      changes: focused.changes,
       affectedAreas: detected.affectedAreas,
       evidence: detected.evidence,
       relatedMemoryHints: memory.relatedHints
@@ -218,15 +225,25 @@ export class ContentService {
     const factCheck = factCheckPost(
       generated.posts.map((p) => p.content).join('\n'),
       detected.evidence,
-      { activityTitle: detected.title }
+      { activityTitle: detected.title, evidenceText: buildEvidenceText(detected) }
     );
 
     // Validate each post against both fact checking and structural rules
     const validation = generated.posts.map((p) => {
-      const fc = factCheckPost(p.content, detected.evidence, { activityTitle: detected.title });
+      const fc = factCheckPost(p.content, detected.evidence, { activityTitle: detected.title, evidenceText: buildEvidenceText(detected) });
       const struct = validatePost(p.content);
-      const valid = fc.passed && struct.valid;
-      const issues = [...fc.issues, ...struct.issues];
+      const semantic = semanticReview(p.content);
+      const semanticOk = semantic.humanLike >= 60;
+      const valid = fc.passed && struct.valid && semanticOk;
+      const issues = [
+        ...fc.issues,
+        ...struct.issues,
+        ...(semanticOk ? [] : semantic.issues.map((i) => ({
+          severity: 'error' as const,
+          message: `Semantic review: too AI-sounding (humanLike ${semantic.humanLike}/100). ${i.message}`,
+          matchedPhrase: i.matchedPhrase
+        })))
+      ];
 
       if (!valid) {
         if (!fc.passed) {
@@ -249,9 +266,19 @@ export class ContentService {
             message: struct.issues.map((i) => i.message).join('; ')
           });
         }
+        if (!semanticOk) {
+          errorTrackerService.recordError({
+            userId,
+            repositoryId: opportunity.repositoryId,
+            opportunityId: opportunity._id.toString(),
+            variant: p.variant,
+            errorType: 'semantic_review_failure',
+            message: `humanLike ${semantic.humanLike}/100`
+          });
+        }
       }
 
-      return { variant: p.variant, valid, issues };
+      return { variant: p.variant, valid, issues, humanLike: semantic.humanLike };
     });
 
     // Structural gate: never persist degenerate variants (model misfires,
@@ -691,3 +718,7 @@ function toActivityLike(activity: any): ActivityLike {
 }
 
 export default ContentService;
+
+function buildEvidenceText(detected: { title: string; changes?: string[] }): string {
+  return [detected.title, ...(detected.changes ?? [])].join('\n');
+}

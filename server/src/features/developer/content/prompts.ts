@@ -25,10 +25,38 @@ export interface StoryContext {
   journey: string[];
   problem: string;
   activityTitle: string;
+  /** The single commit the post should describe; pins focus in large groups. */
+  focusCommit?: string;
   changes: string[];
   affectedAreas: string[];
   evidence: FactCheckEvidence;
   relatedMemoryHints: string[];
+}
+
+export interface FocusResult {
+  changes: string[];
+  focusCommit?: string;
+}
+
+/**
+ * Evidence focus filter. When an activity groups many commits, the oldest
+ * ones dilute the story and the model misattributes which commit did what.
+ * Above the threshold, keep only the most recent messages (changes are
+ * ordered newest-first; changes[0] is the primary commit, the same one the
+ * activity title was built from) and pin it as focusCommit.
+ * Pure.
+ */
+export function focusStoryEvidence(input: {
+  changes: string[];
+  commitCount: number;
+  maxChanges?: number;
+}): FocusResult {
+  const max = input.maxChanges ?? 5;
+  const focusCommit = input.changes[0]?.trim() || undefined;
+  if (input.commitCount > 10 && input.changes.length > max) {
+    return { changes: input.changes.slice(0, max), focusCommit };
+  }
+  return { changes: input.changes, focusCommit };
 }
 
 export function buildStoryContext(opts: {
@@ -39,6 +67,7 @@ export function buildStoryContext(opts: {
   journey?: string[];
   problem?: string;
   activityTitle: string;
+  focusCommit?: string;
   changes: string[];
   affectedAreas: string[];
   evidence: FactCheckEvidence;
@@ -51,6 +80,7 @@ export function buildStoryContext(opts: {
     journey: opts.journey ?? [],
     problem: opts.problem ?? '',
     activityTitle: opts.activityTitle,
+    focusCommit: opts.focusCommit,
     changes: opts.changes,
     affectedAreas: opts.affectedAreas,
     evidence: opts.evidence,
@@ -65,6 +95,9 @@ export function serializeStoryContext(ctx: StoryContext): string {
   if (ctx.techStack.length) lines.push(`Tech stack: ${ctx.techStack.join(', ')}`);
   if (ctx.journey.length) lines.push(`Project journey: ${ctx.journey.join(' → ')}`);
   lines.push(`Work: ${ctx.activityTitle}`);
+  if (ctx.focusCommit) {
+    lines.push(`PRIMARY COMMIT — describe this specific work, not the group history: ${ctx.focusCommit}`);
+  }
   if (ctx.problem) lines.push(`Problem: ${ctx.problem}`);
   if (ctx.affectedAreas.length) lines.push(`Areas: ${ctx.affectedAreas.join(', ')}`);
   if (ctx.changes.length) {
