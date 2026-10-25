@@ -20,6 +20,7 @@ let timer: NodeJS.Timeout | null = null;
 let initialTimer: NodeJS.Timeout | null = null;
 /** Single in-process lock: ticks never overlap themselves. */
 let running = false;
+let runningSince = 0;
 
 /**
  * Claim the repository for this process. Two steps: the strict claim refuses
@@ -51,8 +52,12 @@ export async function runDeveloperSchedulerTick(): Promise<void> {
   try {
     // Defence in depth: the bootstrap only starts this when the flag is on.
     if (!env.developerFlowEnabled) return;
-    if (running) return;
+    // A tick frozen mid-run by a serverless freeze would hold `running`
+    // forever, silently disabling the scheduler on that instance. Take over
+    // stale runs after 5 minutes.
+    if (running && Date.now() - runningSince < 5 * 60_000) return;
     running = true;
+    runningSince = Date.now();
     try {
       const now = Date.now();
       const staleCutoff = new Date(now - STALE_MS);
