@@ -643,7 +643,7 @@ export class ContentService {
           prompt: flattenPrompt(system, prompt),
           // Headroom for full narrative variants; a truncated post is worse
           // than a long one — review trims, cutoff corrupts.
-          options: { temperature: 0.7, max_tokens: 2000 },
+          options: { temperature: 0.7, max_tokens: 1200 },
           // Free-tier models routinely queue past the default 30s abort;
           // one 50s round-trip still fits the serverless ceiling.
           timeoutMs: 50000
