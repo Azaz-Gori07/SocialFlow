@@ -134,9 +134,14 @@ const SWEEP_COOLDOWN_MS = 25 * 1000;
 
 type SweepOutcome = { ok: boolean; ms: number; error?: string };
 
-async function runSweepOnce(): Promise<Record<string, SweepOutcome>> {
+async function runSweepOnce(force = false): Promise<Record<string, SweepOutcome>> {
   const out: Record<string, SweepOutcome> = {};
-  if (sweepRunning) return { skipped: { ok: true, ms: 0, error: 'already-running' } };
+  // force: the explicit cron endpoint must run even when the opportunistic
+  // middleware just started a fire-and-forget sweep on this same request —
+  // that one dies with the lambda freeze; only the awaited one completes.
+  // Overlap is safe: posts/deliveries are claimed atomically and the
+  // developer tick has its own running guard.
+  if (sweepRunning && !force) return { skipped: { ok: true, ms: 0, error: 'already-running' } };
   sweepRunning = true;
   const parts: Array<[string, () => Promise<unknown>]> = [
     ['posts', () => processDuePosts()],
@@ -227,7 +232,7 @@ app.post('/api/cron/sweep', async (req, res) => {
   if (process.env.NODE_ENV === 'production' && req.headers['x-cron-secret'] !== env.CRON_SECRET) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
-  const outcomes = await runSweepOnce();
+  const outcomes = await runSweepOnce(true);
   res.json({ success: true, swept: true, at: new Date().toISOString(), outcomes });
 });
 
