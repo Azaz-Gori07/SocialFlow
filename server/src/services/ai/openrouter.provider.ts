@@ -48,7 +48,9 @@ export class OpenRouterProvider {
       if (!res.ok) {
         const message = (data as { error?: { message?: string } })?.error?.message
           || JSON.stringify(data).slice(0, 200);
-        throw new Error(`AI provider HTTP ${res.status}: ${message}`);
+        const err = new Error(`AI provider HTTP ${res.status}: ${message}`) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
       }
       return { data };
     } finally {

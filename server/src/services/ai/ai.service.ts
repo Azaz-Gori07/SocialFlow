@@ -93,9 +93,14 @@ export class AIService {
     const maxAttempts = retries + 1;
     while (attempt < maxAttempts) {
       try {
-        return await provider.call(request, 30000);
+        return await provider.call(request, request.timeoutMs);
       } catch (err: any) {
         attempt++;
+        // Rate-limit and billing responses get worse with fast retries —
+        // each retry spends quota. Surface them to the caller immediately.
+        if (err?.status === 429 || err?.status === 402) {
+          throw err;
+        }
         if (attempt >= maxAttempts) {
           throw err;
         }
