@@ -232,6 +232,14 @@ app.post('/api/cron/sweep', async (req, res) => {
   if (process.env.NODE_ENV === 'production' && req.headers['x-cron-secret'] !== env.CRON_SECRET) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
+  // The DB-connect middleware deliberately skips this path (same allowlist as
+  // /api-docs), so without this the sweep buffered every query into a 10s
+  // timeout and could never do any work.
+  try {
+    await connectDb();
+  } catch (error: any) {
+    return res.status(503).json({ success: false, message: 'Database unavailable for sweep.', error: error.message });
+  }
   const outcomes = await runSweepOnce(true);
   res.json({ success: true, swept: true, at: new Date().toISOString(), outcomes });
 });
