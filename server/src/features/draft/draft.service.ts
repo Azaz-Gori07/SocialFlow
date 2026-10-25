@@ -1,5 +1,11 @@
 import { DraftRepository, PaginatedDraftsResult } from './draft.repository';
 import { DraftPublisher } from './draft.publisher';
+import { SocialRepository } from '../social/social.repository';
+import { OAuthConnectionRepository } from '../social/oauthConnection.repository';
+import { OAuthTransactionRepository } from '../social/oauthTransaction.repository';
+import { SocialService } from '../social/social.service';
+import { ProviderFactory } from '../../services/social/providers/provider.factory';
+import { ProjectPostHistoryModel } from '../developer/history/projectHistory.model';
 import { AppError } from '../../shared/errors/appError';
 import DraftModel, { IDraft } from './draft.model';
 import { CreateDraftInput, UpdateDraftInput, PublishDraftInput } from './draft.validation';
@@ -18,9 +24,17 @@ export interface PaginatedDrafts {
 
 export class DraftService {
   private draftPublisher: DraftPublisher;
+  private socialService: SocialService;
 
   constructor(private draftRepository: DraftRepository) {
     this.draftPublisher = new DraftPublisher(draftRepository);
+    // Provider-side post deletion needs decrypted tokens; SocialService owns
+    // the account->connection token fallback chain.
+    this.socialService = new SocialService(
+      new SocialRepository(),
+      new OAuthConnectionRepository(),
+      new OAuthTransactionRepository()
+    );
   }
 
   async createDraft(input: CreateDraftInput, userId: string): Promise<IDraft> {
@@ -226,6 +240,47 @@ export class DraftService {
     } as any);
     if (!updatedDraft) throw AppError.internal('Failed to approve compliance');
     return updatedDraft;
+  }
+
+  /**
+   * Deletes an already-published draft's post from the provider. The
+   * adapters implement deletePost but no route exposed it, which left
+   * published posts unremovable from SocialFlow.
+   */
+  async deleteFromProvider(id: string, userId: string): Promise<IDraft> {
+    const draft = await this.draftRepository.findById(id);
+    if (!draft) throw AppError.notFound('Draft not found');
+    if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
+    const externalPostId = (draft.platformResponse as { externalPostId?: string } | undefined)?.externalPostId;
+    if (draft.status !== 'published' || !externalPostId) {
+      throw AppError.badRequest('Draft is not a published post with a provider post id');
+    }
+    const targets = draft.targetAccountIds ?? [];
+    if (targets.length !== 1) {
+      throw AppError.badRequest('Provider delete expects exactly one target account');
+    }
+    const bundle = await this.socialService.resolveAccountTokenBundle(targets[0]);
+    if (bundle.account.userId && bundle.account.userId.toString() !== userId) {
+      throw AppError.forbidden('Insufficient permissions');
+    }
+    const provider = ProviderFactory.getConfiguredProvider(draft.platform);
+    if (!provider.deletePost) {
+      throw AppError.badRequest(`Provider ${draft.platform} does not support post deletion`);
+    }
+    await provider.deletePost(
+      {
+        tokens: { accessToken: bundle.accessToken, refreshToken: bundle.refreshToken },
+        account: bundle.account as any
+      } as any,
+      externalPostId
+    );
+    await ProjectPostHistoryModel.updateOne(
+      { draftId: id },
+      { status: 'deleted', deletedAt: new Date() }
+    );
+    const archived = await this.draftRepository.update(id, { status: 'archived' } as any);
+    if (!archived) throw AppError.internal('Failed to archive draft after provider delete');
+    return archived;
   }
 
   async updateComplianceState(

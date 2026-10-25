@@ -108,6 +108,14 @@ export class DraftController {
     } catch (error) { next(error); }
   };
 
+  deleteFromProvider = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+    try {
+      if (!req.user) return next(AppError.unauthorized());
+      const draft = await this.draftService.deleteFromProvider(req.params.id, req.user.id);
+      return ApiResponse.success(res, draft, 'Post deleted from provider');
+    } catch (error) { next(error); }
+  };
+
   approveCompliance = async (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
     try {
       if (!req.user) return next(AppError.unauthorized());

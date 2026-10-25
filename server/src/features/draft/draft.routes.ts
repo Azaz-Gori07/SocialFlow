@@ -122,6 +122,14 @@ router.post(
   draftController.bulkApproveCompliance as any
 );
 
+// POST /api/drafts/:id/delete-from-provider - Delete the published post from the platform
+router.post(
+  '/:id/delete-from-provider',
+  authenticate as any,
+  validate({ params: draftIdSchema }),
+  draftController.deleteFromProvider as any
+);
+
 // POST /api/drafts/:id/approve-compliance - Manually approve compliance
 router.post(
   '/:id/approve-compliance',
