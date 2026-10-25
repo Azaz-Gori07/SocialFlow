@@ -33,6 +33,7 @@ import { initSocketIO } from './services/socket/socket.service';
 import { SchedulerService } from './services/scheduler';
 import { processDuePosts } from './services/scheduler';
 import { runDraftSweep } from './features/draft/draft.scheduler';
+import { runDeveloperSchedulerTick } from './features/developer/jobs/developer.scheduler';
 
 // Import the Atlas database connection and fail fast on startup if it cannot connect.
 import { connectDb, isConnected, ensureFreshDb, markDbActivity } from './database/db';
@@ -135,7 +136,7 @@ async function runSweepOnce(): Promise<void> {
   if (sweepRunning) return;
   sweepRunning = true;
   try {
-    await Promise.allSettled([processDuePosts(), runDraftSweep()]);
+    await Promise.allSettled([processDuePosts(), runDraftSweep(), runDeveloperSchedulerTick()]);
   } catch (error: any) {
     console.error('[Sweep] error:', error.message);
   } finally {
