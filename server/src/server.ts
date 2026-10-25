@@ -132,17 +132,32 @@ let sweepRunning = false;
 let lastSweepAt = 0;
 const SWEEP_COOLDOWN_MS = 25 * 1000;
 
-async function runSweepOnce(): Promise<void> {
-  if (sweepRunning) return;
+type SweepOutcome = { ok: boolean; ms: number; error?: string };
+
+async function runSweepOnce(): Promise<Record<string, SweepOutcome>> {
+  const out: Record<string, SweepOutcome> = {};
+  if (sweepRunning) return { skipped: { ok: true, ms: 0, error: 'already-running' } };
   sweepRunning = true;
+  const parts: Array<[string, () => Promise<unknown>]> = [
+    ['posts', () => processDuePosts()],
+    ['drafts', () => runDraftSweep()],
+    ['devTick', () => runDeveloperSchedulerTick()]
+  ];
   try {
-    await Promise.allSettled([processDuePosts(), runDraftSweep(), runDeveloperSchedulerTick()]);
-  } catch (error: any) {
-    console.error('[Sweep] error:', error.message);
+    await Promise.all(parts.map(async ([name, fn]) => {
+      const t0 = Date.now();
+      try {
+        await fn();
+        out[name] = { ok: true, ms: Date.now() - t0 };
+      } catch (e: any) {
+        out[name] = { ok: false, ms: Date.now() - t0, error: String(e?.message || e).slice(0, 200) };
+      }
+    }));
   } finally {
     lastSweepAt = Date.now();
     sweepRunning = false;
   }
+  return out;
 }
 
 function maybeSweep(force = false): void {
@@ -212,8 +227,8 @@ app.post('/api/cron/sweep', async (req, res) => {
   if (process.env.NODE_ENV === 'production' && req.headers['x-cron-secret'] !== env.CRON_SECRET) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
-  await runSweepOnce();
-  res.json({ success: true, swept: true, at: new Date().toISOString() });
+  const outcomes = await runSweepOnce();
+  res.json({ success: true, swept: true, at: new Date().toISOString(), outcomes });
 });
 
 // Zenuxs OAuth callback (registered redirect URI) — see the router for why the
