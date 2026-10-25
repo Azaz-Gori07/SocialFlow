@@ -4,6 +4,7 @@ export type AIErrorType =
   | 'generation_failure'
   | 'validation_failure'
   | 'fact_check_failure'
+  | 'semantic_review_failure'
   | 'compliance_failure';
 
 export interface IAIErrorEvent extends Document {
