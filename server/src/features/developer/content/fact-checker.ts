@@ -29,7 +29,7 @@ export interface FactCheckResult {
 export function factCheckPost(
   post: string,
   evidence: FactCheckEvidence,
-  opts?: { activityTitle?: string }
+  opts?: { activityTitle?: string; evidenceText?: string }
 ): FactCheckResult {
   const issues: FactCheckIssue[] = [];
   const lower = post.toLowerCase();
@@ -116,7 +116,65 @@ export function factCheckPost(
     }
   }
 
+
+  // 6. Mechanism inversion: evidence says something was removed/replaced, but
+  //    the post claims it now works or was fixed. Sentence-level co-occurrence
+  //    keeps this conservative — aligned phrasing ("we removed X") never fires.
+  if (opts?.evidenceText) {
+    const removedTerms = extractRemovedTerms(opts.evidenceText);
+    if (removedTerms.length > 0) {
+      const claimRe =
+        /\b(?:now\s+(?:works|opens|reliably)|reliably\s+(?:works|opens)|works\s+reliably|(?:fixed|improved|restored|patched))\b/i;
+      const sentences = post.split(/\n+|(?<=[.!?])\s+(?=["'`(\[]?[A-Z0-9])/);
+      for (const sentence of sentences) {
+        if (!claimRe.test(sentence)) continue;
+        for (const term of removedTerms) {
+          const hit = term.includes('.') || term.includes('(')
+            ? sentence.toLowerCase().includes(term)
+            : new RegExp(`\\b${term.replace(/[^\w]/g, '\\$&')}\\b`, 'i').test(sentence);
+          if (hit) {
+            issues.push({
+              severity: 'error',
+              message: `Mechanism inversion: evidence says "${term}" was removed/replaced, but the post claims it was fixed or now works.`,
+              matchedPhrase: sentence.trim().slice(0, 80)
+            });
+            break;
+          }
+        }
+      }
+    }
+  }
+
   return { passed: issues.every((i) => i.severity !== 'error'), issues };
+}
+
+const REMOVAL_TERM_STOPWORDS = new Set([
+  'this', 'that', 'with', 'from', 'were', 'been', 'have', 'when', 'while', 'which', 'their',
+  'after', 'before', 'instead', 'blockers', 'browser', 'browsers', 'silent', 'silently'
+]);
+
+/** Terms the evidence says were removed/replaced, from both sides of the verb. */
+function extractRemovedTerms(evidenceText: string): string[] {
+  const text = evidenceText.toLowerCase();
+  const terms = new Set<string>();
+  const verbAlt = 'removed|replaced|eliminated|deprecated|dropped|disabled';
+  const word = "[\\w@./'`\"()-]+";
+  // Object after the verb: "replaced the popup flow entirely"
+  const after = new RegExp(`(?:${verbAlt})\\s+((?:${word}\\s+){0,3}${word})`, 'g');
+  // Subject before the verb (passive): "window.open() ... gets silently dropped"
+  const before = new RegExp(`(${word}(?:\\s+${word}){0,2})\\s+(?:gets?|was|were|been)?\\s*(?:silently\\s+)?(?:${verbAlt})`, 'g');
+  const collect = (m: RegExpMatchArray | null) => {
+    if (!m) return;
+    for (const token of m[1].split(/\s+/)) {
+      const clean = token.replace(/^[^\w@.(]+|[^\w@.)]+$/g, '');
+      if (clean.length >= 5 && !REMOVAL_TERM_STOPWORDS.has(clean)) terms.add(clean);
+      else if (/[@.(]/.test(clean) && clean.replace(/[^\w@.]/g, '').length >= 5) terms.add(clean);
+    }
+  };
+  let m: RegExpMatchArray | null;
+  while ((m = after.exec(text))) collect(m);
+  while ((m = before.exec(text))) collect(m);
+  return [...terms];
 }
 
 /**
