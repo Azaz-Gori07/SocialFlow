@@ -22,5 +22,15 @@
       "src": "/(.*)",
       "dest": "api/index.ts"
     }
+  ],
+  "crons": [
+    {
+      "path": "/api/cron/sweep",
+      "schedule": "35 17 * * *"
+    },
+    {
+      "path": "/api/cron/sweep",
+      "schedule": "5 18 * * *"
+    }
   ]
 }

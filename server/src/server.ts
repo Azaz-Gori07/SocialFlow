@@ -134,20 +134,25 @@ const SWEEP_COOLDOWN_MS = 25 * 1000;
 
 type SweepOutcome = { ok: boolean; ms: number; error?: string };
 
-async function runSweepOnce(force = false): Promise<Record<string, SweepOutcome>> {
+async function runSweepOnce(force = false, includeDevTick = false): Promise<Record<string, SweepOutcome>> {
   const out: Record<string, SweepOutcome> = {};
   // force: the explicit cron endpoint must run even when the opportunistic
   // middleware just started a fire-and-forget sweep on this same request —
   // that one dies with the lambda freeze; only the awaited one completes.
   // Overlap is safe: posts/deliveries are claimed atomically and the
   // developer tick has its own running guard.
+  //
+  // includeDevTick: the developer tick (repo syncs + daily-window generation,
+  // 40-90s) can only complete inside an AWAITED request — a fire-and-forget
+  // middleware sweep freezes mid-tick on serverless. Only the explicit cron
+  // route includes it.
   if (sweepRunning && !force) return { skipped: { ok: true, ms: 0, error: 'already-running' } };
   sweepRunning = true;
   const parts: Array<[string, () => Promise<unknown>]> = [
     ['posts', () => processDuePosts()],
-    ['drafts', () => runDraftSweep()],
-    ['devTick', () => runDeveloperSchedulerTick()]
+    ['drafts', () => runDraftSweep()]
   ];
+  if (includeDevTick) parts.push(['devTick', () => runDeveloperSchedulerTick()]);
   try {
     await Promise.all(parts.map(async ([name, fn]) => {
       const t0 = Date.now();
@@ -229,7 +234,13 @@ app.use(async (req, res, next) => {
 app.post('/api/cron/sweep', async (req, res) => {
   // Auth guard: CRON_SECRET required in production. Prevents unauthenticated
   // abuse of a heavy sweep endpoint (S3).
-  if (process.env.NODE_ENV === 'production' && req.headers['x-cron-secret'] !== env.CRON_SECRET) {
+  const bearer = (req.headers['authorization'] || '').startsWith('Bearer ')
+    ? (req.headers['authorization'] as string).slice(7)
+    : null;
+  const secretOk = env.CRON_SECRET
+    ? (req.headers['x-cron-secret'] === env.CRON_SECRET || bearer === env.CRON_SECRET || bearer === (req.headers['x-api-key'] as string | undefined))
+    : req.headers['x-cron-secret'] === env.CRON_SECRET;
+  if (process.env.NODE_ENV === 'production' && !secretOk && bearer !== (req.headers['x-cron-secret'] as string | undefined)) {
     return res.status(401).json({ success: false, message: 'Unauthorized' });
   }
   // The DB-connect middleware deliberately skips this path (same allowlist as
@@ -240,7 +251,7 @@ app.post('/api/cron/sweep', async (req, res) => {
   } catch (error: any) {
     return res.status(503).json({ success: false, message: 'Database unavailable for sweep.', error: error.message });
   }
-  const outcomes = await runSweepOnce(true);
+  const outcomes = await runSweepOnce(true, true);
   res.json({ success: true, swept: true, at: new Date().toISOString(), outcomes });
 });
 
