@@ -49,6 +49,8 @@ export interface IComplianceCheck extends Document {
   /** Set once a provider confirms the post exists, for post-publish claims. */
   externalPostId?: string;
   publishedAt?: string;
+  /** ISO timestamp when the post was deleted from the provider. */
+  removedAt?: string;
   processed: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -96,6 +98,7 @@ const ComplianceCheckSchema = new Schema<IComplianceCheck>(
     sourceUrl: { type: String },
     externalPostId: { type: String },
     publishedAt: { type: String },
+    removedAt: { type: String },
     processed: { type: Boolean, default: false }
   },
   schemaOptions

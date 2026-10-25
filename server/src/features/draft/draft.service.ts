@@ -6,6 +6,7 @@ import { OAuthTransactionRepository } from '../social/oauthTransaction.repositor
 import { SocialService } from '../social/social.service';
 import { ProviderFactory } from '../../services/social/providers/provider.factory';
 import { ProjectPostHistoryModel } from '../developer/history/projectHistory.model';
+import { ComplianceService } from '../compliance/compliance.service';
 import { AppError } from '../../shared/errors/appError';
 import DraftModel, { IDraft } from './draft.model';
 import { CreateDraftInput, UpdateDraftInput, PublishDraftInput } from './draft.validation';
@@ -277,6 +278,8 @@ export class DraftService {
       } as any,
       externalPostId
     );
+    // The compliance record for this post must stop claiming it is live.
+    await new ComplianceService().markRemovedByExternalId(externalPostId);
     await ProjectPostHistoryModel.updateOne(
       { draftId: id },
       { status: 'deleted', deletedAt: new Date() }

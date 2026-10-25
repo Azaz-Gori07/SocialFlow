@@ -271,6 +271,17 @@ export class ComplianceService {
   }
 
   /**
+   * Provider-verified removal: when a published post is deleted from the
+   * platform, its compliance record must stop claiming the post is live.
+   */
+  async markRemovedByExternalId(externalPostId: string): Promise<void> {
+    await ComplianceCheckModel.updateMany(
+      { externalPostId } as any,
+      { $set: { status: 'removed', removedAt: new Date().toISOString() } } as any
+    ).exec();
+  }
+
+  /**
    * Post-publish claim (§36). Only a provider-verified claim downgrades a
    * published item to `claimed_after_publish`; an uncertain signal is recorded
    * for review and never deletes or blocks anything by itself.
