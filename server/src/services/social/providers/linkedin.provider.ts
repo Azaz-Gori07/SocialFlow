@@ -281,7 +281,9 @@ export class LinkedInProvider extends OAuth2Strategy implements SocialProvider {
 
   async deletePost(ctx: PublishContext, externalPostId: string): Promise<void> {
     const urn = externalPostId.startsWith('urn:') ? externalPostId : `urn:li:share:${externalPostId}`;
-    const response = await fetch(`https://api.linkedin.com/v2/posts/${urn}`, {
+    // Rest.li requires URL-encoded path variables; a raw urn:li:share:x is
+    // rejected with ILLEGAL_ARGUMENT (syntax exception in path variables).
+    const response = await fetch(`https://api.linkedin.com/v2/posts/${encodeURIComponent(urn)}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${ctx.tokens.accessToken}`, ...RESTLI },
     });
