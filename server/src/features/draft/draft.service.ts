@@ -256,7 +256,7 @@ export class DraftService {
     // accept the externalPostId alias for callers that use the older name.
     const pr = draft.platformResponse as { externalPostId?: string; postId?: string } | undefined;
     const externalPostId = pr?.externalPostId ?? pr?.postId;
-    if (draft.status !== 'published' || !externalPostId) {
+    if (!['published', 'archived'].includes(draft.status) || !externalPostId) {
       throw AppError.badRequest('Draft is not a published post with a provider post id');
     }
     const targets = draft.targetAccountIds ?? [];
