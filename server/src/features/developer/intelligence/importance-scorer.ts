@@ -80,13 +80,18 @@ export function scoreImportance(activity: ScoredActivity): ImportanceScore {
   if (/breaking|BREAKING/i.test(msg)) { score += 15; reasons.push('Breaking change detected'); }
   if (/major|redesign|rewrite|architecture/i.test(msg)) { score += 10; reasons.push('Significant refactoring indicated'); }
   if (/v\d+\.\d+|release|version/i.test(msg)) { score += 8; reasons.push('Version/release related'); }
-  if (/(?:fix|bug|patch|resolve|closes|closed)\b/i.test(msg)) {
-    if (totalChanges >= 50) {
-      score += 8;
-      reasons.push('Significant bug fix/patch');
-    }
+  if (/(?:feat|feature)\b/i.test(msg)) {
+    score += 15;
+    reasons.push('Feature work introduced');
   }
-
+  if (/(?:fix|bug|patch|resolve|closes|closed)\b/i.test(msg)) {
+    score += (totalChanges >= 50 ? 10 : 6);
+    reasons.push(totalChanges >= 50 ? 'Significant bug fix/patch' : 'Bug fix/patch');
+  }
+  if (/(?:ai|pipeline|engine|auth|oauth|security|token)\b/i.test(msg)) {
+    score += 10;
+    reasons.push('Core domain enhancement');
+  }
   // Cap score
   score = Math.min(100, score);
 
