@@ -31,6 +31,8 @@ export interface StoryContext {
   affectedAreas: string[];
   evidence: FactCheckEvidence;
   relatedMemoryHints: string[];
+  /** Topics already posted previously — avoids redundant content. */
+  coveredTopics?: string[];
 }
 
 export interface FocusResult {
@@ -72,6 +74,7 @@ export function buildStoryContext(opts: {
   affectedAreas: string[];
   evidence: FactCheckEvidence;
   relatedMemoryHints?: string[];
+  coveredTopics?: string[];
 }): StoryContext {
   return {
     projectName: opts.projectName,
@@ -84,7 +87,8 @@ export function buildStoryContext(opts: {
     changes: opts.changes,
     affectedAreas: opts.affectedAreas,
     evidence: opts.evidence,
-    relatedMemoryHints: opts.relatedMemoryHints ?? []
+    relatedMemoryHints: opts.relatedMemoryHints ?? [],
+    coveredTopics: opts.coveredTopics ?? []
   };
 }
 
@@ -97,6 +101,10 @@ export function serializeStoryContext(ctx: StoryContext): string {
   lines.push(`Work: ${ctx.activityTitle}`);
   if (ctx.focusCommit) {
     lines.push(`PRIMARY COMMIT — describe this specific work, not the group history: ${ctx.focusCommit}`);
+  }
+  if (ctx.coveredTopics && ctx.coveredTopics.length > 0) {
+    lines.push('Already posted topics (continue the journey forward — do NOT re-announce these):');
+    for (const t of ctx.coveredTopics) lines.push(`  - ${t}`);
   }
   if (ctx.problem) lines.push(`Problem: ${ctx.problem}`);
   if (ctx.affectedAreas.length) lines.push(`Areas: ${ctx.affectedAreas.join(', ')}`);
@@ -150,7 +158,9 @@ export function buildLinkedInPostPrompt(req: PostGenRequest): { system: string; 
     '- Never invent facts: no unproven metrics, performance claims, user impact, or achievements.\n' +
     '- Only mention what the evidence supports (commits, PRs, issues, files, lines changed).\n' +
     '- Do not claim things were "completed" unless evidence shows it; use "working on" / "implementing" when appropriate.\n' +
-    '- Write in first person as the developer, but keep a natural developer voice — no corporate buzzwords.\n' +
+    '- NATURAL DEVELOPER VOICE: Write in first person like a real human engineer sharing learnings with peers (fluent, natural, and engaging like ChatGPT conversational responses). Avoid robotic templates, cliché corporate hooks, or hype adjectives.\n' +
+    '- CONTINUITY: If previously covered topics are noted in the context, do not re-explain them as brand new discoveries. Connect the narrative seamlessly with previous progress.\n' +
+    '- READABILITY: Use natural paragraph breaks for clean mobile skimming. Code snippets or names should be accurate and backticked.\n' +
     '- Use hashtags sparingly and only the relevant ones (project/tech related); never dump generic tags.\n' +
     (req.customInstructions?.trim()
       ? 'USER CONTENT PREFERENCES (apply only insofar as they do not conflict with any rule above):\n' +

@@ -169,6 +169,14 @@ export class ContentService {
       changes: detected.changes ?? [],
       commitCount: (detected.evidence as { commitCount?: number }).commitCount ?? (detected.changes ?? []).length
     });
+    const coveredTopics = await this.getCoveredTopics(userId, opportunity.repositoryId);
+    const pastDrafts = await this.listDeveloperDrafts(userId);
+    const previousPosts = (pastDrafts || [])
+      .filter((d: any) => d.status === 'published' || (d.status === 'archived' && d.publishedAt))
+      .slice(0, 3)
+      .map((d: any) => d.caption)
+      .filter(Boolean);
+
     const context = buildStoryContext({
       projectName: repository.name ?? repository.fullName,
       // Never feed the free-text repository description: it is user
@@ -183,13 +191,14 @@ export class ContentService {
       changes: focused.changes,
       affectedAreas: detected.affectedAreas,
       evidence: detected.evidence,
-      relatedMemoryHints: memory.relatedHints
+      relatedMemoryHints: memory.relatedHints,
+      coveredTopics
     });
 
-    const coveredTopics = await this.getCoveredTopics(userId, opportunity.repositoryId);
     const styleInput: StyleInput = {
       preferredTone: opts?.preferredTone ?? (settings.defaultTone as WritingTone),
-      coveredTopics
+      coveredTopics,
+      previousPosts
     };
     const { profile } = analyzeStyle(styleInput);
     let customInstructions = composeInstructions(opts?.customInstructions ?? settings.aiInstructions, settings);
@@ -595,7 +604,8 @@ export class ContentService {
     const drafts = await this.listDeveloperDrafts(userId);
     const topics = new Set<string>();
     for (const d of drafts) {
-      if (d.status !== 'published') continue;
+      const reachedPlatform = d.status === 'published' || (d.status === 'archived' && (d as any).publishedAt);
+      if (!reachedPlatform) continue;
       if (d.developerRepositoryId !== repositoryId) continue;
       const title = d.aiMetadata?.opportunityTitle;
       if (typeof title === 'string' && title.trim()) topics.add(title.toLowerCase());
