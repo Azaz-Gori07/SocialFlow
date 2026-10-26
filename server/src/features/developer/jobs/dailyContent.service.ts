@@ -115,8 +115,8 @@ export class DailyContentService {
   }
 
   async processAllDueDailyWindows(now = new Date()): Promise<number> {
-    if (!this.isWindowDue(now)) return 0;
-
+    // Window-due check is evaluated per repository against that user's configured
+    // window hours/minutes in settings, rather than a single hard-coded default.
     let processedCount = 0;
     try {
       const repos = await DeveloperRepositoryModel.find({
@@ -128,6 +128,7 @@ export class DailyContentService {
         try {
           const settings = await DeveloperSettingsModel.findOne({ userId: repo.userId }).lean().exec();
           if (!settings || (!settings.autoContent && !settings.autoPublish)) continue;
+          if (!this.isWindowDue(now, settings || undefined)) continue;
 
           const res = await this.processDailyWindowForRepo(repo.userId, String(repo._id), now);
           if (res.status === 'processed') processedCount++;
