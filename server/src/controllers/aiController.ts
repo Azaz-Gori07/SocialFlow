@@ -74,7 +74,11 @@ export const AIController = {
         return res.status(503).json({ message: 'AI provider is not configured on the server' });
       }
 
-      const response = await ai.execute({ prompt: GENERATION_PROMPT(prompt) });
+      const response = await ai.execute({
+        prompt: GENERATION_PROMPT(prompt),
+        options: { temperature: 0.7, max_tokens: 1200 },
+        timeoutMs: 45000
+      });
       const text = AIService.extractText(response.data);
       let outputs: Partial<Record<SocialPlatform, string>>;
       try {
@@ -112,6 +116,8 @@ export const AIController = {
 
       const response = await ai.execute({
         prompt: `${GENERATION_PROMPT(prompt)}\nRegenerate only the "${platform}" variant, differently worded but with the same meaning.`,
+        options: { temperature: 0.7, max_tokens: 800 },
+        timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
       let outputs: Record<string, string>;
@@ -150,6 +156,8 @@ export const AIController = {
 
       const response = await ai.execute({
         prompt: SUGGESTION_PROMPT(comment.message, comment.author?.username || 'user'),
+        options: { temperature: 0.7, max_tokens: 600 },
+        timeoutMs: 30000
       });
       const text = AIService.extractText(response.data);
       let parsed: { suggestions?: string[] };
@@ -205,6 +213,8 @@ Write launch posts for each platform announcing it, grounded ONLY in the title/c
 
 Return ONLY valid JSON with one key per platform:
 {"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}`,
+        options: { temperature: 0.7, max_tokens: 1200 },
+        timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
       let outputs: Partial<Record<SocialPlatform, string>>;
@@ -275,6 +285,8 @@ Return ONLY valid JSON with one key per platform:
 
       const response = await ai.execute({
         prompt: `You are a social media copywriter. Summarize this article into launch posts for every platform:\n\n"""${excerpt}"""\n\nReturn ONLY valid JSON with one key per platform:\n{"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}`,
+        options: { temperature: 0.7, max_tokens: 1200 },
+        timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
       let outputs: Partial<Record<SocialPlatform, string>>;
