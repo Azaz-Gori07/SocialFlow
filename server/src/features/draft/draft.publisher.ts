@@ -107,6 +107,13 @@ export class DraftPublisher {
     const { _id: draftId, userId, platform, caption, media } = draft;
     const draftIdStr = draftId.toString();
 
+    if (draft.status === 'publishing') {
+      logger.warn(`[DraftPublisher] Draft ${draftId} is already publishing. Skipping.`);
+      return draft;
+    }
+    if (draft.status === 'archived' || draft.status === 'published') {
+      return draft;
+    }
     if (draft.status === 'ready') {
       // Atomic claim: the opportunistic sweep races explicit publish calls;
       // without it both created a Post and delivered twice.
@@ -116,13 +123,6 @@ export class DraftPublisher {
         return draft;
       }
       draft = claimed;
-    }
-    if (draft.status === 'publishing') {
-      logger.warn(`[DraftPublisher] Draft ${draftId} is already publishing. Skipping.`);
-      return draft;
-    }
-    if (draft.status === 'archived' || draft.status === 'published') {
-      return draft;
     }
 
     const existing = await this.postRepository.findByDraftId(draftIdStr);
