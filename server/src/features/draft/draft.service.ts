@@ -338,7 +338,7 @@ export class DraftService {
     if (draft.userId !== userId) throw AppError.forbidden('Insufficient permissions');
     const updatedDraft = await this.draftRepository.update(id, {
       status: 'ready',
-      scheduledAt: new Date(scheduledAt),
+      scheduledAt: new Date(scheduledAt).toISOString(),
     } as any);
     if (!updatedDraft) throw AppError.internal('Failed to schedule draft');
     return updatedDraft;
