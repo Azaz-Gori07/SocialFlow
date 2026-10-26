@@ -3,6 +3,8 @@ import { EncryptionAdapter } from '../../../services/social/adapters/encryption.
 
 export interface UpsertConnectionInput {
   accessToken: string;
+  refreshToken?: string;
+  tokenExpiresAt?: string;
   scope?: string;
   providerUserId?: string;
   metadata: Record<string, any>;
@@ -22,10 +24,13 @@ export class ConnectionRepository {
    */
   async upsert(userId: string, input: UpsertConnectionInput): Promise<IDeveloperConnection> {
     const accessTokenEncrypted = EncryptionAdapter.encrypt(input.accessToken);
+    const refreshTokenEncrypted = input.refreshToken ? EncryptionAdapter.encrypt(input.refreshToken) : undefined;
     const existing = await this.findByUser(userId);
     if (existing) {
       existing.set({
         accessTokenEncrypted,
+        ...(refreshTokenEncrypted !== undefined ? { refreshTokenEncrypted } : {}),
+        ...(input.tokenExpiresAt !== undefined ? { tokenExpiresAt: input.tokenExpiresAt } : {}),
         scope: input.scope,
         providerUserId: input.providerUserId,
         metadata: input.metadata
@@ -36,6 +41,8 @@ export class ConnectionRepository {
       userId,
       provider: 'github',
       accessTokenEncrypted,
+      refreshTokenEncrypted,
+      tokenExpiresAt: input.tokenExpiresAt,
       scope: input.scope,
       providerUserId: input.providerUserId,
       metadata: input.metadata

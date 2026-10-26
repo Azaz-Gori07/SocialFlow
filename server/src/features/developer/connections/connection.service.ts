@@ -3,7 +3,7 @@ import { EncryptionAdapter } from '../../../services/social/adapters/encryption.
 import { IDeveloperConnection } from './connection.model';
 import { DeveloperConnectionModel } from './connection.model';
 import { ConnectionRepository } from './connection.repository';
-import { exchangeCode, fetchGitHubUser, getAuthUrl, verifyState } from '../github/github.oauth';
+import { exchangeCode, refreshGitHubToken, fetchGitHubUser, getAuthUrl, verifyState } from '../github/github.oauth';
 
 export interface GitHubConnectionStatus {
   connected: boolean;
@@ -32,10 +32,15 @@ export class ConnectionService {
     const stateUserId = verifyState(state);
     if (stateUserId !== userId) throw AppError.oauthStateMismatch();
 
-    const accessToken = await exchangeCode(code);
-    const profile = await fetchGitHubUser(accessToken);
+    const tokenData = await exchangeCode(code);
+    const profile = await fetchGitHubUser(tokenData.accessToken);
+    const tokenExpiresAt = tokenData.expiresIn
+      ? new Date(Date.now() + tokenData.expiresIn * 1000).toISOString()
+      : undefined;
     const connection = await this.connectionRepository.upsert(userId, {
-      accessToken,
+      accessToken: tokenData.accessToken,
+      refreshToken: tokenData.refreshToken,
+      tokenExpiresAt,
       providerUserId: String(profile.id),
       scope: 'read:user repo',
       metadata: { login: profile.login, avatar_url: profile.avatar_url, name: profile.name }
@@ -56,6 +61,38 @@ export class ConnectionService {
     const connection = await this.connectionRepository.findByUser(userId);
     if (!connection?.accessTokenEncrypted) throw AppError.notFound('GitHub not connected');
     const meta = (connection.metadata || {}) as Record<string, any>;
+
+    // Automatic silent token refresh on server side if expired or flagged invalid
+    const isExpiring = connection.tokenExpiresAt
+      ? new Date(connection.tokenExpiresAt).getTime() - 5 * 60 * 1000 < Date.now()
+      : false;
+
+    if ((isExpiring || meta.tokenInvalid) && connection.refreshTokenEncrypted) {
+      try {
+        const refreshToken = EncryptionAdapter.decrypt(connection.refreshTokenEncrypted);
+        const refreshed = await refreshGitHubToken(refreshToken);
+        const tokenExpiresAt = refreshed.expiresIn
+          ? new Date(Date.now() + refreshed.expiresIn * 1000).toISOString()
+          : undefined;
+        await this.connectionRepository.upsert(userId, {
+          accessToken: refreshed.accessToken,
+          refreshToken: refreshed.refreshToken || refreshToken,
+          tokenExpiresAt,
+          providerUserId: connection.providerUserId,
+          scope: connection.scope,
+          metadata: {
+            ...meta,
+            tokenInvalid: false,
+            tokenInvalidReason: undefined,
+            tokenInvalidAt: undefined
+          }
+        });
+        return refreshed.accessToken;
+      } catch (err) {
+        // If refresh fails, fall through to error check below
+      }
+    }
+
     if (meta.tokenInvalid) {
       throw AppError.unauthorized('GitHub access token is no longer valid. Reconnect GitHub from Developer settings.');
     }

@@ -437,7 +437,7 @@ export class AuthService {
   }
 
   private async generateTokens(payload: TokenPayload, rotatedFrom?: string) {
-    const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: '15m' });
+    const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: (env.JWT_EXPIRES_IN as any) || '7d' });
     // jti: JWT iat has 1s granularity, so same-payload tokens minted in the
     // same second are byte-identical → duplicate tokenHash → E11000 on the
     // unique refreshtokens index.

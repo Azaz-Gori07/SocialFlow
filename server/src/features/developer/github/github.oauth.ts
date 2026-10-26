@@ -62,7 +62,13 @@ export function verifyState(state: string): string {
   }
 }
 
-export async function exchangeCode(code: string): Promise<string> {
+export interface GitHubTokenExchangeResult {
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn?: number;
+}
+
+export async function exchangeCode(code: string): Promise<GitHubTokenExchangeResult> {
   const { clientId, clientSecret } = requireCredentials();
   const resp = await fetch(GITHUB_TOKEN_URL, {
     method: 'POST',
@@ -72,12 +78,47 @@ export async function exchangeCode(code: string): Promise<string> {
   });
   const data = (await resp.json().catch(() => ({}))) as {
     access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
     error_description?: string;
   };
   if (!resp.ok || !data.access_token) {
     throw AppError.unauthorized(data.error_description || 'GitHub authorization failed');
   }
-  return data.access_token;
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in
+  };
+}
+
+export async function refreshGitHubToken(refreshToken: string): Promise<GitHubTokenExchangeResult> {
+  const { clientId, clientSecret } = requireCredentials();
+  const resp = await fetch(GITHUB_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({
+      client_id: clientId,
+      client_secret: clientSecret,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    }),
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS)
+  });
+  const data = (await resp.json().catch(() => ({}))) as {
+    access_token?: string;
+    refresh_token?: string;
+    expires_in?: number;
+    error_description?: string;
+  };
+  if (!resp.ok || !data.access_token) {
+    throw AppError.unauthorized(data.error_description || 'GitHub token refresh failed');
+  }
+  return {
+    accessToken: data.access_token,
+    refreshToken: data.refresh_token,
+    expiresIn: data.expires_in
+  };
 }
 
 export async function fetchGitHubUser(accessToken: string): Promise<GitHubUser> {
