@@ -103,7 +103,7 @@ export const Dashboard: React.FC = () => {
   // platform" — rendering that as 0 would claim the account has 0 followers,
   // which is a different (and false) statement.
   const hasPlatformMetrics = (platId: string) =>
-    platformsData.some((item: any) => item.platform === platId);
+    platformsData.some((item: any) => item.platform === platId && item.hasMetrics === true);
 
   const getPlatformFollowers = (platId: string) => {
     const p = platformsData.find((item: any) => item.platform === platId);

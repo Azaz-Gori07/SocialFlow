@@ -256,6 +256,9 @@ export const DashboardController = {
         impressions: number;
         engagement: number;
         accountsCount: number;
+        /** False until at least one analytics sync stored a row for this
+         *  platform. Consumers must not read the zeroed metrics as "0". */
+        hasMetrics: boolean;
       }> = {} as any;
 
       for (const act of accounts) {
@@ -267,7 +270,8 @@ export const DashboardController = {
             reach: 0,
             impressions: 0,
             engagement: 0,
-            accountsCount: 0
+            accountsCount: 0,
+            hasMetrics: false
           };
         }
         // Count the connection even before the first analytics sync. Skipping
@@ -278,6 +282,7 @@ export const DashboardController = {
         const latest = latestRecords[String(act._id)];
         if (!latest) continue;
 
+        platformStats[platform].hasMetrics = true;
         platformStats[platform].followers += latest.followers ?? 0;
         platformStats[platform].reach += latest.reach ?? 0;
         platformStats[platform].impressions += latest.impressions ?? 0;
