@@ -81,7 +81,7 @@ export class AIService {
     const start = cleaned.indexOf('{');
     const end = cleaned.lastIndexOf('}');
     if (start === -1 || end === -1 || end <= start) {
-      throw new Error('AI provider did not return valid JSON');
+      throw new Error(`AI provider did not return valid JSON (tail: ${cleaned.slice(-120)})`);
     }
     return JSON.parse(cleaned.slice(start, end + 1));
   }

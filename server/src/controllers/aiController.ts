@@ -125,7 +125,7 @@ export const AIController = {
 
       const response = await ai.execute({
         prompt: GENERATION_PROMPT(prompt),
-        options: { temperature: 0.7, max_tokens: 1200 },
+        options: { temperature: 0.7, max_tokens: 3000 },
         timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
@@ -258,7 +258,7 @@ Write launch posts for each platform announcing it, grounded ONLY in the title/c
 
 Return ONLY valid JSON with one key per platform:
 {"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}`,
-        options: { temperature: 0.7, max_tokens: 1200 },
+        options: { temperature: 0.7, max_tokens: 3000 },
         timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
@@ -329,7 +329,7 @@ Return ONLY valid JSON with one key per platform:
 
       const response = await ai.execute({
         prompt: `You are a social media copywriter. Summarize this article into launch posts for every platform:\n\n"""${excerpt}"""\n\nReturn ONLY valid JSON with one key per platform:\n{"twitter": "...", "linkedin": "...", "instagram": "...", "facebook": "...", "youtube": "...", "threads": "..."}`,
-        options: { temperature: 0.7, max_tokens: 1200 },
+        options: { temperature: 0.7, max_tokens: 3000 },
         timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
