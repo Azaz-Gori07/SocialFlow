@@ -458,12 +458,18 @@ export const Dashboard: React.FC = () => {
                   </>
                 ) : (
                   <span style={{ fontSize: '0.72rem', color: '#9ca3af', flexGrow: 1 }}>
-                    This platform doesn&apos;t expose follower counts through its API.
+                    Not available on this platform&apos;s API tier
                   </span>
                 )}
                 <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
               </div>
             ))}
+            {connectedChannels.length > 0 && !connectedChannels.some((c) => hasPlatformMetrics(c.id)) && (
+              <div style={{ fontSize: '0.72rem', color: '#9ca3af', borderTop: '1px solid #f3f4f6', paddingTop: '10px' }}>
+                No follower metrics have been synced. LinkedIn&apos;s member API exposes none, and X requires
+                enterprise API access.
+              </div>
+            )}
           </div>
         </div>
 
