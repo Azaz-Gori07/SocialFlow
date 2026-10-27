@@ -1,5 +1,6 @@
 import { Response } from 'express';
 import { db } from '../database/db';
+import { DraftModel } from '../features/draft/draft.model';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { SocialPlatform } from '../types';
 
@@ -35,6 +36,21 @@ export const DashboardController = {
         db.socialAccounts.find({ userId }).select('platform'),
         latestAnalyticsPairs(userId)
       ]);
+      // Content activity is always available (posts and drafts are our own
+      // records), unlike provider metrics. The dashboard uses these counts
+      // when no analytics rows exist — e.g. LinkedIn exposes no reach API.
+      const [publishedCount, scheduledCount, draftCount, failedCount] = await Promise.all([
+        db.posts.countDocuments({ userId, status: 'published' }),
+        db.posts.countDocuments({ userId, status: 'scheduled' }),
+        DraftModel.countDocuments({ userId, status: { $in: ['draft', 'ready'] } }),
+        db.posts.countDocuments({ userId, status: { $in: ['failed', 'partial_failure'] } })
+      ]);
+      const content = {
+        published: publishedCount,
+        scheduled: scheduledCount,
+        drafts: draftCount,
+        failed: failedCount
+      };
       if (accounts.length === 0) {
         return res.json({
           totalFollowers: 0,
@@ -45,7 +61,8 @@ export const DashboardController = {
           totalClicks: 0,
           averageCtr: 0,
           growth: { followers: 0, reach: 0, impressions: 0, engagement: 0 },
-          connectedPlatforms: []
+          connectedPlatforms: [],
+          content
         });
       }
 
@@ -115,7 +132,8 @@ export const DashboardController = {
           impressions: getGrowthPercentage(totalImpressions, prevImpressions),
           engagement: getGrowthPercentage(totalEngagement, prevEngagement),
         },
-        connectedPlatforms: accounts.map(a => a.platform)
+        connectedPlatforms: accounts.map(a => a.platform),
+        content
       });
     } catch (error) {
       console.error('Get dashboard overview error', error);

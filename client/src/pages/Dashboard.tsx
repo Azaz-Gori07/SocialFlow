@@ -13,7 +13,11 @@ import {
   Sparkles, 
   ArrowRight, 
   ChevronRight, 
-  ChevronDown
+  ChevronDown,
+  CheckCircle2,
+  CalendarClock,
+  FileText,
+  AlertTriangle
 } from 'lucide-react';
 import { 
   AreaChart, 
@@ -115,6 +119,35 @@ export const Dashboard: React.FC = () => {
 
   const hasData = growthData.length > 0 && growthData.some((d: any) => d.reach > 0 || d.impressions > 0);
 
+  // Provider metrics (followers/reach/CTR) only exist for platforms that
+  // expose an analytics API. When they don't, show what we can actually count:
+  // our own published/scheduled/draft/failed records.
+  const content = overview?.content || { published: 0, scheduled: 0, drafts: 0, failed: 0 };
+  const hasAnalytics = totalFollowers > 0 || totalImpressions > 0 || totalEngagement > 0 || Number(averageCtr) > 0;
+
+  type StatCard = {
+    label: string;
+    value: string;
+    delta?: string;
+    hint: string;
+    tint: string;
+    icon: React.ReactNode;
+  };
+
+  const statCards: StatCard[] = hasAnalytics
+    ? [
+        { label: 'Total Audience', value: formatNumber(totalFollowers), delta: `↗ ${followersGrowth}%`, hint: 'Across all connected channels', tint: '#ecfdf5', icon: <Users size={18} style={{ color: '#10b981' }} /> },
+        { label: 'Total Impressions', value: formatNumber(totalImpressions), delta: `↗ ${impressionsGrowth}%`, hint: 'Content views across all platforms', tint: '#fef3c7', icon: <Eye size={18} style={{ color: '#d97706' }} /> },
+        { label: 'Total Engagement', value: formatNumber(totalEngagement), delta: `↗ ${engagementGrowth}%`, hint: 'Likes, comments, reposts & reactions', tint: '#ffe4e6', icon: <MessageSquare size={18} style={{ color: '#e11d48' }} /> },
+        { label: 'CTR Efficiency', value: `${averageCtr}%`, hint: 'Average outbound link conversion', tint: '#eff6ff', icon: <MousePointer size={18} style={{ color: '#2563eb' }} /> }
+      ]
+    : [
+        { label: 'Published', value: String(content.published), hint: 'Delivered to your connected channels', tint: '#ecfdf5', icon: <CheckCircle2 size={18} style={{ color: '#10b981' }} /> },
+        { label: 'Scheduled', value: String(content.scheduled), hint: 'Queued for the next publish window', tint: '#eff6ff', icon: <CalendarClock size={18} style={{ color: '#2563eb' }} /> },
+        { label: 'Drafts', value: String(content.drafts), hint: 'Saved or generated, not yet queued', tint: '#fef3c7', icon: <FileText size={18} style={{ color: '#d97706' }} /> },
+        { label: 'Needs attention', value: String(content.failed), hint: 'Failed deliveries to review', tint: '#ffe4e6', icon: <AlertTriangle size={18} style={{ color: '#e11d48' }} /> }
+      ];
+
   return (
     <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
       
@@ -195,149 +228,49 @@ export const Dashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Four Stat Cards (Row of 4) */}
+      {/* 2. Four Stat Cards — real provider metrics when they exist,
+          otherwise real content-activity counts. */}
       <div className="responsive-stat-grid" style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '16px'
       }}>
-        
-        {/* Card 1: Total Audience */}
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: '#ecfdf5',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Users size={18} style={{ color: '#10b981' }} />
+        {statCards.map((card) => (
+          <div key={card.label} className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '8px',
+                  background: card.tint,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}>
+                  {card.icon}
+                </div>
+                <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#374151' }}>
+                  {card.label}
+                </span>
               </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#374151' }}>
-                Total Audience
-              </span>
+              <MoreVertical size={16} style={{ color: '#9ca3af', cursor: 'pointer' }} />
             </div>
-            <MoreVertical size={16} style={{ color: '#9ca3af', cursor: 'pointer' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '6px' }}>
-            <span style={{ fontSize: '2rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-              {formatNumber(totalFollowers)}
-            </span>
-            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: '#10b981' }}>
-              ↗ {followersGrowth}%
-            </span>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
-            Across all connected channels
-          </div>
-        </div>
-
-        {/* Card 2: Total Impressions */}
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: '#fef3c7',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <Eye size={18} style={{ color: '#d97706' }} />
-              </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#374151' }}>
-                Total Impressions
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '6px' }}>
+              <span style={{ fontSize: '2rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
+                {card.value}
               </span>
+              {card.delta && (
+                <span style={{ fontSize: '0.825rem', fontWeight: 600, color: '#10b981' }}>
+                  {card.delta}
+                </span>
+              )}
             </div>
-            <MoreVertical size={16} style={{ color: '#9ca3af', cursor: 'pointer' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '6px' }}>
-            <span style={{ fontSize: '2rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-              {formatNumber(totalImpressions)}
-            </span>
-            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: '#10b981' }}>
-              ↗ {impressionsGrowth}%
-            </span>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
-            Content views across all platforms
-          </div>
-        </div>
-
-        {/* Card 3: Total Engagement */}
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: '#ffe4e6',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <MessageSquare size={18} style={{ color: '#e11d48' }} />
-              </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#374151' }}>
-                Total Engagement
-              </span>
+            <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
+              {card.hint}
             </div>
-            <MoreVertical size={16} style={{ color: '#9ca3af', cursor: 'pointer' }} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '6px' }}>
-            <span style={{ fontSize: '2rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-              {formatNumber(totalEngagement)}
-            </span>
-            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: '#10b981' }}>
-              ↗ {engagementGrowth}%
-            </span>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
-            Likes, comments, reposts & reactions
-          </div>
-        </div>
-
-        {/* Card 4: CTR Efficiency */}
-        <div className="card" style={{ padding: '18px 20px', display: 'flex', flexDirection: 'column', gap: '8px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-              <div style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '8px',
-                background: '#eff6ff',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center'
-              }}>
-                <MousePointer size={18} style={{ color: '#2563eb' }} />
-              </div>
-              <span style={{ fontSize: '0.85rem', fontWeight: 500, color: '#374151' }}>
-                CTR Efficiency
-              </span>
-            </div>
-            <MoreVertical size={16} style={{ color: '#9ca3af', cursor: 'pointer' }} />
-          </div>
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '10px', marginTop: '6px' }}>
-            <span style={{ fontSize: '2rem', fontWeight: 700, color: '#111827', fontVariantNumeric: 'tabular-nums', lineHeight: 1 }}>
-              {averageCtr}%
-            </span>
-            <span style={{ fontSize: '0.825rem', fontWeight: 600, color: '#10b981' }}>
-              ↗ 0%
-            </span>
-          </div>
-          <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px' }}>
-            Average outbound link conversion
-          </div>
-        </div>
-
+        ))}
       </div>
 
       {/* 3. Middle Section: Content Performance Chart (Left) + Connected Channels (Right) */}
@@ -475,6 +408,7 @@ export const Dashboard: React.FC = () => {
               <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#111827' }}>Connected Channels</h3>
             </div>
             <button
+              onClick={() => navigate('/connected-accounts')}
               style={{
                 padding: '3px 12px',
                 background: '#ffffff',
