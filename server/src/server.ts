@@ -3,6 +3,7 @@ if (typeof dns.setDefaultResultOrder === 'function') {
   dns.setDefaultResultOrder('ipv4first');
 }
 import express, { RequestHandler } from 'express';
+import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
@@ -269,6 +270,18 @@ if (process.env.NODE_ENV !== 'production') {
     res.status(200).json({ message: 'ok' });
   });
 }
+
+// Liveness probe backing the in-app status pill. Reports the real Mongoose
+// connection state instead of a hardcoded "operational" label; unauthenticated
+// because it exposes no user data.
+app.get('/api/health', (_req, res) => {
+  const dbUp = mongoose.connection.readyState === 1;
+  return res.status(dbUp ? 200 : 503).json({
+    status: dbUp ? 'ok' : 'degraded',
+    database: dbUp ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
 
 // Route Mounts
 app.use('/api/auth', authRouter);

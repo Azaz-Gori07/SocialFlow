@@ -100,6 +100,7 @@ let accountsCache: { at: number; data: any[] } | null = null;
 let accountsInflight: Promise<any[]> | null = null;
 
 export const api = {
+  health: () => request<{ status: string; database: string }>('/health', { skipAuth: true }),
   auth: {
     register: (body: any) => request<any>('/auth/register', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),
     login: (body: any) => request<any>('/auth/login', { method: 'POST', body: JSON.stringify(body), skipAuth: true }),

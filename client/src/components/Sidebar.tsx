@@ -38,8 +38,23 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
   const [showWSMenu, setShowWSMenu] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [developerEnabled, setDeveloperEnabled] = useState(false);
+  const [systemStatus, setSystemStatus] = useState<'checking' | 'ok' | 'degraded'>('checking');
 
   const userId = user?.id;
+
+  useEffect(() => {
+    let cancelled = false;
+    api.health()
+      .then(() => {
+        if (!cancelled) setSystemStatus('ok');
+      })
+      .catch(() => {
+        if (!cancelled) setSystemStatus('degraded');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
@@ -348,10 +363,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ currentTab, setCurrentTab, isO
         boxShadow: '0 1px 2px rgba(0, 0, 0, 0.02)'
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10b981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.4)' }} />
+          <span style={{
+            width: '7px',
+            height: '7px',
+            borderRadius: '50%',
+            background: systemStatus === 'ok' ? '#10b981' : systemStatus === 'degraded' ? '#f59e0b' : '#9ca3af',
+            boxShadow: systemStatus === 'ok' ? '0 0 6px rgba(16, 185, 129, 0.4)' : 'none'
+          }} />
           <div>
             <div style={{ fontSize: '0.8rem', fontWeight: 600, color: '#111827', lineHeight: 1.2 }}>System Status</div>
-            <div style={{ fontSize: '0.68rem', color: '#6b7280' }}>All systems operational</div>
+            <div style={{ fontSize: '0.68rem', color: '#6b7280' }}>
+              {systemStatus === 'ok'
+                ? 'All systems operational'
+                : systemStatus === 'degraded'
+                  ? 'Service degraded'
+                  : 'Checking status…'}
+            </div>
           </div>
         </div>
         <ChevronRight size={14} color="#9ca3af" />
