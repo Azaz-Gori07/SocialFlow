@@ -127,7 +127,7 @@ export const Dashboard: React.FC = () => {
   // Provider metrics (followers/reach/CTR) only exist for platforms that
   // expose an analytics API. When they don't, show what we can actually count:
   // our own published/scheduled/draft/failed records.
-  const content = overview?.content || { published: 0, scheduled: 0, drafts: 0, failed: 0 };
+  const content = overview?.content || { published: 0, scheduled: 0, drafts: 0, archived: 0, failed: 0 };
   const hasAnalytics = totalFollowers > 0 || totalImpressions > 0 || totalEngagement > 0 || Number(averageCtr) > 0;
 
   type StatCard = {
@@ -149,7 +149,7 @@ export const Dashboard: React.FC = () => {
     : [
         { label: 'Published', value: String(content.published), hint: 'Delivered to your connected channels', tint: '#ecfdf5', icon: <CheckCircle2 size={18} style={{ color: '#10b981' }} /> },
         { label: 'Scheduled', value: String(content.scheduled), hint: 'Queued for the next publish window', tint: '#eff6ff', icon: <CalendarClock size={18} style={{ color: '#2563eb' }} /> },
-        { label: 'Drafts', value: String(content.drafts), hint: 'Saved or generated, not yet queued', tint: '#fef3c7', icon: <FileText size={18} style={{ color: '#d97706' }} /> },
+        { label: 'Drafts', value: String(content.drafts), hint: content.archived > 0 ? `Not yet queued · ${content.archived} archived` : 'Saved or generated, not yet queued', tint: '#fef3c7', icon: <FileText size={18} style={{ color: '#d97706' }} /> },
         { label: 'Needs attention', value: String(content.failed), hint: 'Failed deliveries to review', tint: '#ffe4e6', icon: <AlertTriangle size={18} style={{ color: '#e11d48' }} /> }
       ];
 

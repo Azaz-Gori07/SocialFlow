@@ -39,16 +39,21 @@ export const DashboardController = {
       // Content activity is always available (posts and drafts are our own
       // records), unlike provider metrics. The dashboard uses these counts
       // when no analytics rows exist — e.g. LinkedIn exposes no reach API.
-      const [publishedCount, scheduledCount, draftCount, failedCount] = await Promise.all([
+      const [publishedCount, scheduledCount, draftCount, archivedCount, failedCount] = await Promise.all([
         db.posts.countDocuments({ userId, status: 'published' }),
         db.posts.countDocuments({ userId, status: 'scheduled' }),
         DraftModel.countDocuments({ userId, status: { $in: ['draft', 'ready'] } }),
+        DraftModel.countDocuments({ userId, status: 'archived' }),
         db.posts.countDocuments({ userId, status: { $in: ['failed', 'partial_failure'] } })
       ]);
       const content = {
         published: publishedCount,
         scheduled: scheduledCount,
         drafts: draftCount,
+        // Archived drafts are excluded from `drafts` (they are not queued for
+        // publishing) but surfaced separately so the dashboard does not look
+        // inconsistent with a Drafts page that lists them.
+        archived: archivedCount,
         failed: failedCount
       };
       if (accounts.length === 0) {
