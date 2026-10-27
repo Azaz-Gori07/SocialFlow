@@ -34,6 +34,9 @@ export const ContentStudio: React.FC = () => {
   const [tone, setTone] = useState<'Default' | 'Professional' | 'Casual' | 'Visionary' | 'Technical'>('Default');
   const [showToneMenu, setShowToneMenu] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Real, provider-supplied reason for the last failed AI action. Alerts hid
+  // it behind "please try again", which is wrong when the cause is billing.
+  const [studioError, setStudioError] = useState('');
   const [activeTab, setActiveTab] = useState<'twitter' | 'linkedin' | 'instagram' | 'facebook'>('twitter');
   const [copied, setCopied] = useState(false);
   const [generatedContent, setGeneratedContent] = useState<any>(null);
@@ -58,6 +61,7 @@ export const ContentStudio: React.FC = () => {
     if (!prompt.trim()) return;
 
     setLoading(true);
+    setStudioError('');
     setGeneratedContent(null);
     try {
       const finalPrompt = tone !== 'Default' ? `[Tone: ${tone}] ${prompt}` : prompt;
@@ -66,7 +70,7 @@ export const ContentStudio: React.FC = () => {
       setPlatformsToSchedule(Object.keys(data.outputs));
     } catch (err) {
       console.error(err);
-      alert('AI generation failed. Please try again.');
+      setStudioError(err instanceof Error ? err.message : 'AI generation failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -78,6 +82,7 @@ export const ContentStudio: React.FC = () => {
     if (repurposeType === 'text' && !rawText.trim()) return;
 
     setLoading(true);
+    setStudioError('');
     setGeneratedContent(null);
     try {
       let data: any;
@@ -92,7 +97,7 @@ export const ContentStudio: React.FC = () => {
       setPlatformsToSchedule(Object.keys(data.outputs));
     } catch (err) {
       console.error(err);
-      alert('Repurposing failed. Please try again.');
+      setStudioError(err instanceof Error ? err.message : 'Repurposing failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -102,6 +107,7 @@ export const ContentStudio: React.FC = () => {
     if (!generatedContent) return;
     
     setLoading(true);
+    setStudioError('');
     try {
       const res = await api.ai.regenerate(generatedContent.prompt, platform);
       setGeneratedContent((prev: any) => ({
@@ -113,7 +119,9 @@ export const ContentStudio: React.FC = () => {
       }));
     } catch (err) {
       console.error(err);
-      alert(`Could not regenerate the ${platform} post. Please try again.`);
+      setStudioError(
+        `Could not regenerate the ${platform} post. ${err instanceof Error ? err.message : 'Please try again.'}`
+      );
     } finally {
       setLoading(false);
     }
@@ -218,6 +226,39 @@ export const ContentStudio: React.FC = () => {
           </p>
         </div>
       </div>
+
+      {studioError && (
+        <div style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: '14px',
+          padding: '12px 16px',
+          background: '#fef2f2',
+          border: '1px solid #fecaca',
+          borderRadius: '10px',
+          color: '#991b1b',
+          fontSize: '0.85rem',
+          lineHeight: 1.5
+        }}>
+          <span>{studioError}</span>
+          <button
+            type="button"
+            onClick={() => setStudioError('')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#991b1b',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              flexShrink: 0
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* 2. Card 1: Post Studio (Generous & Large) */}
       <div className="card" style={{ padding: '28px 30px', display: 'flex', flexDirection: 'column', gap: '18px' }}>
