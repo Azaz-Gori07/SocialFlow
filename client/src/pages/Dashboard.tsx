@@ -99,16 +99,21 @@ export const Dashboard: React.FC = () => {
   const engagementGrowth = overview?.growth?.engagement || 0;
   const averageCtr = ((overview?.averageCtr || 0) * 100).toFixed(2);
 
-  // Platform lookup helper
+  // Platform lookup helper. `undefined` means "no analytics row for this
+  // platform" — rendering that as 0 would claim the account has 0 followers,
+  // which is a different (and false) statement.
+  const hasPlatformMetrics = (platId: string) =>
+    platformsData.some((item: any) => item.platform === platId);
+
   const getPlatformFollowers = (platId: string) => {
     const p = platformsData.find((item: any) => item.platform === platId);
-    return p ? p.followers : 0;
+    return p ? p.followers : undefined;
   };
 
   const totalSubsAll = platformsData.reduce((sum: number, p: any) => sum + (p.followers || 0), 0);
   const getPlatformPercent = (platId: string) => {
-    if (totalSubsAll <= 0) return 0;
-    const f = getPlatformFollowers(platId);
+    if (!hasPlatformMetrics(platId) || totalSubsAll <= 0) return null;
+    const f = getPlatformFollowers(platId) || 0;
     return Math.round((f / totalSubsAll) * 100);
   };
 
@@ -434,18 +439,28 @@ export const Dashboard: React.FC = () => {
             {connectedChannels.map((channel) => (
               <div key={channel.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                 <PlatformBadge platform={channel.id} size={32} iconSize={16} />
-                <div style={{ width: '90px' }}>
+                <div style={{ width: '110px' }}>
                   <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>{channel.label}</div>
                   <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
-                    {getPlatformFollowers(channel.id)} {channel.unit}
+                    {hasPlatformMetrics(channel.id)
+                      ? `${getPlatformFollowers(channel.id)} ${channel.unit}`
+                      : 'No metrics yet'}
                   </div>
                 </div>
-                <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                  <div style={{ width: `${getPlatformPercent(channel.id)}%`, height: '100%', background: channel.color, borderRadius: '4px' }} />
-                </div>
-                <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
-                  {getPlatformPercent(channel.id)}%
-                </span>
+                {hasPlatformMetrics(channel.id) ? (
+                  <>
+                    <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                      <div style={{ width: `${getPlatformPercent(channel.id) ?? 0}%`, height: '100%', background: channel.color, borderRadius: '4px' }} />
+                    </div>
+                    <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
+                      {getPlatformPercent(channel.id) ?? 0}%
+                    </span>
+                  </>
+                ) : (
+                  <span style={{ fontSize: '0.72rem', color: '#9ca3af', flexGrow: 1 }}>
+                    This platform doesn&apos;t expose follower counts through its API.
+                  </span>
+                )}
                 <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
               </div>
             ))}

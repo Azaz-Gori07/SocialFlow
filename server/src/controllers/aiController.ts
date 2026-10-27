@@ -93,8 +93,19 @@ Replies should be polite, specific to the comment, under 200 characters each, an
  */
 function sendAIError(res: Response, error: any, label: string) {
   const status = typeof error?.status === 'number' ? error.status : undefined;
+  // Provider detail is what distinguishes "slow down for a minute" from
+  // "your daily allowance is gone" — both arrive as HTTP 429.
+  const detail = typeof error?.message === 'string'
+    ? error.message.replace(/^AI provider HTTP \d+:\s*/, '').slice(0, 300)
+    : '';
   if (status === 429) {
-    return res.status(429).json({ message: 'The AI provider is rate limiting requests. Try again in a few seconds.' });
+    const exhausted = /per[- ]day|daily|quota|free-models|credits|insufficient/i.test(detail);
+    return res.status(429).json({
+      message: exhausted
+        ? 'The AI provider has exhausted its quota for now. Retrying in a few seconds will not help — add credits or a second provider key, then try again.'
+        : 'The AI provider is rate limiting requests. Try again in a few seconds.',
+      ...(detail ? { detail } : {})
+    });
   }
   if (status === 402) {
     return res.status(402).json({ message: 'The AI provider account is out of credits.' });
