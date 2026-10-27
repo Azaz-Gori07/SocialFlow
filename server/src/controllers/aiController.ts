@@ -86,6 +86,29 @@ Comment by @${author}: "${message}"
 Return ONLY valid JSON: {"suggestions": ["reply 1", "reply 2", "reply 3"]}
 Replies should be polite, specific to the comment, under 200 characters each, and must not invent features, pricing, or claims about the product.`;
 
+/**
+ * Maps a provider failure onto a status the client can act on. Rate limits and
+ * billing problems are temporary/account-level, not "internal server errors",
+ * and the UI shows these messages verbatim.
+ */
+function sendAIError(res: Response, error: any, label: string) {
+  const status = typeof error?.status === 'number' ? error.status : undefined;
+  if (status === 429) {
+    return res.status(429).json({ message: 'The AI provider is rate limiting requests. Try again in a few seconds.' });
+  }
+  if (status === 402) {
+    return res.status(402).json({ message: 'The AI provider account is out of credits.' });
+  }
+  if (status === 401 || status === 403) {
+    return res.status(503).json({ message: 'The AI provider rejected the server credentials.' });
+  }
+  if (status === 400 || status === 422) {
+    return res.status(502).json({ message: 'The AI provider rejected the request.' });
+  }
+  console.error(label, error);
+  return res.status(502).json({ message: 'The AI provider request failed. Please try again.' });
+}
+
 export const AIController = {
   generatePost: async (req: AuthenticatedRequest, res: Response) => {
     try {
@@ -120,8 +143,7 @@ export const AIController = {
       });
       return res.status(201).json(generation);
     } catch (error) {
-      console.error('AI generate post error', error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return sendAIError(res, error, 'AI generate post error');
     }
   },
 
@@ -145,7 +167,7 @@ export const AIController = {
 
       const response = await ai.execute({
         prompt: REGENERATE_PROMPT(prompt, platform),
-        options: { temperature: 0.8, max_tokens: 800 },
+        options: { temperature: 0.8, max_tokens: 1600 },
         timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
@@ -158,8 +180,7 @@ export const AIController = {
       }
       return res.json({ platform, content });
     } catch (error) {
-      console.error('AI regenerate error', error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return sendAIError(res, error, 'AI regenerate error');
     }
   },
 
@@ -194,8 +215,7 @@ export const AIController = {
 
       return res.json({ suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions : [] });
     } catch (error) {
-      console.error('AI reply suggestion error', error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return sendAIError(res, error, 'AI reply suggestion error');
     }
   },
 
@@ -256,8 +276,7 @@ Return ONLY valid JSON with one key per platform:
       });
       return res.status(201).json(generation);
     } catch (error) {
-      console.error('AI repurpose youtube error', error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return sendAIError(res, error, 'AI repurpose youtube error');
     }
   },
 
@@ -328,8 +347,7 @@ Return ONLY valid JSON with one key per platform:
       });
       return res.status(201).json(generation);
     } catch (error) {
-      console.error('AI repurpose blog error', error);
-      return res.status(500).json({ message: 'Internal server error' });
+      return sendAIError(res, error, 'AI repurpose blog error');
     }
   },
 

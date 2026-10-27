@@ -59,7 +59,10 @@ export class AIService {
     }
 
     if (lastError) {
-      throw new Error(`AI provider call failed: ${lastError.message}`);
+      // Rethrow the provider error unchanged so callers can read `status`
+      // (429 rate limit vs 402 billing vs 5xx). Wrapping it in a plain Error
+      // turned every provider refusal into an opaque 500.
+      throw lastError;
     }
 
     throw new Error('No AI provider configured. Set OPENROUTER_API_KEY (and OPENROUTER_API_KEY_MODEL) to enable AI features.');
