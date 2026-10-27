@@ -52,6 +52,32 @@ Rules:
 - Threads: conversational, 1-3 punchy lines, under 500 characters.
 - No markdown, no commentary outside the JSON.`;
 
+/**
+ * Per-platform tone rules, shared by generation and regeneration so a rewritten
+ * variant keeps the same voice contract as the original.
+ */
+const PLATFORM_RULES: Record<string, string> = {
+  twitter: 'under 280 characters, no hashtag stuffing',
+  linkedin: 'professional tone, 2-4 short paragraphs',
+  instagram: 'casual, 2-5 lines',
+  facebook: 'friendly, 2-4 lines',
+  youtube: 'a video title plus a 2-3 sentence description',
+  threads: 'conversational, 1-3 punchy lines, under 500 characters'
+};
+
+/**
+ * Regeneration returns plain post text for ONE platform. Asking the model for
+ * the full six-platform JSON here used to overflow max_tokens and truncate the
+ * payload, so parseJson threw and every regenerate request ended in a 502.
+ */
+const REGENERATE_PROMPT = (prompt: string, platform: string) =>
+  `You are a social media copywriter. Write a new version of the ${platform} post for this announcement: "${prompt}".
+
+Rules:
+- ${PLATFORM_RULES[platform] || 'match the platform tone'}.
+- Same meaning as the announcement, different wording from any previous version.
+- Return ONLY the post text. No JSON, no markdown, no quotation marks, no commentary.`;
+
 const SUGGESTION_PROMPT = (message: string, author: string) =>
   `You are a social media manager drafting a reply to this comment on our social post.
 
@@ -108,6 +134,9 @@ export const AIController = {
       if (!prompt || !platform) {
         return res.status(400).json({ message: 'Prompt and platform are required' });
       }
+      if (!Object.prototype.hasOwnProperty.call(PLATFORM_RULES, platform)) {
+        return res.status(400).json({ message: 'Unsupported platform' });
+      }
 
       const ai = new AIService();
       if (!ai.isConfigured) {
@@ -115,19 +144,15 @@ export const AIController = {
       }
 
       const response = await ai.execute({
-        prompt: `${GENERATION_PROMPT(prompt)}\nRegenerate only the "${platform}" variant, differently worded but with the same meaning.`,
-        options: { temperature: 0.7, max_tokens: 800 },
+        prompt: REGENERATE_PROMPT(prompt, platform),
+        options: { temperature: 0.8, max_tokens: 800 },
         timeoutMs: 45000
       });
       const text = AIService.extractText(response.data);
-      let outputs: Record<string, string>;
-      try {
-        outputs = AIService.parseJson(text);
-      } catch {
-        return res.status(502).json({ message: 'AI provider did not return structured output' });
-      }
-
-      const content = outputs[platform] || '';
+      const content = text
+        .replace(/^```(?:[a-z]+)?\s*/i, '')
+        .replace(/\s*```$/, '')
+        .trim();
       if (!content) {
         return res.status(502).json({ message: 'AI provider did not return content for the requested platform' });
       }

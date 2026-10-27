@@ -27,6 +27,16 @@ import {
 import { PlatformBadge } from '../components/SocialIcons';
 import { DashboardSkeleton } from '../components/Skeleton';
 
+/** Display metadata for every channel the API can report as connected. */
+const CHANNELS = [
+  { id: 'linkedin', label: 'LinkedIn', color: '#0A66C2', unit: 'followers' },
+  { id: 'twitter', label: 'X (Twitter)', color: '#000000', unit: 'followers' },
+  { id: 'instagram', label: 'Instagram', color: '#E1306C', unit: 'followers' },
+  { id: 'threads', label: 'Threads', color: '#000000', unit: 'followers' },
+  { id: 'youtube', label: 'YouTube', color: '#FF0000', unit: 'subscribers' },
+  { id: 'facebook', label: 'Facebook', color: '#1877F2', unit: 'followers' },
+];
+
 export const Dashboard: React.FC = () => {
   const navigate = useNavigate();
   const [overview, setOverview] = useState<any>(null);
@@ -98,19 +108,10 @@ export const Dashboard: React.FC = () => {
     return Math.round((f / totalSubsAll) * 100);
   };
 
-  // Mock timeline dates for empty graph matching the exact visual
-  const emptyTimelineDates = [
-    { date: 'Oct 5', val: 0 },
-    { date: 'Oct 8', val: 0 },
-    { date: 'Oct 11', val: 0 },
-    { date: 'Oct 14', val: 0 },
-    { date: 'Oct 17', val: 0 },
-    { date: 'Oct 20', val: 0 },
-    { date: 'Oct 23', val: 0 },
-    { date: 'Oct 26', val: 0 },
-    { date: 'Oct 29', val: 0 },
-    { date: 'Nov 1', val: 0 }
-  ];
+  // Only the channels the server reports as connected are rendered. Listing a
+  // fixed set of five platforms made disconnected channels look live.
+  const connectedPlatforms: string[] = overview?.connectedPlatforms || [];
+  const connectedChannels = CHANNELS.filter((channel) => connectedPlatforms.includes(channel.id));
 
   const hasData = growthData.length > 0 && growthData.some((d: any) => d.reach > 0 || d.impressions > 0);
 
@@ -179,8 +180,17 @@ export const Dashboard: React.FC = () => {
             {currentTime.time}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '0.75rem', color: '#111827', fontWeight: 500 }}>
-            <span>All systems operational</span>
-            <span style={{ width: '6px', height: '6px', borderRadius: '50%', background: '#10b981' }} />
+            <span>
+              {connectedPlatforms.length > 0
+                ? `${connectedPlatforms.length} channel${connectedPlatforms.length > 1 ? 's' : ''} connected`
+                : 'No channels connected'}
+            </span>
+            <span style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              background: connectedPlatforms.length > 0 ? '#10b981' : '#9ca3af'
+            }} />
           </div>
         </div>
       </div>
@@ -370,27 +380,34 @@ export const Dashboard: React.FC = () => {
           {/* Chart Display Area with Axis & Empty State Backdrop */}
           <div style={{ position: 'relative', width: '100%', height: '310px' }}>
             
-            {/* Chart Area */}
-            <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={300}>
-              <AreaChart data={hasData ? growthData : emptyTimelineDates} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
-                <defs>
-                  <linearGradient id="performanceGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25}/>
-                    <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
-                <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={{ stroke: '#f3f4f6' }} />
-                <YAxis stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={false} domain={[0, 1000]} ticks={[0, 250, 500, 750, 1000]} tickFormatter={v => v === 1000 ? '1K' : v.toString()} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
-                  labelStyle={{ color: '#111827', fontWeight: 600 }}
-                />
-                {hasData && (
+            {/* Chart Area — real analytics rows only; no placeholder dates. */}
+            {hasData && (
+              <ResponsiveContainer width="100%" height={300} minWidth={0} minHeight={300}>
+                <AreaChart data={growthData} margin={{ top: 20, right: 10, left: -20, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="performanceGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#4f46e5" stopOpacity={0.25}/>
+                      <stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/>
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f3f4f6" vertical={false} />
+                  <XAxis dataKey="date" stroke="#9ca3af" fontSize={11} tickLine={false} axisLine={{ stroke: '#f3f4f6' }} />
+                  <YAxis
+                    stroke="#9ca3af"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    domain={[0, 'auto']}
+                    tickFormatter={(v: number) => formatNumber(v)}
+                  />
+                  <Tooltip 
+                    contentStyle={{ backgroundColor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.06)' }}
+                    labelStyle={{ color: '#111827', fontWeight: 600 }}
+                  />
                   <Area type="monotone" dataKey="reach" stroke="#4f46e5" strokeWidth={2} fillOpacity={1} fill="url(#performanceGrad)" name="Reach" />
-                )}
-              </AreaChart>
-            </ResponsiveContainer>
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
 
             {/* Centered Empty State Overlay (Exactly as in screenshot when no data) */}
             {!hasData && (
@@ -419,28 +436,32 @@ export const Dashboard: React.FC = () => {
                   <BarChart2 size={22} style={{ color: '#71717a' }} />
                 </div>
                 <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#111827', marginBottom: '4px' }}>
-                  No data yet
+                  {connectedPlatforms.length > 0 ? 'No analytics available yet' : 'No data yet'}
                 </div>
-                <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: '16px' }}>
-                  Connect your social accounts to see performance analytics.
+                <div style={{ fontSize: '0.8rem', color: '#6b7280', marginBottom: connectedPlatforms.length > 0 ? 0 : '16px', maxWidth: '340px', textAlign: 'center' }}>
+                  {connectedPlatforms.length > 0
+                    ? 'Your connected channels don\'t expose reach or impressions through their APIs yet. Publishing and scheduling are still tracked.'
+                    : 'Connect your social accounts to see performance analytics.'}
                 </div>
-                <button
-                  onClick={() => navigate('/connected-accounts')}
-                  style={{
-                    padding: '8px 18px',
-                    background: '#18181b',
-                    color: '#ffffff',
-                    fontSize: '0.825rem',
-                    fontWeight: 600,
-                    border: 'none',
-                    borderRadius: '8px',
-                    cursor: 'pointer',
-                    pointerEvents: 'auto',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
-                  }}
-                >
-                  Connect Accounts
-                </button>
+                {connectedPlatforms.length === 0 && (
+                  <button
+                    onClick={() => navigate('/connected-accounts')}
+                    style={{
+                      padding: '8px 18px',
+                      background: '#18181b',
+                      color: '#ffffff',
+                      fontSize: '0.825rem',
+                      fontWeight: 600,
+                      border: 'none',
+                      borderRadius: '8px',
+                      cursor: 'pointer',
+                      pointerEvents: 'auto',
+                      boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                    }}
+                  >
+                    Connect Accounts
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -469,89 +490,31 @@ export const Dashboard: React.FC = () => {
             </button>
           </div>
 
-          {/* Channels List */}
+          {/* Channels List — only channels the API reports as connected. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', flexGrow: 1, justifyContent: 'center' }}>
-            
-            {/* 1. LinkedIn */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <PlatformBadge platform="linkedin" size={32} iconSize={16} />
-              <div style={{ width: '90px' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>Linkedin</div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{getPlatformFollowers('linkedin')} followers</div>
+            {connectedChannels.length === 0 && (
+              <div style={{ fontSize: '0.82rem', color: '#6b7280', textAlign: 'center', padding: '12px 0' }}>
+                No channels connected yet.
               </div>
-              <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${getPlatformPercent('linkedin')}%`, height: '100%', background: '#0A66C2', borderRadius: '4px' }} />
+            )}
+            {connectedChannels.map((channel) => (
+              <div key={channel.id} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <PlatformBadge platform={channel.id} size={32} iconSize={16} />
+                <div style={{ width: '90px' }}>
+                  <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>{channel.label}</div>
+                  <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>
+                    {getPlatformFollowers(channel.id)} {channel.unit}
+                  </div>
+                </div>
+                <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
+                  <div style={{ width: `${getPlatformPercent(channel.id)}%`, height: '100%', background: channel.color, borderRadius: '4px' }} />
+                </div>
+                <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
+                  {getPlatformPercent(channel.id)}%
+                </span>
+                <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
               </div>
-              <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
-                {getPlatformPercent('linkedin')}%
-              </span>
-              <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
-            </div>
-
-            {/* 2. X (Twitter) */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <PlatformBadge platform="twitter" size={32} iconSize={15} />
-              <div style={{ width: '90px' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>X (Twitter)</div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{getPlatformFollowers('twitter')} followers</div>
-              </div>
-              <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${getPlatformPercent('twitter')}%`, height: '100%', background: '#000000', borderRadius: '4px' }} />
-              </div>
-              <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
-                {getPlatformPercent('twitter')}%
-              </span>
-              <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
-            </div>
-
-            {/* 3. Instagram */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <PlatformBadge platform="instagram" size={32} iconSize={16} />
-              <div style={{ width: '90px' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>Instagram</div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{getPlatformFollowers('instagram')} followers</div>
-              </div>
-              <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${getPlatformPercent('instagram')}%`, height: '100%', background: '#E1306C', borderRadius: '4px' }} />
-              </div>
-              <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
-                {getPlatformPercent('instagram')}%
-              </span>
-              <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
-            </div>
-
-            {/* 4. Threads */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <PlatformBadge platform="threads" size={32} iconSize={16} />
-              <div style={{ width: '90px' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>Threads</div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{getPlatformFollowers('threads')} followers</div>
-              </div>
-              <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${getPlatformPercent('threads')}%`, height: '100%', background: '#000000', borderRadius: '4px' }} />
-              </div>
-              <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
-                {getPlatformPercent('threads')}%
-              </span>
-              <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
-            </div>
-
-            {/* 5. YouTube */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <PlatformBadge platform="youtube" size={32} iconSize={16} />
-              <div style={{ width: '90px' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: '#111827' }}>YouTube</div>
-                <div style={{ fontSize: '0.72rem', color: '#9ca3af' }}>{getPlatformFollowers('youtube')} subscribers</div>
-              </div>
-              <div style={{ flexGrow: 1, height: '8px', background: '#f3f4f6', borderRadius: '4px', overflow: 'hidden' }}>
-                <div style={{ width: `${getPlatformPercent('youtube')}%`, height: '100%', background: '#FF0000', borderRadius: '4px' }} />
-              </div>
-              <span style={{ fontSize: '0.78rem', color: '#6b7280', width: '32px', textAlign: 'right' }}>
-                {getPlatformPercent('youtube')}%
-              </span>
-              <ChevronRight size={15} style={{ color: '#9ca3af', flexShrink: 0 }} />
-            </div>
-
+            ))}
           </div>
         </div>
 

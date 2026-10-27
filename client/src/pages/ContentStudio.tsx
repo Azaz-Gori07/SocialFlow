@@ -113,6 +113,7 @@ export const ContentStudio: React.FC = () => {
       }));
     } catch (err) {
       console.error(err);
+      alert(`Could not regenerate the ${platform} post. Please try again.`);
     } finally {
       setLoading(false);
     }
